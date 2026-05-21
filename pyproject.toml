@@ -1,0 +1,27 @@
+[project]
+name = "mle-prep"
+version = "0.1.0"
+description = "PyTorch interview prep: 77 staged problems from tensor basics to a working MiniGPT. Fill in each stub in problems/, run the script for pass/fail feedback."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.4.0",
+    "numpy>=1.24",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+# Catch real bugs without nagging about every micro-style issue.
+lint.select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes (undefined names, unused imports/vars, etc.)
+    "B",   # flake8-bugbear (likely-bug patterns)
+    "UP",  # pyupgrade (use modern syntax)
+    "SIM", # simplifications (e.g. `if x == True` -> `if x`)
+    "I",   # isort (import order)
+]
+lint.ignore = [
+    "E401",  # multiple imports on one line — the __main__ runner block uses this.
+    "E501",  # line too long — torch docstrings/expressions in tests can be wide.
+]

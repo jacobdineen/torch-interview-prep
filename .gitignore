@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+!tests/_compiled/*.pyc
+.progress.json
+.ruff_cache/
