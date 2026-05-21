@@ -249,5 +249,12 @@ CONCEPTS = {
 
 
 def get_concept(num):
-    """Return the concept blurb for a problem number string (e.g. '03'), or None."""
-    return CONCEPTS.get(num)
+    """Return the concept blurb for a problem ID (e.g. '03' or '03b'), or None.
+    Children inherit their parent's concept blurb."""
+    import re as _re
+    if num in CONCEPTS:
+        return CONCEPTS[num]
+    m = _re.match(r"^(\d+)", str(num))
+    if m:
+        return CONCEPTS.get(m.group(1))
+    return None

@@ -1,0 +1,22 @@
+"""
+Problem 58f: gradients flow into every parameter
+
+(Split from parent problem 58: Problem 58: Grouped-Query / Multi-Query Attention)
+"""
+import math
+import torch
+import torch.nn as nn
+
+class GroupedQueryAttention(nn.Module):
+
+    def __init__(self, d_model, num_q_heads, num_kv_groups, bias=False):
+        raise NotImplementedError
+
+    def forward(self, x, mask=None):
+        raise NotImplementedError
+if __name__ == '__main__':
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from runner import run_test_for
+    raise SystemExit(run_test_for(os.path.abspath(__file__)))

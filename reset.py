@@ -1,11 +1,12 @@
 """Reset a problem (or all of them) back to its pristine stub.
 
-  python reset.py 04            # reset problem 04 (asks for confirmation)
-  python reset.py 04 --yes      # skip the confirmation prompt
-  python reset.py 04 11 23      # reset multiple problems
-  python reset.py --all         # reset every problem (requires --yes too)
+  python reset.py 04a            # reset just one task (p04a_*)
+  python reset.py 04             # reset every task in parent 04 (p04a, p04b, ...)
+  python reset.py 04a --yes      # skip the confirmation prompt
+  python reset.py 04 11 23a      # mix-and-match
+  python reset.py --all          # reset everything (requires --yes too)
   python reset.py --all --yes
-  python reset.py --status      # show which problems differ from their stub
+  python reset.py --status       # show which problems differ from their stub
 
 Also clears `.progress.json` entries for any reset problem so the dashboard
 reflects that you're starting over on those.
@@ -22,62 +23,120 @@ PROBLEMS = os.path.join(PREP, "problems")
 STUBS = os.path.join(PREP, ".stubs")
 PROGRESS_FILE = os.path.join(PREP, ".progress.json")
 
+_ID_RE = re.compile(r"^p(\d+[a-z]?)_")
+
 
 def _check_stubs_exist():
     if not os.path.isdir(STUBS):
         print(f"ERROR: snapshot directory not found at {STUBS}")
-        print("(If you wiped it, ask Claude to re-run snapshot_stubs.py)")
         sys.exit(2)
 
 
-def _match_problem(num_str):
-    """Find the problem file matching a 2-digit problem number."""
-    matches = glob.glob(os.path.join(PROBLEMS, f"p{num_str}_*.py"))
-    if not matches:
-        return None
-    if len(matches) > 1:
-        print(f"ambiguous: multiple files match p{num_str}_*.py — {matches}")
-        sys.exit(2)
-    return matches[0]
+def _id_from_path(path):
+    m = _ID_RE.match(os.path.basename(path))
+    return m.group(1) if m else None
 
 
 def _stub_for(problem_path):
-    """Find the matching stub in .stubs/ given a problem path."""
     return os.path.join(STUBS, os.path.basename(problem_path))
 
 
-def _diff_status():
-    """List problems whose current file differs from the snapshot."""
-    changed, missing = [], []
-    for problem_path in sorted(glob.glob(os.path.join(PROBLEMS, "p*_*.py"))):
-        stub_path = _stub_for(problem_path)
-        if not os.path.exists(stub_path):
-            missing.append(os.path.basename(problem_path))
+def _resolve(arg):
+    """Resolve a CLI arg like '04' or '04a' to a list of matching problem paths."""
+    m = re.match(r"^(\d+)([a-z]?)$", arg)
+    if not m:
+        return []
+    num_int, letter = m.groups()
+    num = f"{int(num_int):02d}"
+    if letter:
+        return sorted(glob.glob(os.path.join(PROBLEMS, f"p{num}{letter}_*.py")))
+    return sorted(glob.glob(os.path.join(PROBLEMS, f"p{num}[a-z]_*.py")))
+
+
+def _is_super_init(stmt):
+    """True if stmt is exactly `super().__init__(...)`."""
+    import ast
+    return (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Call)
+        and isinstance(stmt.value.func, ast.Attribute)
+        and stmt.value.func.attr == "__init__"
+        and isinstance(stmt.value.func.value, ast.Call)
+        and isinstance(stmt.value.func.value.func, ast.Name)
+        and stmt.value.func.value.func.id == "super"
+    )
+
+
+def _body_is_stub(body):
+    """A function body is 'stub' if, after stripping docstring + Pass +
+    `super().__init__()` calls, the remaining body is exactly
+    `raise NotImplementedError`."""
+    import ast
+    filtered = []
+    for i, stmt in enumerate(body):
+        # Leading docstring
+        if (i == 0 and isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+                and isinstance(stmt.value.value, str)):
             continue
-        with open(problem_path) as f: cur = f.read()
-        with open(stub_path) as f: pristine = f.read()
-        if cur != pristine:
-            changed.append(os.path.basename(problem_path))
+        if isinstance(stmt, ast.Pass):
+            continue
+        if _is_super_init(stmt):
+            continue
+        filtered.append(stmt)
+    if len(filtered) != 1 or not isinstance(filtered[0], ast.Raise):
+        return False
+    exc = filtered[0].exc
+    if isinstance(exc, ast.Name):
+        return exc.id == "NotImplementedError"
+    if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name):
+        return exc.func.id == "NotImplementedError"
+    return False
+
+
+def _is_pristine(src):
+    """A problem file is pristine if every top-level function and every class
+    method has a stub body."""
+    import ast
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return False
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if not _body_is_stub(node.body):
+                return False
+        elif isinstance(node, ast.ClassDef):
+            for m in node.body:
+                if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if not _body_is_stub(m.body):
+                        return False
+    return True
+
+
+def _diff_status():
+    """List problems where the user has written something other than a pure stub."""
+    edited = []
+    for problem_path in sorted(glob.glob(os.path.join(PROBLEMS, "p*_*.py"))):
+        with open(problem_path) as f:
+            src = f.read()
+        if not _is_pristine(src):
+            edited.append(os.path.basename(problem_path))
     print()
-    if changed:
-        print(f"  {len(changed)} problem(s) edited (differ from stub):")
-        for c in changed:
+    if edited:
+        print(f"  {len(edited)} problem(s) edited:")
+        for c in edited:
             print(f"    {c}")
     else:
-        print("  No problems have been edited — everything matches the stubs.")
-    if missing:
-        print()
-        print(f"  WARNING: {len(missing)} problem(s) have no snapshot in .stubs/")
+        print("  No problems have been edited — everything is at its stub.")
 
 
 def _confirm(msg):
-    """Prompt the user; return True if they confirm."""
     print(f"{msg} [y/N]: ", end="", flush=True)
     answer = sys.stdin.readline().strip().lower()
     return answer in ("y", "yes")
 
 
-def _clear_progress_for(nums):
+def _clear_progress_for(ids):
     if not os.path.exists(PROGRESS_FILE):
         return
     try:
@@ -85,37 +144,32 @@ def _clear_progress_for(nums):
             progress = json.load(f)
     except Exception:
         return
-    for n in nums:
+    for n in ids:
         progress.pop(n, None)
     with open(PROGRESS_FILE, "w") as f:
         json.dump(progress, f, indent=2, sort_keys=True)
 
 
-def _reset(nums, force):
-    """Reset the given list of 2-digit problem numbers."""
+def _reset(paths, force):
     pairs = []
-    for n in nums:
-        p = _match_problem(n)
-        if p is None:
-            print(f"  no problem found for {n!r}")
-            continue
+    for p in paths:
         s = _stub_for(p)
         if not os.path.exists(s):
             print(f"  no snapshot for {os.path.basename(p)} — skipping")
             continue
-        pairs.append((n, p, s))
+        pairs.append((p, s))
     if not pairs:
         print("  nothing to do.")
         return
     print(f"  Will reset {len(pairs)} problem(s):")
-    for n, p, _ in pairs:
+    for p, _ in pairs:
         print(f"    {os.path.basename(p)}")
     if not force and not _confirm("  Proceed?"):
         print("  Aborted.")
         return
-    for n, p, s in pairs:
+    for p, s in pairs:
         shutil.copy(s, p)
-    _clear_progress_for([n for n, _, _ in pairs])
+    _clear_progress_for([_id_from_path(p) for p, _ in pairs if _id_from_path(p)])
     print(f"  Reset {len(pairs)} problem(s).")
 
 
@@ -134,22 +188,20 @@ def main():
         if not force:
             print("--all requires --yes (this rewrites every problem file)")
             sys.exit(2)
-        nums = sorted({
-            re.match(r"p(\d+)_", os.path.basename(p)).group(1)
-            for p in glob.glob(os.path.join(PROBLEMS, "p*_*.py"))
-        })
-        _reset(nums, force=True)
+        all_paths = sorted(glob.glob(os.path.join(PROBLEMS, "p*_*.py")))
+        _reset(all_paths, force=True)
         return
-    nums = []
+    paths = []
     for a in args:
-        if not a.isdigit():
-            print(f"  ignoring {a!r}: expected a problem number")
+        ps = _resolve(a)
+        if not ps:
+            print(f"  no problem found for {a!r}")
             continue
-        nums.append(f"{int(a):02d}")
-    if not nums:
+        paths.extend(ps)
+    if not paths:
         print(__doc__)
         return
-    _reset(nums, force=force)
+    _reset(paths, force=force)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+import contextlib
+
+
+@contextlib.contextmanager
+def step(label):
+    """Wrap an assertion / sub-check; on failure, raise AssertionError with the label."""
+    try:
+        yield
+    except AssertionError as e:
+        msg = str(e) if str(e) else "(no message)"
+        raise AssertionError(f"step {label!r}: {msg}") from e
+    except Exception as e:
+        raise AssertionError(f"step {label!r} crashed with {type(e).__name__}: {e}") from e
+
+import contextlib
+import torch
+import torch.nn.functional as F
+from p21b_gamma2 import *
+
+def test_p21b_gamma2():
+    torch.manual_seed(0)
+    logits = torch.randn(6, 4) * 2
+    targets = torch.tensor([0, 1, 2, 3, 1, 2])
+    pass
+    with step('gamma > 0 shrinks loss relative to CE'):
+        expected_ce = F.cross_entropy(logits, targets, reduction='mean')
+        fl = focal_loss(logits, targets, gamma=2.0, reduction='mean')
+        assert fl.item() <= expected_ce.item() + 1e-06
+    pass
+    pass

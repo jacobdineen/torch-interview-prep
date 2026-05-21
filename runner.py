@@ -296,7 +296,8 @@ def _print_progress_after_pass(num):
                     print("    tier complete")
             else:
                 print("    final tier — well done")
-        total_solved = sum(1 for k in ever if k.isdigit() and 1 <= int(k) <= TOTAL_PROBLEMS)
+        # Count any progress key that looks like a problem ID (digits, optional letter).
+        total_solved = sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
         print(f"    overall: {total_solved}/{TOTAL_PROBLEMS} solved")
     except Exception:
         pass  # progress display is best-effort
@@ -306,7 +307,7 @@ def _print_progress_after_pass(num):
 
 def run_test_for(stub_path):
     base = os.path.basename(stub_path)
-    m = re.match(r"^p(\d+)_(.+)\.py$", base)
+    m = re.match(r"^p(\d+[a-z]?)_(.+)\.py$", base)
     if not m:
         print(f"[runner] Not a problem stub: {base}")
         return 2

@@ -24,17 +24,24 @@ from curriculum import TIERS, tier_members  # noqa: E402
 
 
 def _parse_filter(args):
+    """Args are parent integers (e.g. '04') or ranges ('30-50').
+    Filter selects any problem ID whose parent matches."""
     if not args:
-        return lambda _n: True
-    wanted = set()
+        return lambda _id: True
+    wanted_parents = set()
     for a in args:
         if "-" in a:
             lo, hi = a.split("-")
             for n in range(int(lo), int(hi) + 1):
-                wanted.add(f"{n:02d}")
+                wanted_parents.add(n)
         else:
-            wanted.add(f"{int(a):02d}")
-    return lambda n: n in wanted
+            wanted_parents.add(int(a))
+
+    def keep(problem_id):
+        m = re.match(r"^(\d+)", str(problem_id))
+        return bool(m) and int(m.group(1)) in wanted_parents
+
+    return keep
 
 
 def _load_progress():
@@ -60,14 +67,14 @@ def show_status():
     total = 0
     print()
     for name, lo, hi in TIERS:
-        members = [f"{n:02d}" for n in range(lo, hi + 1)]
+        members = tier_members(lo, hi)
         solved = sum(1 for m in members if m in nums_solved)
         total_passed += solved
         total += len(members)
         bar = _bar(solved, len(members))
         unsolved = [m for m in members if m not in nums_solved]
         unsolved_str = f"  next: {unsolved[0]}" if unsolved else "  (complete)"
-        print(f"  {bar} {solved}/{len(members):<3} {name:<28}{unsolved_str}")
+        print(f"  {bar} {solved:>3}/{len(members):<3} {name:<28}{unsolved_str}")
     print()
     print(f"  Overall: {total_passed}/{total} solved")
 
@@ -80,7 +87,7 @@ def main():
     keep = _parse_filter(sys.argv[1:])
     passed, failed = [], []
     for p in PROBLEMS:
-        m = re.match(r"^p(\d+)_", os.path.basename(p))
+        m = re.match(r"^p(\d+[a-z]?)_", os.path.basename(p))
         if not m: continue
         num = m.group(1)
         if not keep(num):

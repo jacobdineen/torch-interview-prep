@@ -1,0 +1,28 @@
+import contextlib
+
+
+@contextlib.contextmanager
+def step(label):
+    """Wrap an assertion / sub-check; on failure, raise AssertionError with the label."""
+    try:
+        yield
+    except AssertionError as e:
+        msg = str(e) if str(e) else "(no message)"
+        raise AssertionError(f"step {label!r}: {msg}") from e
+    except Exception as e:
+        raise AssertionError(f"step {label!r} crashed with {type(e).__name__}: {e}") from e
+
+import contextlib
+import torch
+import torch.nn.functional as F
+from p45b_stride import *
+
+def test_p45b_stride():
+    torch.manual_seed(0)
+    x = torch.randn(2, 4, 10, 10)
+    for k, s, p in [(2, 2, 0), (3, 1, 1), (3, 2, 1)]:
+        pass
+    with step('stride=None defaults to kernel_size'):
+        out = my_max_pool2d(x, kernel_size=2)
+        expected = F.max_pool2d(x, kernel_size=2)
+        assert torch.allclose(out, expected, atol=1e-06)
