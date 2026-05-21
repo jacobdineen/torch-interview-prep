@@ -1,10 +1,11 @@
-"""Run every problem stub and summarize how many pass.
+"""Batch runner and progress dashboard.
 
-  python run_all.py            # run all 77
-  python run_all.py 30-50      # run problems 30 through 50 (inclusive)
-  python run_all.py 65 67      # run specific problems
-  python run_all.py --status   # show progress dashboard from .progress.json
-                                 (no tests run; reads cached results)
+  python run_all.py              # run every problem (all 313)
+  python run_all.py 4            # only parent 4's children (04a, 04b, 04c, 04d)
+  python run_all.py 30-50        # parents 30 through 50 (inclusive)
+  python run_all.py 4 7 12       # specific parents
+  python run_all.py --status     # progress dashboard from .progress.json (no re-runs)
+  python run_all.py --help / -h  # this summary
 """
 import glob
 import json
@@ -80,11 +81,15 @@ def show_status():
 
 
 def main():
-    if "--status" in sys.argv[1:]:
+    args = sys.argv[1:]
+    if "--help" in args or "-h" in args:
+        print(__doc__)
+        return
+    if "--status" in args:
         show_status()
         return
 
-    keep = _parse_filter(sys.argv[1:])
+    keep = _parse_filter(args)
     passed, failed = [], []
     for p in PROBLEMS:
         m = re.match(r"^p(\d+[a-z]?)_", os.path.basename(p))
