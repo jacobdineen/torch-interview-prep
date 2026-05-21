@@ -43,6 +43,69 @@ _FMT_HELPER = '''def _fmt(v):
         if len(v) <= 6: return repr(v)
         return f"dict(len={len(v)})"
     return repr(v)
+
+
+def _fail_msg(src_text, a, b, op_label="=="):
+    """Multi-line failure message comparing two operands.
+
+    Special cases:
+      * two tensors with mismatched shapes  -> axis-by-axis diff
+      * two shape-like tuples (or torch.Size vs tuple) with mismatched length/content
+                                            -> axis-by-axis diff
+      * two same-shape numeric tensors      -> values + max abs diff + first-mismatch index
+      * mismatched dtypes                   -> dtype line + values
+      * everything else                     -> values"""
+    lines = [src_text]
+    try:
+        import torch as _torch
+        if isinstance(a, _torch.Tensor) and isinstance(b, _torch.Tensor):
+            sa, sb = tuple(a.shape), tuple(b.shape)
+            if sa != sb:
+                lines.append("  shape mismatch:")
+                max_d = max(len(sa), len(sb))
+                for i in range(max_d):
+                    ax_a = sa[i] if i < len(sa) else "-"
+                    ax_b = sb[i] if i < len(sb) else "-"
+                    marker = "  <-- differs" if ax_a != ax_b else ""
+                    lines.append(f"    axis {i}: {ax_a} vs {ax_b}{marker}")
+                lines.append(f"    left :  shape={sa}, dtype={a.dtype}")
+                lines.append(f"    right: shape={sb}, dtype={b.dtype}")
+                return "\\n".join(lines)
+            if a.dtype != b.dtype:
+                lines.append(f"  dtype mismatch: {a.dtype} vs {b.dtype}")
+                lines.append(f"    left :  {_fmt(a)}")
+                lines.append(f"    right: {_fmt(b)}")
+                return "\\n".join(lines)
+            lines.append(f"  left  ({op_label}): {_fmt(a)}")
+            lines.append(f"  right ({op_label}): {_fmt(b)}")
+            if _torch.is_floating_point(a) and a.numel() > 0:
+                diff = (a - b).abs()
+                lines.append(f"  max |left - right| = {diff.max().item():.6g}")
+                rel = (diff > 1e-6).nonzero(as_tuple=False)
+                if rel.numel() > 0:
+                    idx = tuple(rel[0].tolist())
+                    lines.append(f"  first difference at index {idx}: "
+                                  f"left={a[idx].item():.6g}, right={b[idx].item():.6g}")
+            return "\\n".join(lines)
+    except Exception:
+        pass
+    # Shape-like tuples / torch.Size: show axis-by-axis when they differ.
+    try:
+        is_shape = lambda x: isinstance(x, tuple) and all(isinstance(v, int) for v in x)
+        if is_shape(a) and is_shape(b) and a != b:
+            lines.append("  shape comparison:")
+            max_d = max(len(a), len(b))
+            for i in range(max_d):
+                ax_a = a[i] if i < len(a) else "-"
+                ax_b = b[i] if i < len(b) else "-"
+                marker = "  <-- differs" if ax_a != ax_b else ""
+                lines.append(f"    axis {i}: {ax_a} vs {ax_b}{marker}")
+            return "\\n".join(lines)
+    except Exception:
+        pass
+    lines.append(f"  left  ({op_label}): {_fmt(a)}")
+    lines.append(f"  right ({op_label}): {_fmt(b)}")
+    return "\\n".join(lines)
 '''
 
 
@@ -59,16 +122,18 @@ def _fmt_call(varname):
     return ast.Call(func=_name("_fmt"), args=[_name(varname)], keywords=[])
 
 
-def _msg_two_sides(prefix_src, left_label, right_label):
-    """Build an f-string AST that formats:
-        f"<src>\n  <left_label>:  {_fmt(__l)}\n  <right_label>: {_fmt(__r)}"
-    """
-    return ast.JoinedStr(values=[
-        ast.Constant(value=f"{prefix_src}\n  {left_label}:  "),
-        ast.FormattedValue(value=_fmt_call("__l"), conversion=-1),
-        ast.Constant(value=f"\n  {right_label}: "),
-        ast.FormattedValue(value=_fmt_call("__r"), conversion=-1),
-    ])
+def _fail_msg_call(src_text, op_label="=="):
+    """Build `_fail_msg(<src>, __l, __r, <op>)` AST."""
+    return ast.Call(
+        func=_name("_fail_msg"),
+        args=[
+            ast.Constant(value=src_text),
+            _name("__l"),
+            _name("__r"),
+            ast.Constant(value=op_label),
+        ],
+        keywords=[],
+    )
 
 
 def _msg_single(prefix_src, varname, label):
@@ -132,14 +197,13 @@ class AssertRewriter(ast.NodeTransformer):
         op_repr = {ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=",
                    ast.Gt: ">", ast.GtE: ">=", ast.Is: "is", ast.IsNot: "is not",
                    ast.In: "in", ast.NotIn: "not in"}.get(type(op), "?")
-        msg = _msg_two_sides(src_text, "left ", f"right ({op_repr})")
         return [
             ast.Assign(targets=[_store("__l")], value=left),
             ast.Assign(targets=[_store("__r")], value=right),
             ast.Assert(
                 test=ast.Compare(left=_name("__l"), ops=[op],
                                   comparators=[_name("__r")]),
-                msg=msg,
+                msg=_fail_msg_call(src_text, op_repr),
             ),
         ]
 
@@ -153,11 +217,12 @@ class AssertRewriter(ast.NodeTransformer):
             args=[_name("__l"), _name("__r")] + list(call.args[2:]),
             keywords=call.keywords,
         )
-        msg = _msg_two_sides(src_text, "left ", "right")
+        # Use the function's own name as the op label (e.g., "torch.allclose").
+        op_label = "torch." + call.func.attr if isinstance(call.func, ast.Attribute) else "?"
         return [
             ast.Assign(targets=[_store("__l")], value=a_arg),
             ast.Assign(targets=[_store("__r")], value=b_arg),
-            ast.Assert(test=new_call, msg=msg),
+            ast.Assert(test=new_call, msg=_fail_msg_call(src_text, op_label)),
         ]
 
     def _not_assert(self, src_text, unaryop):
