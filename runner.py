@@ -526,13 +526,15 @@ def run_test_for(stub_path):
         _record(num, False)
         return 1
 
+    # Record BEFORE printing progress, so the dashboard / "next in tier" reflects
+    # this pass (otherwise it reads stale .progress.json and appears to go backwards).
+    _record(num, True)
     if json_mode:
         _emit_json(num, name, stub_path, "pass", None, None, None)
     else:
         print(f"PASS {label}")
         _print_concept(num)
         _print_progress_after_pass(num)
-    _record(num, True)
     return 0
 
 
