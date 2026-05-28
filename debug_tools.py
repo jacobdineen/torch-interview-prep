@@ -13,6 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HINT_STATE_FILE = os.path.join(HERE, ".hint_state.json")
 PROGRESS_FILE = os.path.join(HERE, ".progress.json")
 SOLUTION_UNLOCK_FILE = os.path.join(HERE, ".solution_unlock.json")
+NOTES_FILE = os.path.join(HERE, ".notes.json")
 
 
 # -------------------------- hint state --------------------------
@@ -33,6 +34,20 @@ def _save_json(path, data):
             json.dump(data, f, indent=2, sort_keys=True)
     except Exception:
         pass
+
+
+# -------------------------- notes --------------------------
+
+def add_note(pid, text):
+    """Append a free-text note for a problem; resurfaces under --explain."""
+    notes = _load_json(NOTES_FILE)
+    notes.setdefault(pid, []).append(text)
+    _save_json(NOTES_FILE, notes)
+    print(f"  Noted for {pid}: {text}")
+
+
+def get_notes(pid):
+    return _load_json(NOTES_FILE).get(pid, [])
 
 
 # -------------------------- hints --------------------------
@@ -133,6 +148,16 @@ def show_explain(pid, problem_path):
                 print(line)
     except ImportError:
         pass
+
+    # Any notes the user jotted with --note.
+    notes = get_notes(pid)
+    if notes:
+        print(f"    Your notes:")
+        for n in notes:
+            for line in textwrap.wrap(n, width=78,
+                                       initial_indent="      - ",
+                                       subsequent_indent="        "):
+                print(line)
 
 
 # -------------------------- solution gating --------------------------

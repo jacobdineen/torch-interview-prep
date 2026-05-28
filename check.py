@@ -2,6 +2,7 @@
 
   python check.py 02a              # run the test for problem 02a
   python check.py 02               # run all of parent 02's children
+  python check.py --next           # print the next unsolved problem (id + path)
 
 Debug modes (don't run the test, show info instead):
   python check.py 02a --hint           # reveal the next graduated hint
@@ -10,6 +11,7 @@ Debug modes (don't run the test, show info instead):
   python check.py 02a --solution       # show the reference implementation
                                        #   (gated; requires --i-give-up to first see)
   python check.py 02a --time           # benchmark your impl vs the reference
+  python check.py 02a --note "TEXT"    # jot a note; shown later under --explain
 """
 import argparse
 import glob
@@ -47,9 +49,32 @@ def _run(matches):
     sys.exit(rc)
 
 
+def _next_unsolved():
+    """First problem (in tier/curriculum order) not yet ever-passed: (pid, path)."""
+    import json
+    from curriculum import all_problem_ids
+    progress = {}
+    pf = os.path.join(HERE, ".progress.json")
+    if os.path.exists(pf):
+        try:
+            with open(pf) as f:
+                progress = json.load(f)
+        except Exception:
+            progress = {}
+    for pid in all_problem_ids():
+        if not progress.get(pid, {}).get("ever_passed"):
+            matches = sorted(glob.glob(os.path.join(HERE, "problems", f"p{pid}_*.py")))
+            return pid, (matches[0] if matches else None)
+    return None, None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("id", help="problem id, e.g. '02' (parent) or '02a' (single task)")
+    parser.add_argument("id", nargs="?", help="problem id, e.g. '02' (parent) or '02a' (single task)")
+    parser.add_argument("--next", action="store_true",
+                        help="print the next unsolved problem (id, then its path) and exit")
+    parser.add_argument("--note", metavar="TEXT",
+                        help="save a free-text note for this problem (shown later under --explain)")
     parser.add_argument("--hint", action="store_true", help="reveal the next hint")
     parser.add_argument("--reset-hints", action="store_true",
                         help="reset hint counter so --hint starts from the beginning")
@@ -63,6 +88,19 @@ def main():
                         help="time your implementation against the reference")
     args = parser.parse_args()
 
+    if args.next:
+        pid, path = _next_unsolved()
+        if not pid:
+            print("All problems solved — nice work.")
+            return
+        print(f"Next unsolved: {pid}")
+        if path:
+            print(path)  # last line = path, for editors to open
+        return
+
+    if args.id is None:
+        parser.error("a problem id is required (e.g. '02a'), or use --next")
+
     pid, matches = _resolve(args.id)
     if pid is None:
         print(f"unrecognized id {args.id!r}; expected e.g. 02 or 02a")
@@ -70,6 +108,12 @@ def main():
     if not matches:
         print(f"no problem found for {args.id!r}")
         sys.exit(2)
+
+    if args.note is not None:
+        from debug_tools import add_note
+        for m in matches:
+            add_note(_id_from_path(m), args.note)
+        return
 
     if args.hint or args.reset_hints:
         from debug_tools import show_hints

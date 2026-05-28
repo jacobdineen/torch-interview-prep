@@ -143,6 +143,144 @@ def _find_test_frame(tb):
     return None
 
 
+def _user_fail_site(exc):
+    """Deepest frame inside the user's problems/ file (the actual failing line),
+    or (None, None, None, '') if the failure was raised inside test code. Walks the
+    __cause__/__context__ chain so a RuntimeError that step() re-wraps as an
+    AssertionError still points back at the user's line."""
+    best = (None, None, None, "")
+    seen = set()
+    e = exc
+    while e is not None and id(e) not in seen:
+        seen.add(id(e))
+        for f in traceback.extract_tb(e.__traceback__):
+            if "problems" + os.sep in f.filename:
+                best = (f.filename, f.lineno, f.name, (f.line or ""))
+        e = e.__cause__ or e.__context__
+    return best
+
+
+def _const_scale(a, b):
+    """If a ≈ k*b for a near-constant k (and k is not ~1), return k. Used to spot a
+    missing/extra scaling term (e.g. /sqrt(d), mean-vs-sum). a, b are float tensors."""
+    import torch
+    mask = b.abs() > 1e-8
+    if int(mask.sum().item()) < 4:
+        return None
+    r = a[mask] / b[mask]
+    r = r[torch.isfinite(r)]
+    if r.numel() < 4:
+        return None
+    mean = r.mean().item()
+    std = r.std().item()
+    if abs(mean) > 1e-6 and std / abs(mean) < 0.01 and abs(mean - 1.0) > 0.02:
+        return mean
+    return None
+
+
+def _diff_struct(exc):
+    """Structured description of the first actual/expected tensor pair at the test
+    frame: {kind: shape|dtype|value, ...}. None if no such pair is bound."""
+    tframe = _find_test_frame(exc.__traceback__)
+    if tframe is None:
+        return None
+    try:
+        import torch
+    except ImportError:
+        return None
+    locs = tframe.tb_frame.f_locals
+    tensors = {k: v for k, v in locs.items()
+               if not k.startswith("_") and isinstance(v, torch.Tensor)}
+    names = list(tensors.keys())
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if not _looks_like_pair(a, b):
+                continue
+            ta, tb = tensors[a], tensors[b]
+            if tuple(ta.shape) != tuple(tb.shape):
+                return {"kind": "shape", "a": a, "b": b,
+                        "shape_a": list(ta.shape), "shape_b": list(tb.shape)}
+            if ta.dtype != tb.dtype:
+                return {"kind": "dtype", "a": a, "b": b,
+                        "dtype_a": str(ta.dtype), "dtype_b": str(tb.dtype)}
+            af = ta.detach().to(torch.float64)
+            bf = tb.detach().to(torch.float64)
+            d = (af - bf).abs()
+            max_diff = d.max().item() if d.numel() else 0.0
+            first_index = None
+            nz = (d > max(1e-6, max_diff * 1e-6)).nonzero(as_tuple=False)
+            if nz.numel() > 0:
+                first_index = tuple(nz[0].tolist())
+            info = {"kind": "value", "a": a, "b": b,
+                    "max_diff": max_diff, "first_index": first_index}
+            scale = _const_scale(af, bf)
+            if scale is not None:
+                info["scale"] = scale
+            return info
+    return None
+
+
+def _likely_cause(error_type, message, diff):
+    """A single-sentence guess at what went wrong, for a learner. None if unsure."""
+    msg = (message or "").lower()
+    if error_type == "NotImplementedError":
+        return "The function still raises NotImplementedError — fill in the body."
+    if error_type and error_type != "AssertionError":
+        # Runtime error raised inside the user's code.
+        if any(w in msg for w in ("shape", "size", "dimension", "must match", "broadcast")):
+            return ("Shape/dimension error at runtime — check broadcasting, a transpose, "
+                    "or the reduction dim.")
+        if "expected scalar type" in msg or "dtype" in msg or "same type" in msg:
+            return "Dtype error — add a cast (.float(), .long(), .to(...))."
+        if "device" in msg:
+            return "Device mismatch — move tensors to the same device with .to(...)."
+        return None
+    if diff:
+        if diff["kind"] == "shape":
+            return ("Output SHAPE is wrong — likely reduced over the wrong dim, forgot "
+                    "keepdim, or need a transpose/reshape.")
+        if diff["kind"] == "dtype":
+            return "Output DTYPE is wrong — add a cast (.float()/.long()/.to(...))."
+        if diff["kind"] == "value":
+            scale = diff.get("scale")
+            if scale is not None:
+                return (f"Values are off by a roughly constant factor (~{scale:.4g}x) — likely "
+                        f"a missing/extra scaling term (e.g. /sqrt(d), /N, or mean vs sum).")
+            return ("Output VALUES are wrong — check which axis you operate on, an off-by-one, "
+                    "or a missing term in the formula.")
+    # A runtime error raised inside the user's code, re-wrapped by step().
+    if "crashed with" in msg:
+        if any(w in msg for w in ("shape", "size", "dimension", "must match", "broadcast")):
+            return ("Your code raised a shape/dimension error — check broadcasting, a "
+                    "transpose, or the reduction dim.")
+        if "expected scalar type" in msg or "dtype" in msg:
+            return "Your code raised a dtype error — add a cast (.float()/.long()/.to(...))."
+        if "device" in msg:
+            return "Your code raised a device error — move tensors to the same device with .to(...)."
+        return "Your code raised an exception before returning — read the error message above."
+    # No named got/expected pair — fall back to the rewritten assertion message, which
+    # encodes the failure kind (this is the common case for value/shape asserts).
+    if "shape comparison" in msg or "shape mismatch" in msg:
+        return ("Output SHAPE is wrong — likely reduced over the wrong dim, forgot "
+                "keepdim, or need a transpose/reshape.")
+    if "dtype mismatch" in msg:
+        return "Output DTYPE is wrong — add a cast (.float()/.long()/.to(...))."
+    if any(k in msg for k in ("max |left - right|", "first difference", "allclose", "isclose")):
+        return ("Output VALUES are wrong — check which axis you operate on, an off-by-one, "
+                "or a missing term in the formula.")
+    return None
+
+
+def _print_likely_cause(exc, diff=None):
+    cause = _likely_cause(type(exc).__name__, str(exc),
+                          diff if diff is not None else _diff_struct(exc))
+    if cause:
+        print()
+        print("  Likely cause:")
+        for line in textwrap.wrap(cause, width=78, initial_indent="    ", subsequent_indent="    "):
+            print(line)
+
+
 def _print_failure_context(exc):
     """Show user-code frames + tensor diff (if present) + relevant test locals."""
     # 1) User-code frames: point at the line in their .py file.
@@ -158,6 +296,7 @@ def _print_failure_context(exc):
     # 2) Walk locals at the test frame.
     tframe = _find_test_frame(exc.__traceback__)
     if tframe is None:
+        _print_likely_cause(exc)
         return
     locs = tframe.tb_frame.f_locals
     try:
@@ -210,6 +349,9 @@ def _print_failure_context(exc):
                 print(f"    {k} = Tensor(shape={tuple(v.shape)}, dtype={v.dtype})")
             else:
                 print(f"    {k} = {_short_repr(v)}")
+
+    # 5) A one-line guess at the root cause — most useful for a learner.
+    _print_likely_cause(exc)
 
 
 # ---------- progress tracking ----------
@@ -303,6 +445,32 @@ def _print_progress_after_pass(num):
         pass  # progress display is best-effort
 
 
+# ---------- machine-readable output (for editor integration) ----------
+
+def _emit_json(num, name, stub_path, status, error_type, message, exc):
+    """Print a single JSON object describing the run. Enabled when PREP_JSON=1, so
+    editors (nvim) can parse a run without scraping human-formatted text."""
+    out = {
+        "status": status,            # "pass" | "fail"
+        "problem": num,              # e.g. "05b"
+        "name": name,
+        "file": os.path.abspath(stub_path),
+        "error_type": error_type,    # AssertionError / RuntimeError / NotImplementedError / None
+        "message": message,
+        "fail_file": None,           # abs path of the user's failing line, if any
+        "fail_line": None,
+        "fail_func": None,
+        "diff": None,                # structured tensor diff, if any
+        "hint": None,                # one-line likely cause
+    }
+    if exc is not None:
+        ff, fl, fn_, _line = _user_fail_site(exc)
+        out["fail_file"], out["fail_line"], out["fail_func"] = ff, fl, fn_
+        out["diff"] = _diff_struct(exc)
+    out["hint"] = _likely_cause(error_type, message, out["diff"])
+    print(json.dumps(out))
+
+
 # ---------- main entry ----------
 
 def run_test_for(stub_path):
@@ -325,32 +493,46 @@ def run_test_for(stub_path):
     spec = importlib.util.spec_from_loader(test_mod_name, loader)
     tmod = importlib.util.module_from_spec(spec)
     label = f"Problem {num} ({name})"
+    json_mode = os.environ.get("PREP_JSON") == "1"
 
     try:
         spec.loader.exec_module(tmod)
         fn = getattr(tmod, test_mod_name)
         fn()
     except NotImplementedError:
-        print(f"FAIL {label}: NotImplementedError — one of the functions still raises NotImplementedError.")
+        if json_mode:
+            _emit_json(num, name, stub_path, "fail", "NotImplementedError",
+                       "one of the functions still raises NotImplementedError", None)
+        else:
+            print(f"FAIL {label}: NotImplementedError — one of the functions still raises NotImplementedError.")
         _record(num, False)
         return 1
     except AssertionError as e:
         msg = str(e) if str(e) else "(no message — see test locals below)"
-        print(f"FAIL {label}")
-        print(f"  AssertionError: {msg}")
-        _print_failure_context(e)
+        if json_mode:
+            _emit_json(num, name, stub_path, "fail", "AssertionError", msg, e)
+        else:
+            print(f"FAIL {label}")
+            print(f"  AssertionError: {msg}")
+            _print_failure_context(e)
         _record(num, False)
         return 1
     except Exception as e:
-        print(f"FAIL {label}: {type(e).__name__}: {e}")
-        _print_failure_context(e)
+        if json_mode:
+            _emit_json(num, name, stub_path, "fail", type(e).__name__, str(e), e)
+        else:
+            print(f"FAIL {label}: {type(e).__name__}: {e}")
+            _print_failure_context(e)
         _record(num, False)
         return 1
 
-    print(f"PASS {label}")
+    if json_mode:
+        _emit_json(num, name, stub_path, "pass", None, None, None)
+    else:
+        print(f"PASS {label}")
+        _print_concept(num)
+        _print_progress_after_pass(num)
     _record(num, True)
-    _print_concept(num)
-    _print_progress_after_pass(num)
     return 0
 
 

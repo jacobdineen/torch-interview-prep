@@ -34,24 +34,32 @@ uv run python check.py <id> [flags]
 
 `<id>` is either `NNa` (one task, e.g. `03a`) or `NN` (all tasks of a parent, runs them in order, e.g. `03` runs 03a, 03b, 03c, 03d).
 
+`<id>` is optional when using `--next`.
+
 | Flag | What it does |
 |---|---|
-| (no flag) | Run the test for that problem. Records PASS/FAIL to `.progress.json`. |
+| (no flag) | Run the test for that problem. Records PASS/FAIL to `.progress.json`. On failure, prints a tensor diff plus a one-line **likely cause** (shape → wrong reduction dim, dtype → missing cast, constant scale factor → missing normalization). |
+| `--next` | Print the next unsolved problem (its id, then its path on the last line). Used by the editor to jump to where you left off. |
+| `--note "TEXT"` | Save a free-text note for this problem; it resurfaces under `--explain`. Stored in `.notes.json`. |
 | `--hint` | Show the next graduated hint for this problem (1 of 3-4). Persists state in `.hint_state.json`. |
 | `--reset-hints` | Reset the hint counter for one problem so `--hint` starts over. |
-| `--explain` | Show what the test verifies + the function signatures you need + the concept blurb. |
+| `--explain` | Show what the test verifies + the function signatures you need + the concept blurb + any notes you saved. |
 | `--solution` | Show the reference implementation. Locked until either: (a) you've passed the problem once, OR (b) you pass `--i-give-up`. |
 | `--i-give-up` | Unlock `--solution` for that one problem without earning it. State persists in `.solution_unlock.json`. |
 | `--time` | Benchmark your implementation vs the reference. Available for 16 compute-sensitive problems. |
 | `--help` / `-h` | Print this help summary. |
+
+Setting `PREP_JSON=1` makes a run print a single machine-readable JSON line instead of the human report (`status`, `problem`, `fail_file`, `fail_line`, `error_type`, `message`, `hint`, `diff`). This is what the Neovim integration parses; normal runs are unchanged.
 
 Examples:
 
 ```bash
 uv run python check.py 04a                       # run one task
 uv run python check.py 04                        # run all of parent 04
+uv run python check.py --next                    # where did I leave off?
 uv run python check.py 09c --hint                # graduated hint
 uv run python check.py 65a --explain             # what is flash-attention-tiled asking for?
+uv run python check.py 05a --note "reduce over batch+spatial, keep channel"
 uv run python check.py 22a --solution --i-give-up   # unlock + show reference
 uv run python check.py 65a --time                # benchmark flash attention vs reference
 ```
@@ -161,6 +169,29 @@ For nvim with a Python LSP, point pyright/pylsp at the local venv. Drop a `pyrig
 ```
 
 Then `:LspRestart` from a Python buffer.
+
+### Neovim integration
+
+An additive block in `init.lua` wires the practice loop into the editor (prefix `<leader>p`).
+It shells out to `check.py`/`run_all.py`, parses `PREP_JSON=1` output, and turns a failure into a
+diagnostic on the exact failing line (also pushed to the quickfix list, viewable in Trouble).
+The repo root and venv python are auto-detected by walking up to `check.py`.
+
+| Keymap | Command | What it does |
+|---|---|---|
+| `<leader>pp` | `:PracticeRun` | Run the current problem. PASS → notify; FAIL → diagnostic on the failing line + a float with the diff and likely cause. |
+| `<leader>pn` | `:PracticeNext` | Open the next unsolved problem. |
+| `<leader>pf` | `:PracticePick` | Telescope picker over all problems, marked `[x]` solved / `[ ]` unsolved. |
+| `<leader>ph` | `:PracticeHint` | Next graduated hint (float). |
+| `<leader>pe` | `:PracticeExplain` | What the test checks + your notes (float). |
+| `<leader>ps` | `:PracticeSolution` | Reference solution if unlocked (float). |
+| `<leader>pg` | `:PracticeGiveUp` | Unlock + show the solution. |
+| `<leader>pt` | `:PracticeTime` | Benchmark vs the reference (float). |
+| `<leader>po` | `:PracticeNote` | Jot a note for this problem (resurfaces under explain). |
+| `<leader>pd` | `:PracticeStatus` | Progress dashboard (float). |
+| `<leader>pw` | `:PracticeAutorun` | Toggle run-on-save for `p*_*.py` (off by default). |
+
+After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
 
 ## Workflow tips
 
