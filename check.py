@@ -49,8 +49,13 @@ def _run(matches):
     sys.exit(rc)
 
 
-def _next_unsolved():
-    """First problem (in tier/curriculum order) not yet ever-passed: (pid, path)."""
+def _next_unsolved(after=None):
+    """Next problem not yet ever-passed, in curriculum order: (pid, path, wrapped).
+
+    If ``after`` is given (a problem id like '07b'), return the first unsolved
+    problem AFTER it. If nothing remains ahead, fall back to the earliest unsolved
+    (an earlier gap) and set wrapped=True so the caller can say so.
+    """
     import json
     from curriculum import all_problem_ids
     progress = {}
@@ -61,11 +66,29 @@ def _next_unsolved():
                 progress = json.load(f)
         except Exception:
             progress = {}
-    for pid in all_problem_ids():
-        if not progress.get(pid, {}).get("ever_passed"):
-            matches = sorted(glob.glob(os.path.join(HERE, "problems", f"p{pid}_*.py")))
-            return pid, (matches[0] if matches else None)
-    return None, None
+
+    ids = all_problem_ids()
+
+    def unsolved(pid):
+        return not progress.get(pid, {}).get("ever_passed")
+
+    def path_for(pid):
+        matches = sorted(glob.glob(os.path.join(HERE, "problems", f"p{pid}_*.py")))
+        return matches[0] if matches else None
+
+    if after:
+        m = re.match(r"^(\d+)([a-z]?)$", after)
+        norm = f"{int(m.group(1)):02d}{m.group(2)}" if m else after
+        if norm in ids:
+            i = ids.index(norm)
+            fwd = next((p for p in ids[i + 1:] if unsolved(p)), None)
+            if fwd:
+                return fwd, path_for(fwd), False
+
+    earliest = next((p for p in ids if unsolved(p)), None)
+    if earliest is None:
+        return None, None, False
+    return earliest, path_for(earliest), bool(after)
 
 
 def main():
@@ -89,11 +112,14 @@ def main():
     args = parser.parse_args()
 
     if args.next:
-        pid, path = _next_unsolved()
+        pid, path, wrapped = _next_unsolved(after=args.id)
         if not pid:
             print("All problems solved — nice work.")
             return
-        print(f"Next unsolved: {pid}")
+        if wrapped:
+            print(f"Nothing left ahead — earlier gap: {pid}")
+        else:
+            print(f"Next unsolved: {pid}")
         if path:
             print(path)  # last line = path, for editors to open
         return

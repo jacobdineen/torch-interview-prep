@@ -426,18 +426,35 @@ def _print_progress_after_pass(num):
             filled = int(round(bar_width * solved / len(members))) if members else 0
             bar = "[" + "#" * filled + "-" * (bar_width - filled) + "]"
             print(f"    {bar} {solved}/{len(members)}  {tier_name}")
-            next_in_tier = next((m for m in members if m not in ever), None)
-            if next_in_tier:
-                print(f"    next in tier: {next_in_tier}")
-            elif tier_idx + 1 < len(TIERS):
-                _, nlo, nhi = TIERS[tier_idx + 1]
-                next_problem = next((m for m in tier_members(nlo, nhi) if m not in ever), None)
-                if next_problem:
-                    print(f"    tier complete — next tier starts at {next_problem}")
+            # Point FORWARD: the next unsolved problem after the one just passed.
+            try:
+                cur_idx = members.index(num)
+            except ValueError:
+                cur_idx = -1
+            forward = next((m for m in members[cur_idx + 1:] if m not in ever), None)
+            earlier_gaps = [m for m in members[:cur_idx] if m not in ever]
+            if forward:
+                print(f"    next in tier: {forward}")
+            elif not earlier_gaps:
+                # Everything in this tier is solved — move on.
+                if tier_idx + 1 < len(TIERS):
+                    _, nlo, nhi = TIERS[tier_idx + 1]
+                    nxt = next((m for m in tier_members(nlo, nhi) if m not in ever), None)
+                    print(f"    tier complete — next tier starts at {nxt}" if nxt
+                          else "    tier complete")
                 else:
-                    print("    tier complete")
+                    print("    final tier — well done")
             else:
-                print("    final tier — well done")
+                # Nothing left ahead in this tier, but earlier gaps remain.
+                nxt = None
+                if tier_idx + 1 < len(TIERS):
+                    _, nlo, nhi = TIERS[tier_idx + 1]
+                    nxt = next((m for m in tier_members(nlo, nhi) if m not in ever), None)
+                if nxt:
+                    print(f"    end of tier reached — next: {nxt}")
+            if earlier_gaps:
+                shown = ", ".join(earlier_gaps[:6]) + ("…" if len(earlier_gaps) > 6 else "")
+                print(f"    ({len(earlier_gaps)} earlier still unsolved: {shown})")
         # Count any progress key that looks like a problem ID (digits, optional letter).
         total_solved = sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
         print(f"    overall: {total_solved}/{TOTAL_PROBLEMS} solved")
