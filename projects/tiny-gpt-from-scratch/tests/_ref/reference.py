@@ -424,3 +424,115 @@ def sample_from_neural_bigram(w, start_token, n, rng):
         cur = sample_next_token(stable_softmax_1d(w[cur]), rng)
         out.append(cur)
     return out
+
+
+# ================= Part 5 — Layer Primitives and Backprop =================
+
+def linear_forward(x, w):
+    """Linear layer without bias: y = x @ W."""
+    return x @ w
+
+
+def derive_dx_on_paper(dout, w):
+    """For y = x @ W, the input gradient is dL/dx = dout @ W.T."""
+    return dout @ w.T
+
+
+def derive_linear_dw_on_paper(x, dout):
+    """For y = x @ W, the weight gradient is dL/dW = x.T @ dout."""
+    return x.T @ dout
+
+
+def linear_backward_dx(dout, w):
+    """Input gradient of a linear layer: dout @ W.T."""
+    return dout @ w.T
+
+
+def linear_backward_dw(x, dout):
+    """Weight gradient of a linear layer: x.T @ dout."""
+    return x.T @ dout
+
+
+def bias_add_forward(x, b):
+    """Add a per-feature bias, broadcasting over the batch: y = x + b."""
+    return x + b
+
+
+def bias_add_backward_db(dout):
+    """Bias gradient is dout summed over the batch (axis 0)."""
+    return dout.sum(axis=0)
+
+
+def relu_forward(x):
+    """ReLU: max(x, 0)."""
+    return np.maximum(x, 0.0)
+
+
+def relu_backward(dout, x):
+    """ReLU gradient: pass dout through only where the input was positive."""
+    return dout * (x > 0)
+
+
+def softmax_cross_entropy_backward(probs, y):
+    """dL/dlogits for mean softmax+cross-entropy over a batch: (probs - onehot)/N."""
+    n = len(y)
+    onehot = np.eye(probs.shape[1])[y]
+    return (probs - onehot) / n
+
+
+def layernorm_forward_mean(x):
+    """Per-row mean over the feature axis, kept 2-D for broadcasting."""
+    return x.mean(axis=-1, keepdims=True)
+
+
+def layernorm_forward_variance(x):
+    """Per-row (population) variance over the feature axis, kept for broadcasting."""
+    return x.var(axis=-1, keepdims=True)
+
+
+def layernorm_forward_normalize(x, eps):
+    """Center and scale to unit variance: (x - mean) / sqrt(var + eps)."""
+    mu = x.mean(axis=-1, keepdims=True)
+    var = x.var(axis=-1, keepdims=True)
+    return (x - mu) / np.sqrt(var + eps)
+
+
+def layernorm_forward_affine(xhat, gamma, beta):
+    """Learnable scale and shift: gamma * xhat + beta."""
+    return gamma * xhat + beta
+
+
+def layernorm_backward_subtract_mean(g):
+    """Backward through centering c = x - mean(x): dx = g - mean(g) over features."""
+    return g - g.mean(axis=-1, keepdims=True)
+
+
+def layernorm_backward_divide_std(g, std):
+    """Backward through dividing by a (constant) std: dc = g / std."""
+    return g / std
+
+
+def layernorm_backward_full(dout, x, gamma, eps):
+    """Full input gradient dx of LayerNorm(x) * gamma, over the feature axis."""
+    mu = x.mean(axis=-1, keepdims=True)
+    var = x.var(axis=-1, keepdims=True)
+    std = np.sqrt(var + eps)
+    xhat = (x - mu) / std
+    dxhat = dout * gamma
+    return (dxhat - dxhat.mean(axis=-1, keepdims=True)
+            - xhat * (dxhat * xhat).mean(axis=-1, keepdims=True)) / std
+
+
+def layernorm_backward_implementation(dout, x, gamma, eps):
+    """Complete LayerNorm backward: returns (dx, dgamma, dbeta)."""
+    mu = x.mean(axis=-1, keepdims=True)
+    var = x.var(axis=-1, keepdims=True)
+    std = np.sqrt(var + eps)
+    xhat = (x - mu) / std
+    axes = tuple(range(dout.ndim - 1))  # sum over all but the feature axis
+    dgamma = (dout * xhat).sum(axis=axes)
+    dbeta = dout.sum(axis=axes)
+    dxhat = dout * gamma
+    dx = (dxhat - dxhat.mean(axis=-1, keepdims=True)
+          - xhat * (dxhat * xhat).mean(axis=-1, keepdims=True)) / std
+    return dx, dgamma, dbeta

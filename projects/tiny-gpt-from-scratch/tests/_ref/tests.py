@@ -624,3 +624,179 @@ def test_0073_sample_from_neural_bigram(ns):
         expect_eq(out[0], 0)
         expect_eq(len(out), 6)
         expect_true(all(0 <= t < 4 for t in out), "ids must be in range")
+
+
+# ------------------- Part 5 — Layer Primitives and Backprop -------------------
+
+def test_0074_linear_forward(ns):
+    x = np.array([[1.0, 2.0]])
+    w = np.array([[1.0, 0.0, 2.0], [0.0, 1.0, 1.0]])
+    with step("y = x @ W"):
+        expect_allclose(ns["linear_forward"](x, w), x @ w)
+
+
+def test_0075_derive_dx_on_paper(ns):
+    rng = np.random.default_rng(10)
+    x = rng.standard_normal((4, 3))
+    w = rng.standard_normal((3, 5))
+    dout = rng.standard_normal((4, 5))
+    with step("dx = dout @ W.T, gradient-checked"):
+        analytic = ns["derive_dx_on_paper"](dout, w)
+        grad_check(lambda X: ns["linear_forward"](X, w), x, dout, analytic, name="dx")
+
+
+def test_0076_derive_linear_dw_on_paper(ns):
+    rng = np.random.default_rng(11)
+    x = rng.standard_normal((4, 3))
+    w = rng.standard_normal((3, 5))
+    dout = rng.standard_normal((4, 5))
+    with step("dW = x.T @ dout, gradient-checked"):
+        analytic = ns["derive_linear_dw_on_paper"](x, dout)
+        grad_check(lambda W: ns["linear_forward"](x, W), w, dout, analytic, name="dW")
+
+
+def test_0077_linear_backward_dx(ns):
+    rng = np.random.default_rng(12)
+    x = rng.standard_normal((4, 3))
+    w = rng.standard_normal((3, 5))
+    dout = rng.standard_normal((4, 5))
+    with step("gradient check dx"):
+        grad_check(lambda X: ns["linear_forward"](X, w), x,
+                   dout, ns["linear_backward_dx"](dout, w), name="dx")
+
+
+def test_0078_linear_backward_dw(ns):
+    rng = np.random.default_rng(13)
+    x = rng.standard_normal((4, 3))
+    w = rng.standard_normal((3, 5))
+    dout = rng.standard_normal((4, 5))
+    with step("gradient check dW"):
+        grad_check(lambda W: ns["linear_forward"](x, W), w,
+                   dout, ns["linear_backward_dw"](x, dout), name="dW")
+
+
+def test_0079_bias_add_forward(ns):
+    x = np.zeros((2, 3))
+    b = np.array([1.0, 2.0, 3.0])
+    with step("broadcasts bias over rows"):
+        expect_allclose(ns["bias_add_forward"](x, b), [[1, 2, 3], [1, 2, 3]])
+
+
+def test_0080_bias_add_backward_db(ns):
+    rng = np.random.default_rng(14)
+    x = rng.standard_normal((4, 3))
+    b = rng.standard_normal((3,))
+    dout = rng.standard_normal((4, 3))
+    with step("db sums dout over batch, gradient-checked"):
+        grad_check(lambda B: ns["bias_add_forward"](x, B), b,
+                   dout, ns["bias_add_backward_db"](dout), name="db")
+
+
+def test_0081_relu_forward(ns):
+    with step("max(x,0)"):
+        expect_allclose(ns["relu_forward"](np.array([-1.0, 0.0, 2.0])), [0, 0, 2])
+
+
+def test_0082_relu_backward(ns):
+    rng = np.random.default_rng(15)
+    x = rng.standard_normal((4, 3))
+    x[np.abs(x) < 0.1] = 0.5  # avoid kinks near 0 for the finite-diff check
+    dout = rng.standard_normal((4, 3))
+    with step("passes grad where x>0, gradient-checked"):
+        grad_check(lambda X: ns["relu_forward"](X), x,
+                   dout, ns["relu_backward"](dout, x), name="dx")
+
+
+def test_0083_softmax_cross_entropy_backward(ns):
+    rng = np.random.default_rng(16)
+    logits = rng.standard_normal((4, 5))
+    y = rng.integers(0, 5, size=4)
+    probs = ns["stable_softmax_2d_rowwise"](logits)
+    analytic = ns["softmax_cross_entropy_backward"](probs, y)
+
+    def loss(L):
+        p = ns["stable_softmax_2d_rowwise"](L)
+        return -np.mean(np.log(p[np.arange(len(y)), y]))
+
+    with step("dlogits gradient-checked against softmax+CE"):
+        grad_check(loss, logits, 1.0, analytic, name="dlogits")
+
+
+def test_0084_layernorm_forward_mean(ns):
+    x = np.array([[1.0, 2.0, 3.0]])
+    with step("feature-axis mean, keepdims"):
+        out = ns["layernorm_forward_mean"](x)
+        expect_shape(out, (1, 1))
+        expect_allclose(out, [[2.0]])
+
+
+def test_0085_layernorm_forward_variance(ns):
+    x = np.array([[1.0, 2.0, 3.0]])
+    with step("feature-axis (population) variance"):
+        expect_allclose(ns["layernorm_forward_variance"](x), [[np.var([1, 2, 3])]])
+
+
+def test_0086_layernorm_forward_normalize(ns):
+    rng = np.random.default_rng(17)
+    x = rng.standard_normal((3, 6))
+    out = ns["layernorm_forward_normalize"](x, 1e-5)
+    with step("normalized rows have ~0 mean, ~1 variance"):
+        expect_allclose(out.mean(axis=-1), np.zeros(3), atol=1e-6)
+        expect_allclose(out.var(axis=-1), np.ones(3), atol=1e-3)
+
+
+def test_0087_layernorm_forward_affine(ns):
+    xhat = np.ones((2, 3))
+    gamma = np.array([2.0, 2.0, 2.0])
+    beta = np.array([1.0, 1.0, 1.0])
+    with step("gamma*xhat + beta"):
+        expect_allclose(ns["layernorm_forward_affine"](xhat, gamma, beta), np.full((2, 3), 3.0))
+
+
+def test_0088_layernorm_backward_subtract_mean(ns):
+    rng = np.random.default_rng(18)
+    x = rng.standard_normal((4, 5))
+    g = rng.standard_normal((4, 5))
+    with step("backward of centering, gradient-checked"):
+        analytic = ns["layernorm_backward_subtract_mean"](g)
+        grad_check(lambda X: X - X.mean(axis=-1, keepdims=True), x, g, analytic, name="dx")
+
+
+def test_0089_layernorm_backward_divide_std(ns):
+    rng = np.random.default_rng(19)
+    c = rng.standard_normal((4, 5))
+    std = np.abs(rng.standard_normal((4, 1))) + 0.5
+    g = rng.standard_normal((4, 5))
+    with step("backward of dividing by std (constant), gradient-checked"):
+        analytic = ns["layernorm_backward_divide_std"](g, std)
+        grad_check(lambda C: C / std, c, g, analytic, name="dc")
+
+
+def _ln_forward(ns, x, gamma, beta, eps):
+    return ns["layernorm_forward_affine"](ns["layernorm_forward_normalize"](x, eps), gamma, beta)
+
+
+def test_0090_layernorm_backward_full(ns):
+    rng = np.random.default_rng(20)
+    x = rng.standard_normal((4, 6))
+    gamma = rng.standard_normal((6,))
+    beta = rng.standard_normal((6,))
+    dout = rng.standard_normal((4, 6))
+    eps = 1e-5
+    with step("dx gradient-checked against full LayerNorm"):
+        analytic = ns["layernorm_backward_full"](dout, x, gamma, eps)
+        grad_check(lambda X: _ln_forward(ns, X, gamma, beta, eps), x, dout, analytic, name="dx")
+
+
+def test_0091_layernorm_backward_implementation(ns):
+    rng = np.random.default_rng(21)
+    x = rng.standard_normal((4, 6))
+    gamma = rng.standard_normal((6,))
+    beta = rng.standard_normal((6,))
+    dout = rng.standard_normal((4, 6))
+    eps = 1e-5
+    dx, dgamma, dbeta = ns["layernorm_backward_implementation"](dout, x, gamma, eps)
+    with step("dx, dgamma, dbeta all gradient-checked"):
+        grad_check(lambda X: _ln_forward(ns, X, gamma, beta, eps), x, dout, dx, name="dx")
+        grad_check(lambda G: _ln_forward(ns, x, G, beta, eps), gamma, dout, dgamma, name="dgamma")
+        grad_check(lambda B: _ln_forward(ns, x, gamma, B, eps), beta, dout, dbeta, name="dbeta")

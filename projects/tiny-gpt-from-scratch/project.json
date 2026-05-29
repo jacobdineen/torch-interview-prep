@@ -625,144 +625,144 @@
       "name": "linear_forward",
       "part": 4,
       "points": 5,
-      "signature": "linear_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "linear_forward(x, w)",
+      "doc": "Linear layer without bias: y = x @ W."
     },
     {
       "id": "0075",
       "name": "derive_dx_on_paper",
       "part": 4,
       "points": 5,
-      "signature": "derive_dx_on_paper(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "derive_dx_on_paper(dout, w)",
+      "doc": "For y = x @ W, the input gradient is dL/dx = dout @ W.T."
     },
     {
       "id": "0076",
       "name": "derive_linear_dw_on_paper",
       "part": 4,
       "points": 5,
-      "signature": "derive_linear_dw_on_paper(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "derive_linear_dw_on_paper(x, dout)",
+      "doc": "For y = x @ W, the weight gradient is dL/dW = x.T @ dout."
     },
     {
       "id": "0077",
       "name": "linear_backward_dx",
       "part": 4,
       "points": 5,
-      "signature": "linear_backward_dx(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "linear_backward_dx(dout, w)",
+      "doc": "Input gradient of a linear layer: dout @ W.T."
     },
     {
       "id": "0078",
       "name": "linear_backward_dw",
       "part": 4,
       "points": 5,
-      "signature": "linear_backward_dw(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "linear_backward_dw(x, dout)",
+      "doc": "Weight gradient of a linear layer: x.T @ dout."
     },
     {
       "id": "0079",
       "name": "bias_add_forward",
       "part": 4,
       "points": 5,
-      "signature": "bias_add_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "bias_add_forward(x, b)",
+      "doc": "Add a per-feature bias, broadcasting over the batch: y = x + b."
     },
     {
       "id": "0080",
       "name": "bias_add_backward_db",
       "part": 4,
       "points": 5,
-      "signature": "bias_add_backward_db(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "bias_add_backward_db(dout)",
+      "doc": "Bias gradient is dout summed over the batch (axis 0)."
     },
     {
       "id": "0081",
       "name": "relu_forward",
       "part": 4,
       "points": 5,
-      "signature": "relu_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "relu_forward(x)",
+      "doc": "ReLU: max(x, 0)."
     },
     {
       "id": "0082",
       "name": "relu_backward",
       "part": 4,
       "points": 5,
-      "signature": "relu_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "relu_backward(dout, x)",
+      "doc": "ReLU gradient: pass dout through only where the input was positive."
     },
     {
       "id": "0083",
       "name": "softmax_cross_entropy_backward",
       "part": 4,
       "points": 5,
-      "signature": "softmax_cross_entropy_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "softmax_cross_entropy_backward(probs, y)",
+      "doc": "dL/dlogits for mean softmax+cross-entropy over a batch: (probs - onehot)/N."
     },
     {
       "id": "0084",
       "name": "layernorm_forward_mean",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_forward_mean(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_forward_mean(x)",
+      "doc": "Per-row mean over the feature axis, kept 2-D for broadcasting."
     },
     {
       "id": "0085",
       "name": "layernorm_forward_variance",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_forward_variance(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_forward_variance(x)",
+      "doc": "Per-row (population) variance over the feature axis, kept for broadcasting."
     },
     {
       "id": "0086",
       "name": "layernorm_forward_normalize",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_forward_normalize(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_forward_normalize(x, eps)",
+      "doc": "Center and scale to unit variance: (x - mean) / sqrt(var + eps)."
     },
     {
       "id": "0087",
       "name": "layernorm_forward_affine",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_forward_affine(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_forward_affine(xhat, gamma, beta)",
+      "doc": "Learnable scale and shift: gamma * xhat + beta."
     },
     {
       "id": "0088",
       "name": "layernorm_backward_subtract_mean",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_backward_subtract_mean(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_backward_subtract_mean(g)",
+      "doc": "Backward through centering c = x - mean(x): dx = g - mean(g) over features."
     },
     {
       "id": "0089",
       "name": "layernorm_backward_divide_std",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_backward_divide_std(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_backward_divide_std(g, std)",
+      "doc": "Backward through dividing by a (constant) std: dc = g / std."
     },
     {
       "id": "0090",
       "name": "layernorm_backward_full",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_backward_full(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_backward_full(dout, x, gamma, eps)",
+      "doc": "Full input gradient dx of LayerNorm(x) * gamma, over the feature axis."
     },
     {
       "id": "0091",
       "name": "layernorm_backward_implementation",
       "part": 4,
       "points": 5,
-      "signature": "layernorm_backward_implementation(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "layernorm_backward_implementation(dout, x, gamma, eps)",
+      "doc": "Complete LayerNorm backward: returns (dx, dgamma, dbeta)."
     },
     {
       "id": "0092",
