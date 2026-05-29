@@ -1123,3 +1123,202 @@ def test_0130_multihead_reshape_transpose_backward(ns):
     analytic = ns["multihead_reshape_transpose_backward"](dheads, 2)
     with step("inverse of reshape+transpose, gradient-checked"):
         grad_check(fwd, x, dheads, analytic, name="dx")
+
+
+# ------------------- Part 7 — FFN, Blocks, and Full Model -------------------
+
+def _small_block(ns, d_model=8, n_heads=2, d_ff=16, seed=40):
+    np.random.seed(seed)
+    return ns["stack_transformer_blocks"](1, d_model, n_heads, d_ff)[0]
+
+
+def _small_params(ns, vocab=6, d_model=8, n_heads=2, d_ff=16, block_size=4, seed=41):
+    np.random.seed(seed)
+    blocks = ns["stack_transformer_blocks"](1, d_model, n_heads, d_ff)
+    return {
+        "tok_emb": np.random.randn(vocab, d_model) * 0.02,
+        "pos_emb": np.random.randn(block_size, d_model) * 0.02,
+        "blocks": blocks,
+        "ln_f": {"gamma": np.ones(d_model), "beta": np.zeros(d_model)},
+        "lm_head": {"w_lm": np.random.randn(d_model, vocab) * 0.02, "b_lm": np.zeros(vocab)},
+        "block_size": block_size, "vocab_size": vocab,
+    }
+
+
+def test_0131_ffn_linear_one_forward(ns):
+    x = np.ones((2, 3))
+    w1 = np.ones((3, 4))
+    b1 = np.zeros(4)
+    with step("x @ W1 + b1"):
+        expect_allclose(ns["ffn_linear_one_forward"](x, w1, b1), np.full((2, 4), 3.0))
+
+
+def test_0132_ffn_activation_forward(ns):
+    with step("relu"):
+        expect_allclose(ns["ffn_activation_forward"](np.array([-1.0, 2.0])), [0.0, 2.0])
+
+
+def test_0133_ffn_linear_two_forward(ns):
+    a = np.ones((2, 4))
+    w2 = np.ones((4, 3))
+    b2 = np.zeros(3)
+    with step("a @ W2 + b2"):
+        expect_allclose(ns["ffn_linear_two_forward"](a, w2, b2), np.full((2, 3), 4.0))
+
+
+def test_0134_ffn_backward(ns):
+    rng = np.random.default_rng(42)
+    x = rng.standard_normal((2, 5, 4))
+    w1 = rng.standard_normal((4, 8))
+    b1 = rng.standard_normal(8)
+    w2 = rng.standard_normal((8, 4))
+    b2 = rng.standard_normal(4)
+    dout = rng.standard_normal((2, 5, 4))
+
+    def ffn(xx, ww1=w1, bb1=b1, ww2=w2, bb2=b2):
+        a = np.maximum(xx @ ww1 + bb1, 0.0)
+        return a @ ww2 + bb2
+
+    dx, dw1, db1, dw2, db2 = ns["ffn_backward"](dout, x, w1, b1, w2, b2)
+    with step("dx, dW1, db1, dW2, db2 all gradient-checked"):
+        grad_check(lambda X: ffn(X), x, dout, dx, name="dx")
+        grad_check(lambda W: ffn(x, ww1=W), w1, dout, dw1, name="dW1")
+        grad_check(lambda B: ffn(x, bb1=B), b1, dout, db1, name="db1")
+        grad_check(lambda W: ffn(x, ww2=W), w2, dout, dw2, name="dW2")
+        grad_check(lambda B: ffn(x, bb2=B), b2, dout, db2, name="db2")
+
+
+def test_0135_residual_forward(ns):
+    with step("x + sublayer"):
+        expect_allclose(ns["residual_forward"](np.ones(3), np.full(3, 2.0)), np.full(3, 3.0))
+
+
+def test_0136_residual_backward(ns):
+    g = np.array([1.0, 2.0, 3.0])
+    dx, ds = ns["residual_backward"](g)
+    with step("grad goes to both branches"):
+        expect_allclose(dx, g)
+        expect_allclose(ds, g)
+
+
+def test_0137_pre_layernorm_sublayer_forward(ns):
+    rng = np.random.default_rng(43)
+    x = rng.standard_normal((2, 5))
+    gamma = np.ones(5)
+    beta = np.zeros(5)
+    with step("zero sublayer -> identity; identity sublayer -> x + LN(x)"):
+        out0 = ns["pre_layernorm_sublayer_forward"](x, gamma, beta, 1e-5, lambda z: np.zeros_like(z))
+        expect_allclose(out0, x)
+        out1 = ns["pre_layernorm_sublayer_forward"](x, gamma, beta, 1e-5, lambda z: z)
+        expect_allclose(out1, x + ns["layernorm_forward_normalize"](x, 1e-5))
+
+
+def test_0138_transformer_block_forward(ns):
+    block = _small_block(ns)
+    x = np.random.default_rng(44).standard_normal((2, 4, 8))
+    mask = ns["build_causal_mask"](4)
+    with step("shape preserved (B,T,d_model)"):
+        expect_shape(ns["transformer_block_forward"](x, block, mask), (2, 4, 8))
+
+
+def test_0139_transformer_block_backward(ns):
+    block = _small_block(ns)
+    rng = np.random.default_rng(45)
+    x = rng.standard_normal((2, 4, 8))
+    mask = ns["build_causal_mask"](4)
+    dout = rng.standard_normal((2, 4, 8))
+    dx, grads = ns["transformer_block_backward"](dout, x, block, mask)
+    with step("dx gradient-checked through the whole block"):
+        grad_check(lambda X: ns["transformer_block_forward"](X, block, mask), x, dout, dx, name="dx")
+    with step("a representative weight grad (attn Wq) gradient-checked"):
+        def f_wq(W):
+            blk = {**block, "attn": {**block["attn"], "Wq": W}}
+            return ns["transformer_block_forward"](x, blk, mask)
+        grad_check(f_wq, block["attn"]["Wq"], dout, grads["attn"]["Wq"], name="dWq")
+    with step("ffn W1 grad gradient-checked"):
+        def f_w1(W):
+            blk = {**block, "ffn": {**block["ffn"], "w1": W}}
+            return ns["transformer_block_forward"](x, blk, mask)
+        grad_check(f_w1, block["ffn"]["w1"], dout, grads["ffn"]["w1"], name="dW1")
+
+
+def test_0140_stack_transformer_blocks(ns):
+    np.random.seed(46)
+    blocks = ns["stack_transformer_blocks"](3, 8, 2, 16)
+    with step("right count and shapes"):
+        expect_eq(len(blocks), 3)
+        b0 = blocks[0]
+        expect_shape(b0["attn"]["Wq"], (8, 8))
+        expect_shape(b0["ffn"]["w1"], (8, 16))
+        expect_eq(b0["attn"]["n_heads"], 2)
+
+
+def test_0141_forward_through_all_blocks(ns):
+    np.random.seed(47)
+    blocks = ns["stack_transformer_blocks"](2, 8, 2, 16)
+    x = np.random.default_rng(48).standard_normal((2, 4, 8))
+    mask = ns["build_causal_mask"](4)
+    with step("shape preserved through the stack"):
+        expect_shape(ns["forward_through_all_blocks"](x, blocks, mask), (2, 4, 8))
+
+
+def test_0142_backward_through_all_blocks(ns):
+    np.random.seed(49)
+    blocks = ns["stack_transformer_blocks"](2, 8, 2, 16)
+    rng = np.random.default_rng(50)
+    x = rng.standard_normal((2, 4, 8))
+    mask = ns["build_causal_mask"](4)
+    dout = rng.standard_normal((2, 4, 8))
+    dx, grads = ns["backward_through_all_blocks"](dout, x, blocks, mask)
+    with step("dx through the whole stack gradient-checked; per-block grads returned"):
+        grad_check(lambda X: ns["forward_through_all_blocks"](X, blocks, mask), x, dout, dx, name="dx")
+        expect_eq(len(grads), 2)
+
+
+def test_0143_final_layernorm_forward(ns):
+    rng = np.random.default_rng(51)
+    x = rng.standard_normal((2, 4, 8))
+    out = ns["final_layernorm_forward"](x, np.ones(8), np.zeros(8), 1e-5)
+    with step("normalized rows"):
+        expect_allclose(out.mean(axis=-1), np.zeros((2, 4)), atol=1e-6)
+
+
+def test_0144_lm_head_linear_forward(ns):
+    x = np.ones((2, 3, 4))
+    w = np.ones((4, 6))
+    b = np.zeros(6)
+    with step("(B,T,d) -> (B,T,vocab)"):
+        out = ns["lm_head_linear_forward"](x, w, b)
+        expect_shape(out, (2, 3, 6))
+        expect_allclose(out, np.full((2, 3, 6), 4.0))
+
+
+def test_0145_full_model_forward(ns):
+    params = _small_params(ns)
+    x = np.array([[0, 1, 2, 3], [4, 5, 0, 1]])
+    with step("logits shape (B,T,vocab)"):
+        expect_shape(ns["full_model_forward"](params, x), (2, 4, 6))
+
+
+def test_0146_full_model_backward(ns):
+    params = _small_params(ns)
+    x = np.array([[0, 1, 2, 3], [4, 5, 0, 1]])
+    dlogits = np.random.default_rng(52).standard_normal((2, 4, 6))
+    grads = ns["full_model_backward"](params, x, dlogits)
+
+    def forward_with(key_path, value):
+        import copy
+        p = copy.deepcopy(params)
+        node = p
+        for k in key_path[:-1]:
+            node = node[k]
+        node[key_path[-1]] = value
+        return ns["full_model_forward"](p, x)
+
+    with step("tok_emb / lm_head.w_lm / ln_f.gamma grads gradient-checked end-to-end"):
+        grad_check(lambda E: forward_with(["tok_emb"], E), params["tok_emb"],
+                   dlogits, grads["tok_emb"], name="d_tok_emb")
+        grad_check(lambda W: forward_with(["lm_head", "w_lm"], W), params["lm_head"]["w_lm"],
+                   dlogits, grads["lm_head"]["w_lm"], name="d_w_lm")
+        grad_check(lambda G: forward_with(["ln_f", "gamma"], G), params["ln_f"]["gamma"],
+                   dlogits, grads["ln_f"]["gamma"], name="d_ln_f_gamma")

@@ -1081,128 +1081,128 @@
       "name": "ffn_linear_one_forward",
       "part": 6,
       "points": 5,
-      "signature": "ffn_linear_one_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ffn_linear_one_forward(x, w1, b1)",
+      "doc": "First FFN linear layer: x @ W1 + b1 -> (..., d_ff)."
     },
     {
       "id": "0132",
       "name": "ffn_activation_forward",
       "part": 6,
       "points": 5,
-      "signature": "ffn_activation_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ffn_activation_forward(h)",
+      "doc": "FFN nonlinearity (ReLU)."
     },
     {
       "id": "0133",
       "name": "ffn_linear_two_forward",
       "part": 6,
       "points": 5,
-      "signature": "ffn_linear_two_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ffn_linear_two_forward(a, w2, b2)",
+      "doc": "Second FFN linear layer: a @ W2 + b2 -> (..., d_model)."
     },
     {
       "id": "0134",
       "name": "ffn_backward",
       "part": 6,
       "points": 5,
-      "signature": "ffn_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ffn_backward(dout, x, w1, b1, w2, b2)",
+      "doc": "Backward through the 2-layer ReLU FFN. Returns (dx, dW1, db1, dW2, db2)."
     },
     {
       "id": "0135",
       "name": "residual_forward",
       "part": 6,
       "points": 5,
-      "signature": "residual_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "residual_forward(x, sublayer_out)",
+      "doc": "Residual connection: x + sublayer(x)."
     },
     {
       "id": "0136",
       "name": "residual_backward",
       "part": 6,
       "points": 5,
-      "signature": "residual_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "residual_backward(dout)",
+      "doc": "Gradient splits equally to both branches of x + sublayer: (dx, dsublayer)."
     },
     {
       "id": "0137",
       "name": "pre_layernorm_sublayer_forward",
       "part": 6,
       "points": 5,
-      "signature": "pre_layernorm_sublayer_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "pre_layernorm_sublayer_forward(x, gamma, beta, eps, sublayer_fn)",
+      "doc": "Pre-LN sublayer: x + sublayer(LayerNorm(x))."
     },
     {
       "id": "0138",
       "name": "transformer_block_forward",
       "part": 6,
       "points": 5,
-      "signature": "transformer_block_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "transformer_block_forward(x, block, mask)",
+      "doc": "Pre-LN Transformer block: attention sublayer then FFN sublayer, each residual."
     },
     {
       "id": "0139",
       "name": "transformer_block_backward",
       "part": 6,
       "points": 5,
-      "signature": "transformer_block_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "transformer_block_backward(dout, x, block, mask)",
+      "doc": "Backward through a pre-LN Transformer block. Returns (dx, grads) where grads\nmirrors the block dict (ln1, attn, ln2, ffn)."
     },
     {
       "id": "0140",
       "name": "stack_transformer_blocks",
       "part": 6,
       "points": 5,
-      "signature": "stack_transformer_blocks(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "stack_transformer_blocks(n_layers, d_model, n_heads, d_ff)",
+      "doc": "Create ``n_layers`` randomly-initialized pre-LN Transformer blocks."
     },
     {
       "id": "0141",
       "name": "forward_through_all_blocks",
       "part": 6,
       "points": 5,
-      "signature": "forward_through_all_blocks(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "forward_through_all_blocks(x, blocks, mask)",
+      "doc": "Run the input through every Transformer block in order."
     },
     {
       "id": "0142",
       "name": "backward_through_all_blocks",
       "part": 6,
       "points": 5,
-      "signature": "backward_through_all_blocks(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "backward_through_all_blocks(dout, x, blocks, mask)",
+      "doc": "Backward through all blocks (reverse order). Returns (dx, [grads per block])."
     },
     {
       "id": "0143",
       "name": "final_layernorm_forward",
       "part": 6,
       "points": 5,
-      "signature": "final_layernorm_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "final_layernorm_forward(x, gamma, beta, eps)",
+      "doc": "Final LayerNorm before the LM head."
     },
     {
       "id": "0144",
       "name": "lm_head_linear_forward",
       "part": 6,
       "points": 5,
-      "signature": "lm_head_linear_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "lm_head_linear_forward(x, w_lm, b_lm)",
+      "doc": "Project hidden states to vocab logits: x @ W_lm + b_lm -> (..., vocab)."
     },
     {
       "id": "0145",
       "name": "full_model_forward",
       "part": 6,
       "points": 5,
-      "signature": "full_model_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "full_model_forward(params, x)",
+      "doc": "Full GPT forward: embeddings -> blocks -> final LN -> LM head. Returns logits."
     },
     {
       "id": "0146",
       "name": "full_model_backward",
       "part": 6,
       "points": 5,
-      "signature": "full_model_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "full_model_backward(params, x, dlogits)",
+      "doc": "Full GPT backward from dlogits. Returns a grads dict mirroring ``params``\n(tok_emb, pos_emb, blocks, ln_f, lm_head)."
     },
     {
       "id": "0147",

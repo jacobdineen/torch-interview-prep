@@ -752,3 +752,260 @@ def multihead_reshape_transpose_backward(dheads, n_heads):
     gradient (B,H,T,d_head) back to (B,T,d_model)."""
     b, h, t, dh = dheads.shape
     return dheads.transpose(0, 2, 1, 3).reshape(b, t, h * dh)
+
+
+# ================= Part 7 — FFN, Blocks, and Full Model =================
+
+_EPS = 1e-5
+
+
+def _flat(a):
+    return a.reshape(-1, a.shape[-1])
+
+
+def ffn_linear_one_forward(x, w1, b1):
+    """First FFN linear layer: x @ W1 + b1 -> (..., d_ff)."""
+    return x @ w1 + b1
+
+
+def ffn_activation_forward(h):
+    """FFN nonlinearity (ReLU)."""
+    return np.maximum(h, 0.0)
+
+
+def ffn_linear_two_forward(a, w2, b2):
+    """Second FFN linear layer: a @ W2 + b2 -> (..., d_model)."""
+    return a @ w2 + b2
+
+
+def ffn_backward(dout, x, w1, b1, w2, b2):
+    """Backward through the 2-layer ReLU FFN. Returns (dx, dW1, db1, dW2, db2)."""
+    h = x @ w1 + b1
+    a = np.maximum(h, 0.0)
+    da = dout @ w2.T
+    dh = da * (h > 0)
+    dx = dh @ w1.T
+    dw1 = _flat(x).T @ _flat(dh)
+    db1 = _flat(dh).sum(axis=0)
+    dw2 = _flat(a).T @ _flat(dout)
+    db2 = _flat(dout).sum(axis=0)
+    return dx, dw1, db1, dw2, db2
+
+
+def residual_forward(x, sublayer_out):
+    """Residual connection: x + sublayer(x)."""
+    return x + sublayer_out
+
+
+def residual_backward(dout):
+    """Gradient splits equally to both branches of x + sublayer: (dx, dsublayer)."""
+    return dout, dout
+
+
+def pre_layernorm_sublayer_forward(x, gamma, beta, eps, sublayer_fn):
+    """Pre-LN sublayer: x + sublayer(LayerNorm(x))."""
+    normed = layernorm_forward_affine(layernorm_forward_normalize(x, eps), gamma, beta)
+    return x + sublayer_fn(normed)
+
+
+# --- attention sublayer (composed from Part 6 steps) ---
+
+def _mha_forward(x, attn, mask):
+    n_heads = attn["n_heads"]
+    q = compute_query(x, attn["Wq"])
+    k = compute_key(x, attn["Wk"])
+    v = compute_value(x, attn["Wv"])
+    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
+    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
+    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
+    w = multihead_masked_softmax_scores(qh, kh, mask)
+    o = multihead_weighted_sum(w, vh)
+    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
+    return multihead_output_projection_forward(merged, attn["Wo"])
+
+
+def _mha_backward(da, x, attn, mask):
+    n_heads = attn["n_heads"]
+    wq, wk, wv, wo = attn["Wq"], attn["Wk"], attn["Wv"], attn["Wo"]
+    # recompute forward intermediates
+    q = x @ wq
+    k = x @ wk
+    v = x @ wv
+    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
+    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
+    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
+    d_head = qh.shape[-1]
+    w = multihead_masked_softmax_scores(qh, kh, mask)
+    o = multihead_weighted_sum(w, vh)
+    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
+    # backward
+    dmerged = da @ wo.T
+    dwo = _flat(merged).T @ _flat(da)
+    b, t, dm = dmerged.shape
+    do = dmerged.reshape(b, t, n_heads, dm // n_heads).transpose(0, 2, 1, 3)  # (B,H,T,dh)
+    dw = do @ vh.transpose(0, 1, 3, 2)
+    dvh = w.transpose(0, 1, 3, 2) @ do
+    dscaled = w * (dw - (dw * w).sum(axis=-1, keepdims=True))
+    dscores = dscaled / np.sqrt(d_head)
+    dqh = dscores @ kh
+    dkh = dscores.transpose(0, 1, 3, 2) @ qh
+    dq = multihead_reshape_transpose_backward(dqh, n_heads)
+    dk = multihead_reshape_transpose_backward(dkh, n_heads)
+    dv = multihead_reshape_transpose_backward(dvh, n_heads)
+    dx = dq @ wq.T + dk @ wk.T + dv @ wv.T
+    grads = {"Wq": _flat(x).T @ _flat(dq), "Wk": _flat(x).T @ _flat(dk),
+             "Wv": _flat(x).T @ _flat(dv), "Wo": dwo}
+    return dx, grads
+
+
+def transformer_block_forward(x, block, mask):
+    """Pre-LN Transformer block: attention sublayer then FFN sublayer, each residual."""
+    n1 = layernorm_forward_affine(
+        layernorm_forward_normalize(x, _EPS), block["ln1"]["gamma"], block["ln1"]["beta"])
+    a = _mha_forward(n1, block["attn"], mask)
+    r1 = x + a
+    n2 = layernorm_forward_affine(
+        layernorm_forward_normalize(r1, _EPS), block["ln2"]["gamma"], block["ln2"]["beta"])
+    f = block["ffn"]
+    fout = ffn_linear_two_forward(
+        ffn_activation_forward(ffn_linear_one_forward(n2, f["w1"], f["b1"])), f["w2"], f["b2"])
+    return r1 + fout
+
+
+def transformer_block_backward(dout, x, block, mask):
+    """Backward through a pre-LN Transformer block. Returns (dx, grads) where grads
+    mirrors the block dict (ln1, attn, ln2, ffn)."""
+    f = block["ffn"]
+    # recompute forward
+    n1 = layernorm_forward_affine(
+        layernorm_forward_normalize(x, _EPS), block["ln1"]["gamma"], block["ln1"]["beta"])
+    a = _mha_forward(n1, block["attn"], mask)
+    r1 = x + a
+    n2 = layernorm_forward_affine(
+        layernorm_forward_normalize(r1, _EPS), block["ln2"]["gamma"], block["ln2"]["beta"])
+    # backward: y = r1 + ffn(n2)
+    dr1, dfout = dout, dout
+    dn2, dw1, db1, dw2, db2 = ffn_backward(dfout, n2, f["w1"], f["b1"], f["w2"], f["b2"])
+    dr1_ln2, dg2, db_2 = layernorm_backward_implementation(dn2, r1, block["ln2"]["gamma"], _EPS)
+    dr1 = dr1 + dr1_ln2
+    # r1 = x + a
+    dx_res, da = dr1, dr1
+    dn1, attn_grads = _mha_backward(da, n1, block["attn"], mask)
+    dx_ln1, dg1, db_1 = layernorm_backward_implementation(dn1, x, block["ln1"]["gamma"], _EPS)
+    dx = dx_res + dx_ln1
+    grads = {
+        "ln1": {"gamma": dg1, "beta": db_1},
+        "attn": attn_grads,
+        "ln2": {"gamma": dg2, "beta": db_2},
+        "ffn": {"w1": dw1, "b1": db1, "w2": dw2, "b2": db2},
+    }
+    return dx, grads
+
+
+def stack_transformer_blocks(n_layers, d_model, n_heads, d_ff):
+    """Create ``n_layers`` randomly-initialized pre-LN Transformer blocks."""
+    blocks = []
+    for _ in range(n_layers):
+        blocks.append({
+            "ln1": {"gamma": np.ones(d_model), "beta": np.zeros(d_model)},
+            "attn": {
+                "Wq": np.random.randn(d_model, d_model) * 0.02,
+                "Wk": np.random.randn(d_model, d_model) * 0.02,
+                "Wv": np.random.randn(d_model, d_model) * 0.02,
+                "Wo": np.random.randn(d_model, d_model) * 0.02,
+                "n_heads": n_heads,
+            },
+            "ln2": {"gamma": np.ones(d_model), "beta": np.zeros(d_model)},
+            "ffn": {
+                "w1": np.random.randn(d_model, d_ff) * 0.02, "b1": np.zeros(d_ff),
+                "w2": np.random.randn(d_ff, d_model) * 0.02, "b2": np.zeros(d_model),
+            },
+        })
+    return blocks
+
+
+def forward_through_all_blocks(x, blocks, mask):
+    """Run the input through every Transformer block in order."""
+    for block in blocks:
+        x = transformer_block_forward(x, block, mask)
+    return x
+
+
+def backward_through_all_blocks(dout, x, blocks, mask):
+    """Backward through all blocks (reverse order). Returns (dx, [grads per block])."""
+    inputs = []
+    h = x
+    for block in blocks:
+        inputs.append(h)
+        h = transformer_block_forward(h, block, mask)
+    grads = [None] * len(blocks)
+    for i in reversed(range(len(blocks))):
+        dout, g = transformer_block_backward(dout, inputs[i], blocks[i], mask)
+        grads[i] = g
+    return dout, grads
+
+
+def final_layernorm_forward(x, gamma, beta, eps):
+    """Final LayerNorm before the LM head."""
+    return layernorm_forward_affine(layernorm_forward_normalize(x, eps), gamma, beta)
+
+
+def lm_head_linear_forward(x, w_lm, b_lm):
+    """Project hidden states to vocab logits: x @ W_lm + b_lm -> (..., vocab)."""
+    return x @ w_lm + b_lm
+
+
+def full_model_forward(params, x):
+    """Full GPT forward: embeddings -> blocks -> final LN -> LM head. Returns logits."""
+    b, t = x.shape
+    tok = token_embedding_forward(params["tok_emb"], x)
+    pos = slice_positional_embedding(params["pos_emb"], t)
+    h = add_token_and_positional_embeddings(tok, pos)
+    mask = build_causal_mask(t)
+    h = forward_through_all_blocks(h, params["blocks"], mask)
+    h = final_layernorm_forward(h, params["ln_f"]["gamma"], params["ln_f"]["beta"], _EPS)
+    return lm_head_linear_forward(h, params["lm_head"]["w_lm"], params["lm_head"]["b_lm"])
+
+
+def full_model_backward(params, x, dlogits):
+    """Full GPT backward from dlogits. Returns a grads dict mirroring ``params``
+    (tok_emb, pos_emb, blocks, ln_f, lm_head)."""
+    b, t = x.shape
+    # recompute forward intermediates
+    tok = token_embedding_forward(params["tok_emb"], x)
+    pos = slice_positional_embedding(params["pos_emb"], t)
+    h0 = add_token_and_positional_embeddings(tok, pos)
+    mask = build_causal_mask(t)
+    # cache block inputs
+    block_inputs = []
+    h = h0
+    for block in params["blocks"]:
+        block_inputs.append(h)
+        h = transformer_block_forward(h, block, mask)
+    h_blocks = h
+    # LM head: logits = h_ln @ W_lm + b_lm
+    h_ln = final_layernorm_forward(h_blocks, params["ln_f"]["gamma"], params["ln_f"]["beta"], _EPS)
+    dh_ln = dlogits @ params["lm_head"]["w_lm"].T
+    dw_lm = _flat(h_ln).T @ _flat(dlogits)
+    db_lm = _flat(dlogits).sum(axis=0)
+    # final LN backward
+    dh_blocks, dgf, dbf = layernorm_backward_implementation(
+        dh_ln, h_blocks, params["ln_f"]["gamma"], _EPS)
+    # blocks backward
+    dgrad = dh_blocks
+    block_grads = [None] * len(params["blocks"])
+    for i in reversed(range(len(params["blocks"]))):
+        dgrad, g = transformer_block_backward(dgrad, block_inputs[i], params["blocks"][i], mask)
+        block_grads[i] = g
+    # embeddings backward: h0 = tok + pos
+    dtok, dpos_t = embedding_sum_backward(dgrad)
+    d_tok_emb = token_embedding_backward(dtok, x, params["tok_emb"].shape[0], params["tok_emb"].shape[1])
+    d_pos_emb = np.zeros_like(params["pos_emb"])
+    d_pos_emb[:t] += dpos_t
+    return {
+        "tok_emb": d_tok_emb,
+        "pos_emb": d_pos_emb,
+        "blocks": block_grads,
+        "ln_f": {"gamma": dgf, "beta": dbf},
+        "lm_head": {"w_lm": dw_lm, "b_lm": db_lm},
+    }
