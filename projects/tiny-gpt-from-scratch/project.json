@@ -769,312 +769,312 @@
       "name": "create_token_embedding",
       "part": 5,
       "points": 5,
-      "signature": "create_token_embedding(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_token_embedding(vocab_size, d_model)",
+      "doc": "Token embedding table (vocab, d_model), small random init."
     },
     {
       "id": "0093",
       "name": "token_embedding_forward",
       "part": 5,
       "points": 5,
-      "signature": "token_embedding_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "token_embedding_forward(tok_emb, x)",
+      "doc": "Look up embeddings for token ids x (B,T) -> (B, T, d_model)."
     },
     {
       "id": "0094",
       "name": "token_embedding_backward",
       "part": 5,
       "points": 5,
-      "signature": "token_embedding_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "token_embedding_backward(dout, x, vocab_size, d_model)",
+      "doc": "Gradient w.r.t. the table: scatter-add dout into the rows that were used."
     },
     {
       "id": "0095",
       "name": "create_positional_embedding",
       "part": 5,
       "points": 5,
-      "signature": "create_positional_embedding(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_positional_embedding(block_size, d_model)",
+      "doc": "Positional embedding table (block_size, d_model), small random init."
     },
     {
       "id": "0096",
       "name": "slice_positional_embedding",
       "part": 5,
       "points": 5,
-      "signature": "slice_positional_embedding(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "slice_positional_embedding(pos_emb, t)",
+      "doc": "Take the first ``t`` positions: (t, d_model)."
     },
     {
       "id": "0097",
       "name": "add_token_and_positional_embeddings",
       "part": 5,
       "points": 5,
-      "signature": "add_token_and_positional_embeddings(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "add_token_and_positional_embeddings(tok, pos)",
+      "doc": "Sum token (B,T,d) and positional (T,d) embeddings (pos broadcasts over batch)."
     },
     {
       "id": "0098",
       "name": "embedding_sum_backward",
       "part": 5,
       "points": 5,
-      "signature": "embedding_sum_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "embedding_sum_backward(dout)",
+      "doc": "Backward of tok+pos: (dtok, dpos). dtok = dout; dpos sums over the batch."
     },
     {
       "id": "0099",
       "name": "create_qkv_projections",
       "part": 5,
       "points": 5,
-      "signature": "create_qkv_projections(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_qkv_projections(d_model)",
+      "doc": "Single-head Q/K/V projection matrices, each (d_model, d_model)."
     },
     {
       "id": "0100",
       "name": "compute_query",
       "part": 5,
       "points": 5,
-      "signature": "compute_query(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_query(x, wq)",
+      "doc": "Query projection: Q = x @ Wq."
     },
     {
       "id": "0101",
       "name": "compute_key",
       "part": 5,
       "points": 5,
-      "signature": "compute_key(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_key(x, wk)",
+      "doc": "Key projection: K = x @ Wk."
     },
     {
       "id": "0102",
       "name": "compute_value",
       "part": 5,
       "points": 5,
-      "signature": "compute_value(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_value(x, wv)",
+      "doc": "Value projection: V = x @ Wv."
     },
     {
       "id": "0103",
       "name": "compute_attention_scores",
       "part": 5,
       "points": 5,
-      "signature": "compute_attention_scores(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_attention_scores(q, k)",
+      "doc": "Raw attention scores Q @ K.T -> (T, T)."
     },
     {
       "id": "0104",
       "name": "scale_attention_scores",
       "part": 5,
       "points": 5,
-      "signature": "scale_attention_scores(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "scale_attention_scores(scores, d_head)",
+      "doc": "Scale scores by 1/sqrt(d_head) to stabilize the softmax."
     },
     {
       "id": "0105",
       "name": "build_causal_mask",
       "part": 5,
       "points": 5,
-      "signature": "build_causal_mask(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_causal_mask(t)",
+      "doc": "Boolean (T,T) mask, True where a position must be hidden (strictly future)."
     },
     {
       "id": "0106",
       "name": "apply_causal_mask",
       "part": 5,
       "points": 5,
-      "signature": "apply_causal_mask(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "apply_causal_mask(scores, mask)",
+      "doc": "Set masked (future) score entries to a large negative number."
     },
     {
       "id": "0107",
       "name": "softmax_attention_weights",
       "part": 5,
       "points": 5,
-      "signature": "softmax_attention_weights(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "softmax_attention_weights(scores)",
+      "doc": "Row-wise softmax over the key axis -> attention weights."
     },
     {
       "id": "0108",
       "name": "attention_weighted_values",
       "part": 5,
       "points": 5,
-      "signature": "attention_weighted_values(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "attention_weighted_values(weights, v)",
+      "doc": "Weighted sum of values: weights @ V."
     },
     {
       "id": "0109",
       "name": "apply_output_projection",
       "part": 5,
       "points": 5,
-      "signature": "apply_output_projection(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "apply_output_projection(attn_out, wo)",
+      "doc": "Project the attention output back to d_model: attn_out @ Wo."
     },
     {
       "id": "0110",
       "name": "output_projection_backward",
       "part": 5,
       "points": 5,
-      "signature": "output_projection_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "output_projection_backward(dout, attn_out, wo)",
+      "doc": "Backward of attn_out @ Wo: (d_attn_out, dWo)."
     },
     {
       "id": "0111",
       "name": "attention_value_backward",
       "part": 5,
       "points": 5,
-      "signature": "attention_value_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "attention_value_backward(dattn_out, weights, v)",
+      "doc": "Backward of attn_out = weights @ V: (dweights, dV)."
     },
     {
       "id": "0112",
       "name": "masked_softmax_backward",
       "part": 5,
       "points": 5,
-      "signature": "masked_softmax_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "masked_softmax_backward(dweights, weights)",
+      "doc": "Backward through the row-wise softmax: dscores from dweights and weights."
     },
     {
       "id": "0113",
       "name": "scale_scores_backward",
       "part": 5,
       "points": 5,
-      "signature": "scale_scores_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "scale_scores_backward(dscaled, d_head)",
+      "doc": "Backward of dividing scores by sqrt(d_head)."
     },
     {
       "id": "0114",
       "name": "qk_scores_backward",
       "part": 5,
       "points": 5,
-      "signature": "qk_scores_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "qk_scores_backward(dscores, q, k)",
+      "doc": "Backward of scores = Q @ K.T: (dQ, dK)."
     },
     {
       "id": "0115",
       "name": "qkv_projection_backward",
       "part": 5,
       "points": 5,
-      "signature": "qkv_projection_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "qkv_projection_backward(dq, dk, dv, x, wq, wk, wv)",
+      "doc": "Backward of the Q/K/V projections: (dx, dWq, dWk, dWv)."
     },
     {
       "id": "0116",
       "name": "choose_attention_head_config",
       "part": 5,
       "points": 5,
-      "signature": "choose_attention_head_config(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "choose_attention_head_config(d_model, n_heads)",
+      "doc": "Per-head dimension d_head = d_model // n_heads (must divide evenly)."
     },
     {
       "id": "0117",
       "name": "create_multihead_qkv_projections",
       "part": 5,
       "points": 5,
-      "signature": "create_multihead_qkv_projections(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_multihead_qkv_projections(d_model)",
+      "doc": "Combined Q/K/V projections for all heads, each (d_model, d_model)."
     },
     {
       "id": "0118",
       "name": "create_multihead_output_projection",
       "part": 5,
       "points": 5,
-      "signature": "create_multihead_output_projection(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_multihead_output_projection(d_model)",
+      "doc": "Output projection Wo, (d_model, d_model)."
     },
     {
       "id": "0119",
       "name": "reshape_to_heads",
       "part": 5,
       "points": 5,
-      "signature": "reshape_to_heads(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reshape_to_heads(x, n_heads)",
+      "doc": "Split the feature axis into heads: (B,T,d_model) -> (B,T,n_heads,d_head)."
     },
     {
       "id": "0120",
       "name": "transpose_heads_to_front",
       "part": 5,
       "points": 5,
-      "signature": "transpose_heads_to_front(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "transpose_heads_to_front(x)",
+      "doc": "(B,T,H,d_head) -> (B,H,T,d_head) so each head is an independent (T,d_head) block."
     },
     {
       "id": "0121",
       "name": "get_multihead_n_heads",
       "part": 5,
       "points": 5,
-      "signature": "get_multihead_n_heads(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "get_multihead_n_heads(x)",
+      "doc": "Number of heads from a (B,H,T,d_head) tensor."
     },
     {
       "id": "0122",
       "name": "get_multihead_sequence_length",
       "part": 5,
       "points": 5,
-      "signature": "get_multihead_sequence_length(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "get_multihead_sequence_length(x)",
+      "doc": "Sequence length T from a (B,H,T,d_head) tensor."
     },
     {
       "id": "0123",
       "name": "compute_d_head",
       "part": 5,
       "points": 5,
-      "signature": "compute_d_head(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_d_head(x)",
+      "doc": "Per-head dimension d_head from a (B,H,T,d_head) tensor."
     },
     {
       "id": "0124",
       "name": "multihead_masked_softmax_scores",
       "part": 5,
       "points": 5,
-      "signature": "multihead_masked_softmax_scores(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "multihead_masked_softmax_scores(q, k, mask)",
+      "doc": "Per-head causal attention weights: softmax(QK^T/sqrt(d_head) + mask)."
     },
     {
       "id": "0125",
       "name": "multihead_weighted_sum",
       "part": 5,
       "points": 5,
-      "signature": "multihead_weighted_sum(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "multihead_weighted_sum(weights, v)",
+      "doc": "Per-head weighted sum of values: weights @ V -> (B,H,T,d_head)."
     },
     {
       "id": "0126",
       "name": "transpose_heads_to_back",
       "part": 5,
       "points": 5,
-      "signature": "transpose_heads_to_back(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "transpose_heads_to_back(x)",
+      "doc": "(B,H,T,d_head) -> (B,T,H,d_head), ready to merge heads."
     },
     {
       "id": "0127",
       "name": "get_multihead_output_sequence_length",
       "part": 5,
       "points": 5,
-      "signature": "get_multihead_output_sequence_length(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "get_multihead_output_sequence_length(x)",
+      "doc": "Sequence length T from a (B,T,H,d_head) tensor."
     },
     {
       "id": "0128",
       "name": "merge_heads_to_d_model",
       "part": 5,
       "points": 5,
-      "signature": "merge_heads_to_d_model(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "merge_heads_to_d_model(x)",
+      "doc": "Concatenate heads back into d_model: (B,T,H,d_head) -> (B,T,d_model)."
     },
     {
       "id": "0129",
       "name": "multihead_output_projection_forward",
       "part": 5,
       "points": 5,
-      "signature": "multihead_output_projection_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "multihead_output_projection_forward(x, wo)",
+      "doc": "Final output projection: (B,T,d_model) @ Wo."
     },
     {
       "id": "0130",
       "name": "multihead_reshape_transpose_backward",
       "part": 5,
       "points": 5,
-      "signature": "multihead_reshape_transpose_backward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "multihead_reshape_transpose_backward(dheads, n_heads)",
+      "doc": "Inverse of reshape_to_heads + transpose_heads_to_front: take a per-head\ngradient (B,H,T,d_head) back to (B,T,d_model)."
     },
     {
       "id": "0131",

@@ -536,3 +536,219 @@ def layernorm_backward_implementation(dout, x, gamma, eps):
     dx = (dxhat - dxhat.mean(axis=-1, keepdims=True)
           - xhat * (dxhat * xhat).mean(axis=-1, keepdims=True)) / std
     return dx, dgamma, dbeta
+
+
+# ================= Part 6 — Embeddings and Self-Attention =================
+
+def create_token_embedding(vocab_size, d_model):
+    """Token embedding table (vocab, d_model), small random init."""
+    return np.random.randn(vocab_size, d_model) * 0.02
+
+
+def token_embedding_forward(tok_emb, x):
+    """Look up embeddings for token ids x (B,T) -> (B, T, d_model)."""
+    return tok_emb[x]
+
+
+def token_embedding_backward(dout, x, vocab_size, d_model):
+    """Gradient w.r.t. the table: scatter-add dout into the rows that were used."""
+    d_emb = np.zeros((vocab_size, d_model))
+    np.add.at(d_emb, x, dout)
+    return d_emb
+
+
+def create_positional_embedding(block_size, d_model):
+    """Positional embedding table (block_size, d_model), small random init."""
+    return np.random.randn(block_size, d_model) * 0.02
+
+
+def slice_positional_embedding(pos_emb, t):
+    """Take the first ``t`` positions: (t, d_model)."""
+    return pos_emb[:t]
+
+
+def add_token_and_positional_embeddings(tok, pos):
+    """Sum token (B,T,d) and positional (T,d) embeddings (pos broadcasts over batch)."""
+    return tok + pos
+
+
+def embedding_sum_backward(dout):
+    """Backward of tok+pos: (dtok, dpos). dtok = dout; dpos sums over the batch."""
+    return dout, dout.sum(axis=0)
+
+
+def create_qkv_projections(d_model):
+    """Single-head Q/K/V projection matrices, each (d_model, d_model)."""
+    return {"Wq": np.random.randn(d_model, d_model) * 0.02,
+            "Wk": np.random.randn(d_model, d_model) * 0.02,
+            "Wv": np.random.randn(d_model, d_model) * 0.02}
+
+
+def compute_query(x, wq):
+    """Query projection: Q = x @ Wq."""
+    return x @ wq
+
+
+def compute_key(x, wk):
+    """Key projection: K = x @ Wk."""
+    return x @ wk
+
+
+def compute_value(x, wv):
+    """Value projection: V = x @ Wv."""
+    return x @ wv
+
+
+def compute_attention_scores(q, k):
+    """Raw attention scores Q @ K.T -> (T, T)."""
+    return q @ k.T
+
+
+def scale_attention_scores(scores, d_head):
+    """Scale scores by 1/sqrt(d_head) to stabilize the softmax."""
+    return scores / np.sqrt(d_head)
+
+
+def build_causal_mask(t):
+    """Boolean (T,T) mask, True where a position must be hidden (strictly future)."""
+    return np.triu(np.ones((t, t), dtype=bool), k=1)
+
+
+def apply_causal_mask(scores, mask):
+    """Set masked (future) score entries to a large negative number."""
+    out = scores.copy()
+    out[mask] = -1e9
+    return out
+
+
+def softmax_attention_weights(scores):
+    """Row-wise softmax over the key axis -> attention weights."""
+    return stable_softmax_2d_rowwise(scores)
+
+
+def attention_weighted_values(weights, v):
+    """Weighted sum of values: weights @ V."""
+    return weights @ v
+
+
+def apply_output_projection(attn_out, wo):
+    """Project the attention output back to d_model: attn_out @ Wo."""
+    return attn_out @ wo
+
+
+def output_projection_backward(dout, attn_out, wo):
+    """Backward of attn_out @ Wo: (d_attn_out, dWo)."""
+    return dout @ wo.T, attn_out.T @ dout
+
+
+def attention_value_backward(dattn_out, weights, v):
+    """Backward of attn_out = weights @ V: (dweights, dV)."""
+    return dattn_out @ v.T, weights.T @ dattn_out
+
+
+def masked_softmax_backward(dweights, weights):
+    """Backward through the row-wise softmax: dscores from dweights and weights."""
+    return weights * (dweights - (dweights * weights).sum(axis=-1, keepdims=True))
+
+
+def scale_scores_backward(dscaled, d_head):
+    """Backward of dividing scores by sqrt(d_head)."""
+    return dscaled / np.sqrt(d_head)
+
+
+def qk_scores_backward(dscores, q, k):
+    """Backward of scores = Q @ K.T: (dQ, dK)."""
+    return dscores @ k, dscores.T @ q
+
+
+def qkv_projection_backward(dq, dk, dv, x, wq, wk, wv):
+    """Backward of the Q/K/V projections: (dx, dWq, dWk, dWv)."""
+    dx = dq @ wq.T + dk @ wk.T + dv @ wv.T
+    return dx, x.T @ dq, x.T @ dk, x.T @ dv
+
+
+def choose_attention_head_config(d_model, n_heads):
+    """Per-head dimension d_head = d_model // n_heads (must divide evenly)."""
+    assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
+    return d_model // n_heads
+
+
+def create_multihead_qkv_projections(d_model):
+    """Combined Q/K/V projections for all heads, each (d_model, d_model)."""
+    return {"Wq": np.random.randn(d_model, d_model) * 0.02,
+            "Wk": np.random.randn(d_model, d_model) * 0.02,
+            "Wv": np.random.randn(d_model, d_model) * 0.02}
+
+
+def create_multihead_output_projection(d_model):
+    """Output projection Wo, (d_model, d_model)."""
+    return np.random.randn(d_model, d_model) * 0.02
+
+
+def reshape_to_heads(x, n_heads):
+    """Split the feature axis into heads: (B,T,d_model) -> (B,T,n_heads,d_head)."""
+    b, t, d = x.shape
+    return x.reshape(b, t, n_heads, d // n_heads)
+
+
+def transpose_heads_to_front(x):
+    """(B,T,H,d_head) -> (B,H,T,d_head) so each head is an independent (T,d_head) block."""
+    return x.transpose(0, 2, 1, 3)
+
+
+def get_multihead_n_heads(x):
+    """Number of heads from a (B,H,T,d_head) tensor."""
+    return x.shape[1]
+
+
+def get_multihead_sequence_length(x):
+    """Sequence length T from a (B,H,T,d_head) tensor."""
+    return x.shape[2]
+
+
+def compute_d_head(x):
+    """Per-head dimension d_head from a (B,H,T,d_head) tensor."""
+    return x.shape[3]
+
+
+def multihead_masked_softmax_scores(q, k, mask):
+    """Per-head causal attention weights: softmax(QK^T/sqrt(d_head) + mask)."""
+    d_head = q.shape[-1]
+    scores = q @ k.transpose(0, 1, 3, 2) / np.sqrt(d_head)
+    scores = np.where(mask, -1e9, scores)
+    scores = scores - scores.max(axis=-1, keepdims=True)
+    e = np.exp(scores)
+    return e / e.sum(axis=-1, keepdims=True)
+
+
+def multihead_weighted_sum(weights, v):
+    """Per-head weighted sum of values: weights @ V -> (B,H,T,d_head)."""
+    return weights @ v
+
+
+def transpose_heads_to_back(x):
+    """(B,H,T,d_head) -> (B,T,H,d_head), ready to merge heads."""
+    return x.transpose(0, 2, 1, 3)
+
+
+def get_multihead_output_sequence_length(x):
+    """Sequence length T from a (B,T,H,d_head) tensor."""
+    return x.shape[1]
+
+
+def merge_heads_to_d_model(x):
+    """Concatenate heads back into d_model: (B,T,H,d_head) -> (B,T,d_model)."""
+    b, t, h, dh = x.shape
+    return x.reshape(b, t, h * dh)
+
+
+def multihead_output_projection_forward(x, wo):
+    """Final output projection: (B,T,d_model) @ Wo."""
+    return x @ wo
+
+
+def multihead_reshape_transpose_backward(dheads, n_heads):
+    """Inverse of reshape_to_heads + transpose_heads_to_front: take a per-head
+    gradient (B,H,T,d_head) back to (B,T,d_model)."""
+    b, h, t, dh = dheads.shape
+    return dheads.transpose(0, 2, 1, 3).reshape(b, t, h * dh)

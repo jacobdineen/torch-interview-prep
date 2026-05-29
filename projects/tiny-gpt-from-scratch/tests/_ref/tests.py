@@ -800,3 +800,326 @@ def test_0091_layernorm_backward_implementation(ns):
         grad_check(lambda X: _ln_forward(ns, X, gamma, beta, eps), x, dout, dx, name="dx")
         grad_check(lambda G: _ln_forward(ns, x, G, beta, eps), gamma, dout, dgamma, name="dgamma")
         grad_check(lambda B: _ln_forward(ns, x, gamma, B, eps), beta, dout, dbeta, name="dbeta")
+
+
+# ------------------- Part 6 — Embeddings and Self-Attention -------------------
+
+def test_0092_create_token_embedding(ns):
+    np.random.seed(0)
+    got = ns["create_token_embedding"](5, 4)
+    np.random.seed(0)
+    want = np.random.randn(5, 4) * 0.02
+    with step("(vocab, d_model) small init"):
+        expect_shape(got, (5, 4))
+        expect_allclose(got, want)
+
+
+def test_0093_token_embedding_forward(ns):
+    emb = np.arange(12).reshape(4, 3).astype(float)
+    x = np.array([[0, 2], [1, 3]])
+    with step("(B,T) -> (B,T,d) lookup"):
+        out = ns["token_embedding_forward"](emb, x)
+        expect_shape(out, (2, 2, 3))
+        expect_allclose(out[0, 1], emb[2])
+
+
+def test_0094_token_embedding_backward(ns):
+    rng = np.random.default_rng(30)
+    emb = rng.standard_normal((4, 3))
+    x = np.array([[0, 2], [2, 1]])
+    dout = rng.standard_normal((2, 2, 3))
+    analytic = ns["token_embedding_backward"](dout, x, 4, 3)
+    with step("scatter-add gradient, gradient-checked"):
+        grad_check(lambda E: ns["token_embedding_forward"](E, x), emb, dout, analytic, name="dE")
+
+
+def test_0095_create_positional_embedding(ns):
+    np.random.seed(1)
+    got = ns["create_positional_embedding"](6, 4)
+    np.random.seed(1)
+    want = np.random.randn(6, 4) * 0.02
+    with step("(block_size, d_model)"):
+        expect_allclose(got, want)
+
+
+def test_0096_slice_positional_embedding(ns):
+    pos = np.arange(20).reshape(5, 4).astype(float)
+    with step("first t rows"):
+        expect_allclose(ns["slice_positional_embedding"](pos, 3), pos[:3])
+
+
+def test_0097_add_token_and_positional_embeddings(ns):
+    tok = np.ones((2, 3, 4))
+    pos = np.full((3, 4), 2.0)
+    with step("broadcasts pos over batch"):
+        expect_allclose(ns["add_token_and_positional_embeddings"](tok, pos), np.full((2, 3, 4), 3.0))
+
+
+def test_0098_embedding_sum_backward(ns):
+    rng = np.random.default_rng(31)
+    tok = rng.standard_normal((2, 3, 4))
+    pos = rng.standard_normal((3, 4))
+    dout = rng.standard_normal((2, 3, 4))
+    dtok, dpos = ns["embedding_sum_backward"](dout)
+    with step("dtok and dpos gradient-checked"):
+        grad_check(lambda T: ns["add_token_and_positional_embeddings"](T, pos), tok, dout, dtok, name="dtok")
+        grad_check(lambda P: ns["add_token_and_positional_embeddings"](tok, P), pos, dout, dpos, name="dpos")
+
+
+def test_0099_create_qkv_projections(ns):
+    np.random.seed(2)
+    p = ns["create_qkv_projections"](4)
+    with step("Wq/Wk/Wv each (d,d)"):
+        for key in ("Wq", "Wk", "Wv"):
+            expect_shape(p[key], (4, 4))
+
+
+def test_0100_compute_query(ns):
+    x = np.array([[1.0, 2.0]])
+    wq = np.array([[1.0, 0.0], [0.0, 1.0]])
+    with step("Q = x @ Wq"):
+        expect_allclose(ns["compute_query"](x, wq), x @ wq)
+
+
+def test_0101_compute_key(ns):
+    x = np.array([[1.0, 2.0]])
+    wk = np.eye(2)
+    with step("K = x @ Wk"):
+        expect_allclose(ns["compute_key"](x, wk), x)
+
+
+def test_0102_compute_value(ns):
+    x = np.array([[1.0, 2.0]])
+    wv = np.eye(2)
+    with step("V = x @ Wv"):
+        expect_allclose(ns["compute_value"](x, wv), x)
+
+
+def test_0103_compute_attention_scores(ns):
+    q = np.array([[1.0, 0.0], [0.0, 1.0]])
+    k = np.array([[1.0, 0.0], [0.0, 1.0]])
+    with step("scores = Q @ K.T"):
+        expect_allclose(ns["compute_attention_scores"](q, k), q @ k.T)
+
+
+def test_0104_scale_attention_scores(ns):
+    s = np.array([[2.0, 4.0]])
+    with step("divide by sqrt(d_head)"):
+        expect_allclose(ns["scale_attention_scores"](s, 4), s / 2.0)
+
+
+def test_0105_build_causal_mask(ns):
+    m = np.asarray(ns["build_causal_mask"](3))
+    with step("upper triangle (future) is masked"):
+        expect_shape(m, (3, 3))
+        expect_true(bool(m[0, 1]) and bool(m[0, 2]) and bool(m[1, 2]), "future should be masked")
+        expect_true(not m[1, 0] and not m[0, 0], "past/self not masked")
+
+
+def test_0106_apply_causal_mask(ns):
+    scores = np.zeros((3, 3))
+    mask = ns["build_causal_mask"](3)
+    out = ns["apply_causal_mask"](scores, mask)
+    with step("future entries become very negative"):
+        expect_true(out[0, 1] < -1e8, "future not masked to -inf-ish")
+        expect_allclose(out[1, 0], 0.0)
+
+
+def test_0107_softmax_attention_weights(ns):
+    scores = ns["apply_causal_mask"](np.zeros((3, 3)), ns["build_causal_mask"](3))
+    w = ns["softmax_attention_weights"](scores)
+    with step("rows sum to 1; causal (no attention to future)"):
+        expect_allclose(w.sum(axis=1), np.ones(3))
+        expect_true(w[0, 1] < 1e-6 and w[0, 2] < 1e-6, "should not attend to future")
+
+
+def test_0108_attention_weighted_values(ns):
+    w = np.array([[1.0, 0.0], [0.5, 0.5]])
+    v = np.array([[2.0, 0.0], [0.0, 4.0]])
+    with step("weights @ V"):
+        expect_allclose(ns["attention_weighted_values"](w, v), w @ v)
+
+
+def test_0109_apply_output_projection(ns):
+    a = np.array([[1.0, 2.0]])
+    wo = np.eye(2) * 3
+    with step("attn_out @ Wo"):
+        expect_allclose(ns["apply_output_projection"](a, wo), a @ wo)
+
+
+def test_0110_output_projection_backward(ns):
+    rng = np.random.default_rng(32)
+    a = rng.standard_normal((3, 4))
+    wo = rng.standard_normal((4, 4))
+    dout = rng.standard_normal((3, 4))
+    da, dwo = ns["output_projection_backward"](dout, a, wo)
+    with step("d_attn_out and dWo gradient-checked"):
+        grad_check(lambda A: ns["apply_output_projection"](A, wo), a, dout, da, name="d_attn_out")
+        grad_check(lambda W: ns["apply_output_projection"](a, W), wo, dout, dwo, name="dWo")
+
+
+def test_0111_attention_value_backward(ns):
+    rng = np.random.default_rng(33)
+    w = rng.standard_normal((3, 3))
+    v = rng.standard_normal((3, 4))
+    dout = rng.standard_normal((3, 4))
+    dw, dv = ns["attention_value_backward"](dout, w, v)
+    with step("dweights and dV gradient-checked"):
+        grad_check(lambda W: ns["attention_weighted_values"](W, v), w, dout, dw, name="dweights")
+        grad_check(lambda V: ns["attention_weighted_values"](w, V), v, dout, dv, name="dV")
+
+
+def test_0112_masked_softmax_backward(ns):
+    rng = np.random.default_rng(34)
+    scores = rng.standard_normal((3, 3))
+    weights = ns["softmax_attention_weights"](scores)
+    dweights = rng.standard_normal((3, 3))
+    dscores = ns["masked_softmax_backward"](dweights, weights)
+    with step("dscores gradient-checked through the softmax"):
+        grad_check(lambda S: ns["softmax_attention_weights"](S), scores, dweights, dscores, name="dscores")
+
+
+def test_0113_scale_scores_backward(ns):
+    rng = np.random.default_rng(35)
+    scores = rng.standard_normal((3, 3))
+    dscaled = rng.standard_normal((3, 3))
+    ds = ns["scale_scores_backward"](dscaled, 4)
+    with step("gradient-checked"):
+        grad_check(lambda S: ns["scale_attention_scores"](S, 4), scores, dscaled, ds, name="dscores")
+
+
+def test_0114_qk_scores_backward(ns):
+    rng = np.random.default_rng(36)
+    q = rng.standard_normal((3, 4))
+    k = rng.standard_normal((3, 4))
+    dscores = rng.standard_normal((3, 3))
+    dq, dk = ns["qk_scores_backward"](dscores, q, k)
+    with step("dQ and dK gradient-checked"):
+        grad_check(lambda Q: ns["compute_attention_scores"](Q, k), q, dscores, dq, name="dQ")
+        grad_check(lambda K: ns["compute_attention_scores"](q, K), k, dscores, dk, name="dK")
+
+
+def test_0115_qkv_projection_backward(ns):
+    rng = np.random.default_rng(37)
+    x = rng.standard_normal((3, 4))
+    wq, wk, wv = (rng.standard_normal((4, 4)) for _ in range(3))
+    dq, dk, dv = (rng.standard_normal((3, 4)) for _ in range(3))
+    dx, dwq, dwk, dwv = ns["qkv_projection_backward"](dq, dk, dv, x, wq, wk, wv)
+
+    def loss_x(X):
+        return np.sum((X @ wq) * dq) + np.sum((X @ wk) * dk) + np.sum((X @ wv) * dv)
+
+    with step("dx and dWq/dWk/dWv gradient-checked"):
+        grad_check(loss_x, x, 1.0, dx, name="dx")
+        grad_check(lambda W: np.sum((x @ W) * dq), wq, 1.0, dwq, name="dWq")
+        grad_check(lambda W: np.sum((x @ W) * dk), wk, 1.0, dwk, name="dWk")
+        grad_check(lambda W: np.sum((x @ W) * dv), wv, 1.0, dwv, name="dWv")
+
+
+def test_0116_choose_attention_head_config(ns):
+    with step("d_head = d_model // n_heads"):
+        expect_eq(ns["choose_attention_head_config"](8, 2), 4)
+
+
+def test_0117_create_multihead_qkv_projections(ns):
+    np.random.seed(3)
+    p = ns["create_multihead_qkv_projections"](8)
+    with step("Wq/Wk/Wv each (d,d)"):
+        for key in ("Wq", "Wk", "Wv"):
+            expect_shape(p[key], (8, 8))
+
+
+def test_0118_create_multihead_output_projection(ns):
+    np.random.seed(4)
+    with step("(d,d)"):
+        expect_shape(ns["create_multihead_output_projection"](8), (8, 8))
+
+
+def test_0119_reshape_to_heads(ns):
+    x = np.arange(2 * 3 * 8).reshape(2, 3, 8).astype(float)
+    out = ns["reshape_to_heads"](x, 2)
+    with step("(B,T,d) -> (B,T,H,d_head)"):
+        expect_shape(out, (2, 3, 2, 4))
+        expect_allclose(out.reshape(2, 3, 8), x)
+
+
+def test_0120_transpose_heads_to_front(ns):
+    x = np.zeros((2, 3, 2, 4))
+    with step("(B,T,H,dh) -> (B,H,T,dh)"):
+        expect_shape(ns["transpose_heads_to_front"](x), (2, 2, 3, 4))
+
+
+def test_0121_get_multihead_n_heads(ns):
+    with step("heads at axis 1"):
+        expect_eq(ns["get_multihead_n_heads"](np.zeros((2, 2, 3, 4))), 2)
+
+
+def test_0122_get_multihead_sequence_length(ns):
+    with step("T at axis 2"):
+        expect_eq(ns["get_multihead_sequence_length"](np.zeros((2, 2, 3, 4))), 3)
+
+
+def test_0123_compute_d_head(ns):
+    with step("d_head at axis 3"):
+        expect_eq(ns["compute_d_head"](np.zeros((2, 2, 3, 4))), 4)
+
+
+def test_0124_multihead_masked_softmax_scores(ns):
+    rng = np.random.default_rng(38)
+    q = rng.standard_normal((2, 2, 3, 4))
+    k = rng.standard_normal((2, 2, 3, 4))
+    mask = ns["build_causal_mask"](3)
+    w = ns["multihead_masked_softmax_scores"](q, k, mask)
+    with step("(B,H,T,T), rows sum to 1, causal"):
+        expect_shape(w, (2, 2, 3, 3))
+        expect_allclose(w.sum(axis=-1), np.ones((2, 2, 3)))
+        expect_true(np.all(w[..., 0, 1:] < 1e-6), "must not attend to future")
+
+
+def test_0125_multihead_weighted_sum(ns):
+    w = np.zeros((2, 2, 3, 3))
+    w[..., 0] = 1.0  # attend only to position 0
+    v = np.arange(2 * 2 * 3 * 4).reshape(2, 2, 3, 4).astype(float)
+    out = ns["multihead_weighted_sum"](w, v)
+    with step("(B,H,T,dh); picks value 0 for every query"):
+        expect_shape(out, (2, 2, 3, 4))
+        expect_allclose(out[0, 0, 1], v[0, 0, 0])
+
+
+def test_0126_transpose_heads_to_back(ns):
+    x = np.zeros((2, 2, 3, 4))
+    with step("(B,H,T,dh) -> (B,T,H,dh)"):
+        expect_shape(ns["transpose_heads_to_back"](x), (2, 3, 2, 4))
+
+
+def test_0127_get_multihead_output_sequence_length(ns):
+    with step("T at axis 1"):
+        expect_eq(ns["get_multihead_output_sequence_length"](np.zeros((2, 3, 2, 4))), 3)
+
+
+def test_0128_merge_heads_to_d_model(ns):
+    x = np.arange(2 * 3 * 2 * 4).reshape(2, 3, 2, 4).astype(float)
+    out = ns["merge_heads_to_d_model"](x)
+    with step("(B,T,H,dh) -> (B,T,d_model)"):
+        expect_shape(out, (2, 3, 8))
+        expect_allclose(out, x.reshape(2, 3, 8))
+
+
+def test_0129_multihead_output_projection_forward(ns):
+    x = np.ones((2, 3, 8))
+    wo = np.eye(8) * 2
+    with step("(B,T,d) @ Wo"):
+        expect_allclose(ns["multihead_output_projection_forward"](x, wo), x * 2)
+
+
+def test_0130_multihead_reshape_transpose_backward(ns):
+    rng = np.random.default_rng(39)
+    x = rng.standard_normal((2, 3, 8))
+    dheads = rng.standard_normal((2, 2, 3, 4))
+
+    def fwd(X):
+        return ns["transpose_heads_to_front"](ns["reshape_to_heads"](X, 2))
+
+    analytic = ns["multihead_reshape_transpose_backward"](dheads, 2)
+    with step("inverse of reshape+transpose, gradient-checked"):
+        grad_check(fwd, x, dheads, analytic, name="dx")
