@@ -130,6 +130,38 @@ Reads `tests/_src/*.py`, AST-rewrites assertions for nicer failure output, then 
 
 Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per parent, 280 total) live in `hints.py`. Reference solutions (one full impl per parent, child-specific subsets extracted at lookup time) live in `solutions.py`. Benchmarks for compute-sensitive problems live in the `BENCHMARKS` dict at the bottom of `solutions.py`.
 
+## Projects (multi-step builds)
+
+Alongside the standalone problems, **projects** are long ordered sequences of small
+steps that accumulate into one working artifact. The first is **tiny-gpt-from-scratch**:
+166 steps across 8 parts that build a character-level GPT in pure NumPy — tokenizer,
+NumPy/softmax foundations, data pipeline + bigram baseline, a single-layer neural
+bigram, layer primitives with backprop, embeddings + single/multi-head self-attention,
+FFN/blocks/full model (forward **and** backward), and Adam + training loop + generation.
+
+Each step is one function in `projects/<name>/steps/NNNN_<fn>.py`. You solve it like a
+problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that swaps
+your function over a reference implementation, so each step is checked in isolation. Every
+`*_backward*` step is validated by **finite-difference gradient checking**. As you pass
+steps, `solution.py` is re-assembled from your solved code; once enough is done, the
+end-to-end `scaffold.py` trains the GPT and samples text.
+
+```bash
+uv run python projects.py                       # list projects
+uv run python projects.py tiny-gpt-from-scratch  # parts + steps, [x]/[ ] solved
+uv run python projects.py tiny-gpt-from-scratch --status   # per-part bars
+uv run python projects.py tiny-gpt-from-scratch --next     # next unsolved step (id + path)
+uv run python projects.py tiny-gpt-from-scratch 44         # run step 0044
+uv run python projects.py tiny-gpt-from-scratch 44 --explain    # signature + what it does
+uv run python projects.py tiny-gpt-from-scratch 44 --solution --i-give-up  # reference (gated)
+uv run python projects.py tiny-gpt-from-scratch --scaffold # end-to-end demo (once solved)
+```
+
+(When there's a single project, the name is optional: `python projects.py --next`.) The
+nvim `<leader>p` keymaps work on step files too. Build/regenerate a project from its spec
+with `python projects/<name>/_build/gen.py`; `_build/verify.py` checks every reference
+passes its own test.
+
 ## File layout
 
 ```
