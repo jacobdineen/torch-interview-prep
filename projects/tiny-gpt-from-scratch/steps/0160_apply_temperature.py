@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0160: apply_temperature
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+Scale logits by 1/temperature before softmax.
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def apply_temperature(logits, temperature):
     raise NotImplementedError
 
 

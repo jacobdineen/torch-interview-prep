@@ -1,14 +1,15 @@
 """
-Step 0138: transformer_block_forward
+Step 0154: wire_full_training_loop
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+One full training step: forward, cross-entropy loss, backward, and an Adam
+update over the whole parameter tree. ``opt_state`` is None on the first call.
+Returns (params, opt_state, loss).
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def wire_full_training_loop(params, opt_state, x, y, lr=0.001, betas=(0.9, 0.999), eps=1e-08):
     raise NotImplementedError
 
 

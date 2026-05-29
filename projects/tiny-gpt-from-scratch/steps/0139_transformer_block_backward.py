@@ -2,8 +2,8 @@
 Step 0139: transformer_block_backward
 
 Part 7 — FFN, Blocks, and Full Model
-Backward through a pre-LN Transformer block. Returns (dx, grads) where grads
-mirrors the block dict (ln1, attn, ln2, ffn).
+Backward through a pre-LN Transformer block. Returns (dx, grads) mirroring
+the block dict (ln1, attn, ln2, ffn).
 """
 import numpy as np  # noqa: F401
 

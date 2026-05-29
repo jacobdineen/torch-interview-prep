@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0153: adam_parameter_update
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+Adam step: param - lr * mhat / (sqrt(vhat) + eps).
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def adam_parameter_update(param, m_hat, v_hat, lr, eps):
     raise NotImplementedError
 
 

@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0165: generation_loop_for_n_steps
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+Autoregressively generate ``n_new_tokens`` tokens with temperature + top-k.
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def generation_loop_for_n_steps(params, prompt_ids, n_new_tokens, block_size, temperature, top_k, rng):
     raise NotImplementedError
 
 

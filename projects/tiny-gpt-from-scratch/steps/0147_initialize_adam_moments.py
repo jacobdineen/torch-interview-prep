@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0147: initialize_adam_moments
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+First and second moment accumulators (zeros) for one parameter array.
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def initialize_adam_moments(param):
     raise NotImplementedError
 
 

@@ -756,13 +756,6 @@ def multihead_reshape_transpose_backward(dheads, n_heads):
 
 # ================= Part 7 — FFN, Blocks, and Full Model =================
 
-_EPS = 1e-5
-
-
-def _flat(a):
-    return a.reshape(-1, a.shape[-1])
-
-
 def ffn_linear_one_forward(x, w1, b1):
     """First FFN linear layer: x @ W1 + b1 -> (..., d_ff)."""
     return x @ w1 + b1
@@ -785,10 +778,11 @@ def ffn_backward(dout, x, w1, b1, w2, b2):
     da = dout @ w2.T
     dh = da * (h > 0)
     dx = dh @ w1.T
-    dw1 = _flat(x).T @ _flat(dh)
-    db1 = _flat(dh).sum(axis=0)
-    dw2 = _flat(a).T @ _flat(dout)
-    db2 = _flat(dout).sum(axis=0)
+    x2, dh2, a2, dout2 = (z.reshape(-1, z.shape[-1]) for z in (x, dh, a, dout))
+    dw1 = x2.T @ dh2
+    db1 = dh2.sum(axis=0)
+    dw2 = a2.T @ dout2
+    db2 = dout2.sum(axis=0)
     return dx, dw1, db1, dw2, db2
 
 
@@ -808,64 +802,26 @@ def pre_layernorm_sublayer_forward(x, gamma, beta, eps, sublayer_fn):
     return x + sublayer_fn(normed)
 
 
-# --- attention sublayer (composed from Part 6 steps) ---
-
-def _mha_forward(x, attn, mask):
-    n_heads = attn["n_heads"]
-    q = compute_query(x, attn["Wq"])
-    k = compute_key(x, attn["Wk"])
-    v = compute_value(x, attn["Wv"])
-    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
-    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
-    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
-    w = multihead_masked_softmax_scores(qh, kh, mask)
-    o = multihead_weighted_sum(w, vh)
-    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
-    return multihead_output_projection_forward(merged, attn["Wo"])
-
-
-def _mha_backward(da, x, attn, mask):
-    n_heads = attn["n_heads"]
-    wq, wk, wv, wo = attn["Wq"], attn["Wk"], attn["Wv"], attn["Wo"]
-    # recompute forward intermediates
-    q = x @ wq
-    k = x @ wk
-    v = x @ wv
-    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
-    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
-    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
-    d_head = qh.shape[-1]
-    w = multihead_masked_softmax_scores(qh, kh, mask)
-    o = multihead_weighted_sum(w, vh)
-    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
-    # backward
-    dmerged = da @ wo.T
-    dwo = _flat(merged).T @ _flat(da)
-    b, t, dm = dmerged.shape
-    do = dmerged.reshape(b, t, n_heads, dm // n_heads).transpose(0, 2, 1, 3)  # (B,H,T,dh)
-    dw = do @ vh.transpose(0, 1, 3, 2)
-    dvh = w.transpose(0, 1, 3, 2) @ do
-    dscaled = w * (dw - (dw * w).sum(axis=-1, keepdims=True))
-    dscores = dscaled / np.sqrt(d_head)
-    dqh = dscores @ kh
-    dkh = dscores.transpose(0, 1, 3, 2) @ qh
-    dq = multihead_reshape_transpose_backward(dqh, n_heads)
-    dk = multihead_reshape_transpose_backward(dkh, n_heads)
-    dv = multihead_reshape_transpose_backward(dvh, n_heads)
-    dx = dq @ wq.T + dk @ wk.T + dv @ wv.T
-    grads = {"Wq": _flat(x).T @ _flat(dq), "Wk": _flat(x).T @ _flat(dk),
-             "Wv": _flat(x).T @ _flat(dv), "Wo": dwo}
-    return dx, grads
-
-
 def transformer_block_forward(x, block, mask):
-    """Pre-LN Transformer block: attention sublayer then FFN sublayer, each residual."""
+    """Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
+    each wrapped in a residual connection. Composed from the Part 5/6 steps."""
+    eps = 1e-5
+    n_heads = block["attn"]["n_heads"]
     n1 = layernorm_forward_affine(
-        layernorm_forward_normalize(x, _EPS), block["ln1"]["gamma"], block["ln1"]["beta"])
-    a = _mha_forward(n1, block["attn"], mask)
+        layernorm_forward_normalize(x, eps), block["ln1"]["gamma"], block["ln1"]["beta"])
+    q = compute_query(n1, block["attn"]["Wq"])
+    k = compute_key(n1, block["attn"]["Wk"])
+    v = compute_value(n1, block["attn"]["Wv"])
+    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
+    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
+    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
+    w = multihead_masked_softmax_scores(qh, kh, mask)
+    o = multihead_weighted_sum(w, vh)
+    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
+    a = multihead_output_projection_forward(merged, block["attn"]["Wo"])
     r1 = x + a
     n2 = layernorm_forward_affine(
-        layernorm_forward_normalize(r1, _EPS), block["ln2"]["gamma"], block["ln2"]["beta"])
+        layernorm_forward_normalize(r1, eps), block["ln2"]["gamma"], block["ln2"]["beta"])
     f = block["ffn"]
     fout = ffn_linear_two_forward(
         ffn_activation_forward(ffn_linear_one_forward(n2, f["w1"], f["b1"])), f["w2"], f["b2"])
@@ -873,30 +829,63 @@ def transformer_block_forward(x, block, mask):
 
 
 def transformer_block_backward(dout, x, block, mask):
-    """Backward through a pre-LN Transformer block. Returns (dx, grads) where grads
-    mirrors the block dict (ln1, attn, ln2, ffn)."""
+    """Backward through a pre-LN Transformer block. Returns (dx, grads) mirroring
+    the block dict (ln1, attn, ln2, ffn)."""
+    eps = 1e-5
+    n_heads = block["attn"]["n_heads"]
+    wq, wk, wv, wo = (block["attn"][key] for key in ("Wq", "Wk", "Wv", "Wo"))
     f = block["ffn"]
-    # recompute forward
+
+    def flat(z):
+        return z.reshape(-1, z.shape[-1])
+
+    # --- recompute forward intermediates ---
     n1 = layernorm_forward_affine(
-        layernorm_forward_normalize(x, _EPS), block["ln1"]["gamma"], block["ln1"]["beta"])
-    a = _mha_forward(n1, block["attn"], mask)
+        layernorm_forward_normalize(x, eps), block["ln1"]["gamma"], block["ln1"]["beta"])
+    q, k, v = compute_query(n1, wq), compute_key(n1, wk), compute_value(n1, wv)
+    qh = transpose_heads_to_front(reshape_to_heads(q, n_heads))
+    kh = transpose_heads_to_front(reshape_to_heads(k, n_heads))
+    vh = transpose_heads_to_front(reshape_to_heads(v, n_heads))
+    d_head = qh.shape[-1]
+    w = multihead_masked_softmax_scores(qh, kh, mask)
+    o = multihead_weighted_sum(w, vh)
+    merged = merge_heads_to_d_model(transpose_heads_to_back(o))
+    a = multihead_output_projection_forward(merged, wo)
     r1 = x + a
     n2 = layernorm_forward_affine(
-        layernorm_forward_normalize(r1, _EPS), block["ln2"]["gamma"], block["ln2"]["beta"])
-    # backward: y = r1 + ffn(n2)
+        layernorm_forward_normalize(r1, eps), block["ln2"]["gamma"], block["ln2"]["beta"])
+
+    # --- backward: y = r1 + FFN(n2) ---
     dr1, dfout = dout, dout
     dn2, dw1, db1, dw2, db2 = ffn_backward(dfout, n2, f["w1"], f["b1"], f["w2"], f["b2"])
-    dr1_ln2, dg2, db_2 = layernorm_backward_implementation(dn2, r1, block["ln2"]["gamma"], _EPS)
+    dr1_ln2, dg2, dbeta2 = layernorm_backward_implementation(dn2, r1, block["ln2"]["gamma"], eps)
     dr1 = dr1 + dr1_ln2
-    # r1 = x + a
-    dx_res, da = dr1, dr1
-    dn1, attn_grads = _mha_backward(da, n1, block["attn"], mask)
-    dx_ln1, dg1, db_1 = layernorm_backward_implementation(dn1, x, block["ln1"]["gamma"], _EPS)
-    dx = dx_res + dx_ln1
+
+    # r1 = x + attention(n1); split gradient to x and the attention output
+    da = dr1
+    # --- multi-head attention backward ---
+    dmerged = da @ wo.T
+    dwo = flat(merged).T @ flat(da)
+    b, t, dm = dmerged.shape
+    do = dmerged.reshape(b, t, n_heads, dm // n_heads).transpose(0, 2, 1, 3)
+    dw_ = do @ vh.transpose(0, 1, 3, 2)
+    dvh = w.transpose(0, 1, 3, 2) @ do
+    dscaled = w * (dw_ - (dw_ * w).sum(axis=-1, keepdims=True))
+    dscores = dscaled / np.sqrt(d_head)
+    dqh = dscores @ kh
+    dkh = dscores.transpose(0, 1, 3, 2) @ qh
+    dq = multihead_reshape_transpose_backward(dqh, n_heads)
+    dk = multihead_reshape_transpose_backward(dkh, n_heads)
+    dv = multihead_reshape_transpose_backward(dvh, n_heads)
+    dn1 = dq @ wq.T + dk @ wk.T + dv @ wv.T
+    dwq, dwk, dwv = flat(n1).T @ flat(dq), flat(n1).T @ flat(dk), flat(n1).T @ flat(dv)
+
+    dx_ln1, dg1, dbeta1 = layernorm_backward_implementation(dn1, x, block["ln1"]["gamma"], eps)
+    dx = dr1 + dx_ln1  # dr1 is the gradient to x via the residual; dx_ln1 via LN1
     grads = {
-        "ln1": {"gamma": dg1, "beta": db_1},
-        "attn": attn_grads,
-        "ln2": {"gamma": dg2, "beta": db_2},
+        "ln1": {"gamma": dg1, "beta": dbeta1},
+        "attn": {"Wq": dwq, "Wk": dwk, "Wv": dwv, "Wo": dwo},
+        "ln2": {"gamma": dg2, "beta": dbeta2},
         "ffn": {"w1": dw1, "b1": db1, "w2": dw2, "b2": db2},
     }
     return dx, grads
@@ -963,7 +952,7 @@ def full_model_forward(params, x):
     h = add_token_and_positional_embeddings(tok, pos)
     mask = build_causal_mask(t)
     h = forward_through_all_blocks(h, params["blocks"], mask)
-    h = final_layernorm_forward(h, params["ln_f"]["gamma"], params["ln_f"]["beta"], _EPS)
+    h = final_layernorm_forward(h, params["ln_f"]["gamma"], params["ln_f"]["beta"], 1e-5)
     return lm_head_linear_forward(h, params["lm_head"]["w_lm"], params["lm_head"]["b_lm"])
 
 
@@ -984,13 +973,15 @@ def full_model_backward(params, x, dlogits):
         h = transformer_block_forward(h, block, mask)
     h_blocks = h
     # LM head: logits = h_ln @ W_lm + b_lm
-    h_ln = final_layernorm_forward(h_blocks, params["ln_f"]["gamma"], params["ln_f"]["beta"], _EPS)
+    h_ln = final_layernorm_forward(h_blocks, params["ln_f"]["gamma"], params["ln_f"]["beta"], 1e-5)
     dh_ln = dlogits @ params["lm_head"]["w_lm"].T
-    dw_lm = _flat(h_ln).T @ _flat(dlogits)
-    db_lm = _flat(dlogits).sum(axis=0)
+    h_ln2 = h_ln.reshape(-1, h_ln.shape[-1])
+    dlogits2 = dlogits.reshape(-1, dlogits.shape[-1])
+    dw_lm = h_ln2.T @ dlogits2
+    db_lm = dlogits2.sum(axis=0)
     # final LN backward
     dh_blocks, dgf, dbf = layernorm_backward_implementation(
-        dh_ln, h_blocks, params["ln_f"]["gamma"], _EPS)
+        dh_ln, h_blocks, params["ln_f"]["gamma"], 1e-5)
     # blocks backward
     dgrad = dh_blocks
     block_grads = [None] * len(params["blocks"])
@@ -1009,3 +1000,164 @@ def full_model_backward(params, x, dlogits):
         "ln_f": {"gamma": dgf, "beta": dbf},
         "lm_head": {"w_lm": dw_lm, "b_lm": db_lm},
     }
+
+
+# ================= Part 8 — Adam, Training Loop, and Generation =================
+
+def initialize_adam_moments(param):
+    """First and second moment accumulators (zeros) for one parameter array."""
+    return np.zeros_like(param), np.zeros_like(param)
+
+
+def initialize_adam_step_counter():
+    """Adam timestep starts at 0."""
+    return 0
+
+
+def adam_increment_step(t):
+    """Advance the Adam timestep."""
+    return t + 1
+
+
+def adam_update_first_moment(m, grad, beta1):
+    """EMA of the gradient: m = beta1*m + (1-beta1)*grad."""
+    return beta1 * m + (1 - beta1) * grad
+
+
+def adam_update_second_moment(v, grad, beta2):
+    """EMA of the squared gradient: v = beta2*v + (1-beta2)*grad**2."""
+    return beta2 * v + (1 - beta2) * grad ** 2
+
+
+def adam_bias_correction(m, v, beta1, beta2, t):
+    """Correct the moment estimates for their zero initialization. Returns (mhat, vhat)."""
+    return m / (1 - beta1 ** t), v / (1 - beta2 ** t)
+
+
+def adam_parameter_update(param, m_hat, v_hat, lr, eps):
+    """Adam step: param - lr * mhat / (sqrt(vhat) + eps)."""
+    return param - lr * m_hat / (np.sqrt(v_hat) + eps)
+
+
+def wire_full_training_loop(params, opt_state, x, y, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+    """One full training step: forward, cross-entropy loss, backward, and an Adam
+    update over the whole parameter tree. ``opt_state`` is None on the first call.
+    Returns (params, opt_state, loss)."""
+    b1, b2 = betas
+    logits = full_model_forward(params, x)
+    bsz, t, vocab = logits.shape
+    p = stable_softmax_2d_rowwise(logits.reshape(-1, vocab))
+    fy = y.reshape(-1)
+    loss = -np.mean(np.log(p[np.arange(len(fy)), fy]))
+    dlogits = ((p - np.eye(vocab)[fy]) / len(fy)).reshape(bsz, t, vocab)
+    grads = full_model_backward(params, x, dlogits)
+
+    def zeros_like_tree(g):
+        if isinstance(g, dict):
+            return {k: zeros_like_tree(val) for k, val in g.items()}
+        if isinstance(g, list):
+            return [zeros_like_tree(val) for val in g]
+        return np.zeros_like(g)
+
+    if opt_state is None:
+        opt_state = {"m": zeros_like_tree(grads), "v": zeros_like_tree(grads), "t": 0}
+    opt_state["t"] = adam_increment_step(opt_state["t"])
+    t_now = opt_state["t"]
+
+    def apply_adam(par, gr, m, v):
+        if isinstance(gr, dict):
+            for k in gr:
+                apply_adam(par[k], gr[k], m[k], v[k])
+        elif isinstance(gr, list):
+            for i in range(len(gr)):
+                apply_adam(par[i], gr[i], m[i], v[i])
+        else:
+            m[...] = adam_update_first_moment(m, gr, b1)
+            v[...] = adam_update_second_moment(v, gr, b2)
+            mhat, vhat = adam_bias_correction(m, v, b1, b2, t_now)
+            par[...] = adam_parameter_update(par, mhat, vhat, lr, eps)
+
+    apply_adam(params, grads, opt_state["m"], opt_state["v"])
+    return params, opt_state, loss
+
+
+def logging_and_validation_loss(params, val_ids, block_size, batch_size, n_eval_batches):
+    """Mean validation cross-entropy over a few random batches (no parameter update)."""
+    rng = np.random.default_rng(0)
+    losses = []
+    for _ in range(n_eval_batches):
+        x, y = get_batch(val_ids, block_size, batch_size, rng)
+        logits = full_model_forward(params, x)
+        vocab = logits.shape[-1]
+        p = stable_softmax_2d_rowwise(logits.reshape(-1, vocab))
+        fy = y.reshape(-1)
+        losses.append(-np.mean(np.log(p[np.arange(len(fy)), fy])))
+    return float(np.mean(losses))
+
+
+def encode_prompt(s, stoi):
+    """Encode a prompt string into a 1-D int array of token ids."""
+    return np.array(encode_string(s, stoi), dtype=int)
+
+
+def crop_context_to_block_size(ids, block_size):
+    """Keep only the last ``block_size`` tokens as context."""
+    return ids[-block_size:]
+
+
+def forward_to_get_logits(params, ids):
+    """Run the model on a single (T,) sequence; return (T, vocab) logits."""
+    return full_model_forward(params, ids[None, :])[0]
+
+
+def take_last_position_logits(logits):
+    """The logits at the final position (used to predict the next token)."""
+    return logits[-1]
+
+
+def apply_temperature(logits, temperature):
+    """Scale logits by 1/temperature before softmax."""
+    return logits / temperature
+
+
+def top_k_filter(logits, k):
+    """Keep the top-k logits, set the rest to a large negative number."""
+    if k is None or k >= logits.shape[-1]:
+        return logits
+    kth = np.sort(logits)[-k]
+    return np.where(logits < kth, -1e9, logits)
+
+
+def softmax_to_probs(logits):
+    """Softmax a 1-D logit vector into a probability distribution."""
+    return stable_softmax_1d(logits)
+
+
+def sample_one_token(probs, rng):
+    """Sample a single token id from a probability vector."""
+    return sample_next_token(probs, rng)
+
+
+def append_token_to_sequence(ids, token):
+    """Append a sampled token id to the running sequence."""
+    return np.append(ids, token)
+
+
+def generation_loop_for_n_steps(params, prompt_ids, n_new_tokens, block_size,
+                                temperature, top_k, rng):
+    """Autoregressively generate ``n_new_tokens`` tokens with temperature + top-k."""
+    ids = np.array(prompt_ids, dtype=int)
+    for _ in range(n_new_tokens):
+        ctx = crop_context_to_block_size(ids, block_size)
+        logits = forward_to_get_logits(params, ctx)
+        last = take_last_position_logits(logits)
+        last = apply_temperature(last, temperature)
+        last = top_k_filter(last, top_k)
+        probs = softmax_to_probs(last)
+        ids = append_token_to_sequence(ids, sample_one_token(probs, rng))
+    return ids
+
+
+def decode_final_sequence(ids, itos):
+    """Decode the generated id sequence back to text."""
+    return decode_ids(ids, itos)

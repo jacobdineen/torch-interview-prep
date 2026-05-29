@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0159: take_last_position_logits
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+The logits at the final position (used to predict the next token).
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def take_last_position_logits(logits):
     raise NotImplementedError
 
 

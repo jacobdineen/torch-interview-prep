@@ -1138,7 +1138,7 @@
       "part": 6,
       "points": 5,
       "signature": "transformer_block_forward(x, block, mask)",
-      "doc": "Pre-LN Transformer block: attention sublayer then FFN sublayer, each residual."
+      "doc": "Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,\neach wrapped in a residual connection. Composed from the Part 5/6 steps."
     },
     {
       "id": "0139",
@@ -1146,7 +1146,7 @@
       "part": 6,
       "points": 5,
       "signature": "transformer_block_backward(dout, x, block, mask)",
-      "doc": "Backward through a pre-LN Transformer block. Returns (dx, grads) where grads\nmirrors the block dict (ln1, attn, ln2, ffn)."
+      "doc": "Backward through a pre-LN Transformer block. Returns (dx, grads) mirroring\nthe block dict (ln1, attn, ln2, ffn)."
     },
     {
       "id": "0140",
@@ -1209,160 +1209,160 @@
       "name": "initialize_adam_moments",
       "part": 7,
       "points": 5,
-      "signature": "initialize_adam_moments(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "initialize_adam_moments(param)",
+      "doc": "First and second moment accumulators (zeros) for one parameter array."
     },
     {
       "id": "0148",
       "name": "initialize_adam_step_counter",
       "part": 7,
       "points": 5,
-      "signature": "initialize_adam_step_counter(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "initialize_adam_step_counter()",
+      "doc": "Adam timestep starts at 0."
     },
     {
       "id": "0149",
       "name": "adam_increment_step",
       "part": 7,
       "points": 5,
-      "signature": "adam_increment_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_increment_step(t)",
+      "doc": "Advance the Adam timestep."
     },
     {
       "id": "0150",
       "name": "adam_update_first_moment",
       "part": 7,
       "points": 5,
-      "signature": "adam_update_first_moment(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_update_first_moment(m, grad, beta1)",
+      "doc": "EMA of the gradient: m = beta1*m + (1-beta1)*grad."
     },
     {
       "id": "0151",
       "name": "adam_update_second_moment",
       "part": 7,
       "points": 5,
-      "signature": "adam_update_second_moment(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_update_second_moment(v, grad, beta2)",
+      "doc": "EMA of the squared gradient: v = beta2*v + (1-beta2)*grad**2."
     },
     {
       "id": "0152",
       "name": "adam_bias_correction",
       "part": 7,
       "points": 5,
-      "signature": "adam_bias_correction(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_bias_correction(m, v, beta1, beta2, t)",
+      "doc": "Correct the moment estimates for their zero initialization. Returns (mhat, vhat)."
     },
     {
       "id": "0153",
       "name": "adam_parameter_update",
       "part": 7,
       "points": 5,
-      "signature": "adam_parameter_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_parameter_update(param, m_hat, v_hat, lr, eps)",
+      "doc": "Adam step: param - lr * mhat / (sqrt(vhat) + eps)."
     },
     {
       "id": "0154",
       "name": "wire_full_training_loop",
       "part": 7,
       "points": 5,
-      "signature": "wire_full_training_loop(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "wire_full_training_loop(params, opt_state, x, y, lr=0.001, betas=(0.9, 0.999), eps=1e-08)",
+      "doc": "One full training step: forward, cross-entropy loss, backward, and an Adam\nupdate over the whole parameter tree. ``opt_state`` is None on the first call.\nReturns (params, opt_state, loss)."
     },
     {
       "id": "0155",
       "name": "logging_and_validation_loss",
       "part": 7,
       "points": 5,
-      "signature": "logging_and_validation_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "logging_and_validation_loss(params, val_ids, block_size, batch_size, n_eval_batches)",
+      "doc": "Mean validation cross-entropy over a few random batches (no parameter update)."
     },
     {
       "id": "0156",
       "name": "encode_prompt",
       "part": 7,
       "points": 5,
-      "signature": "encode_prompt(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "encode_prompt(s, stoi)",
+      "doc": "Encode a prompt string into a 1-D int array of token ids."
     },
     {
       "id": "0157",
       "name": "crop_context_to_block_size",
       "part": 7,
       "points": 5,
-      "signature": "crop_context_to_block_size(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "crop_context_to_block_size(ids, block_size)",
+      "doc": "Keep only the last ``block_size`` tokens as context."
     },
     {
       "id": "0158",
       "name": "forward_to_get_logits",
       "part": 7,
       "points": 5,
-      "signature": "forward_to_get_logits(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "forward_to_get_logits(params, ids)",
+      "doc": "Run the model on a single (T,) sequence; return (T, vocab) logits."
     },
     {
       "id": "0159",
       "name": "take_last_position_logits",
       "part": 7,
       "points": 5,
-      "signature": "take_last_position_logits(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "take_last_position_logits(logits)",
+      "doc": "The logits at the final position (used to predict the next token)."
     },
     {
       "id": "0160",
       "name": "apply_temperature",
       "part": 7,
       "points": 5,
-      "signature": "apply_temperature(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "apply_temperature(logits, temperature)",
+      "doc": "Scale logits by 1/temperature before softmax."
     },
     {
       "id": "0161",
       "name": "top_k_filter",
       "part": 7,
       "points": 5,
-      "signature": "top_k_filter(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "top_k_filter(logits, k)",
+      "doc": "Keep the top-k logits, set the rest to a large negative number."
     },
     {
       "id": "0162",
       "name": "softmax_to_probs",
       "part": 7,
       "points": 5,
-      "signature": "softmax_to_probs(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "softmax_to_probs(logits)",
+      "doc": "Softmax a 1-D logit vector into a probability distribution."
     },
     {
       "id": "0163",
       "name": "sample_one_token",
       "part": 7,
       "points": 5,
-      "signature": "sample_one_token(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sample_one_token(probs, rng)",
+      "doc": "Sample a single token id from a probability vector."
     },
     {
       "id": "0164",
       "name": "append_token_to_sequence",
       "part": 7,
       "points": 5,
-      "signature": "append_token_to_sequence(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "append_token_to_sequence(ids, token)",
+      "doc": "Append a sampled token id to the running sequence."
     },
     {
       "id": "0165",
       "name": "generation_loop_for_n_steps",
       "part": 7,
       "points": 5,
-      "signature": "generation_loop_for_n_steps(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "generation_loop_for_n_steps(params, prompt_ids, n_new_tokens, block_size, temperature, top_k, rng)",
+      "doc": "Autoregressively generate ``n_new_tokens`` tokens with temperature + top-k."
     },
     {
       "id": "0166",
       "name": "decode_final_sequence",
       "part": 7,
       "points": 5,
-      "signature": "decode_final_sequence(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "decode_final_sequence(ids, itos)",
+      "doc": "Decode the generated id sequence back to text."
     }
   ]
 }

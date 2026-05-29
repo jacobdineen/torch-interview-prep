@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0151: adam_update_second_moment
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+EMA of the squared gradient: v = beta2*v + (1-beta2)*grad**2.
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def adam_update_second_moment(v, grad, beta2):
     raise NotImplementedError
 
 

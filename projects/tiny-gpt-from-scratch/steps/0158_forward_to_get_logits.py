@@ -1,14 +1,13 @@
 """
-Step 0138: transformer_block_forward
+Step 0158: forward_to_get_logits
 
-Part 7 — FFN, Blocks, and Full Model
-Pre-LN Transformer block: multi-head attention sublayer then FFN sublayer,
-each wrapped in a residual connection. Composed from the Part 5/6 steps.
+Part 8 — Adam, Training Loop, and Generation
+Run the model on a single (T,) sequence; return (T, vocab) logits.
 """
 import numpy as np  # noqa: F401
 
 
-def transformer_block_forward(x, block, mask):
+def forward_to_get_logits(params, ids):
     raise NotImplementedError
 
 

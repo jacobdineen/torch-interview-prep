@@ -1322,3 +1322,153 @@ def test_0146_full_model_backward(ns):
                    dlogits, grads["lm_head"]["w_lm"], name="d_w_lm")
         grad_check(lambda G: forward_with(["ln_f", "gamma"], G), params["ln_f"]["gamma"],
                    dlogits, grads["ln_f"]["gamma"], name="d_ln_f_gamma")
+
+
+# ------------------- Part 8 — Adam, Training Loop, and Generation -------------------
+
+def test_0147_initialize_adam_moments(ns):
+    m, v = ns["initialize_adam_moments"](np.ones((2, 3)))
+    with step("two zero arrays shaped like the param"):
+        expect_allclose(m, np.zeros((2, 3)))
+        expect_allclose(v, np.zeros((2, 3)))
+
+
+def test_0148_initialize_adam_step_counter(ns):
+    with step("starts at 0"):
+        expect_eq(ns["initialize_adam_step_counter"](), 0)
+
+
+def test_0149_adam_increment_step(ns):
+    with step("t -> t+1"):
+        expect_eq(ns["adam_increment_step"](4), 5)
+
+
+def test_0150_adam_update_first_moment(ns):
+    with step("EMA of grad"):
+        expect_allclose(ns["adam_update_first_moment"](np.array([1.0]), np.array([3.0]), 0.9),
+                        [0.9 * 1.0 + 0.1 * 3.0])
+
+
+def test_0151_adam_update_second_moment(ns):
+    with step("EMA of grad squared"):
+        expect_allclose(ns["adam_update_second_moment"](np.array([1.0]), np.array([3.0]), 0.999),
+                        [0.999 * 1.0 + 0.001 * 9.0])
+
+
+def test_0152_adam_bias_correction(ns):
+    m = np.array([0.5])
+    v = np.array([0.2])
+    mhat, vhat = ns["adam_bias_correction"](m, v, 0.9, 0.999, 2)
+    with step("divides out the init bias"):
+        expect_allclose(mhat, m / (1 - 0.9 ** 2))
+        expect_allclose(vhat, v / (1 - 0.999 ** 2))
+
+
+def test_0153_adam_parameter_update(ns):
+    p = np.array([1.0])
+    mhat = np.array([0.5])
+    vhat = np.array([0.25])
+    with step("param - lr*mhat/(sqrt(vhat)+eps)"):
+        expect_allclose(ns["adam_parameter_update"](p, mhat, vhat, 0.1, 1e-8),
+                        p - 0.1 * mhat / (np.sqrt(vhat) + 1e-8))
+
+
+def test_0154_wire_full_training_loop(ns):
+    params = _small_params(ns, seed=60)
+    rng = np.random.default_rng(61)
+    # repeating data with structure so the model can learn
+    data = np.array([0, 1, 2, 3, 4, 5] * 40)
+    opt_state = None
+    first = None
+    last = None
+    for _ in range(60):
+        x, y = ns["get_batch"](data, params["block_size"], 8, rng)
+        params, opt_state, loss = ns["wire_full_training_loop"](params, opt_state, x, y, lr=1e-2)
+        first = loss if first is None else first
+        last = loss
+    with step("training reduces the loss"):
+        expect_true(last < first, f"expected loss to drop; first={first:.3f} last={last:.3f}")
+
+
+def test_0155_logging_and_validation_loss(ns):
+    params = _small_params(ns, seed=62)
+    val = np.array([0, 1, 2, 3, 4, 5] * 20)
+    loss = ns["logging_and_validation_loss"](params, val, params["block_size"], 4, 2)
+    with step("returns a finite scalar loss"):
+        expect_true(np.isfinite(loss), "val loss should be finite")
+
+
+def test_0156_encode_prompt(ns):
+    stoi = {"a": 0, "b": 1, "c": 2}
+    out = ns["encode_prompt"]("cab", stoi)
+    with step("encodes to int array"):
+        expect_allclose(out, [2, 0, 1])
+
+
+def test_0157_crop_context_to_block_size(ns):
+    ids = np.arange(10)
+    with step("keeps last block_size tokens"):
+        expect_allclose(ns["crop_context_to_block_size"](ids, 3), [7, 8, 9])
+    with step("shorter than block leaves it unchanged"):
+        expect_allclose(ns["crop_context_to_block_size"](np.arange(2), 5), [0, 1])
+
+
+def test_0158_forward_to_get_logits(ns):
+    params = _small_params(ns, seed=63)
+    ids = np.array([0, 1, 2])
+    with step("(T, vocab) logits for a single sequence"):
+        expect_shape(ns["forward_to_get_logits"](params, ids), (3, 6))
+
+
+def test_0159_take_last_position_logits(ns):
+    logits = np.arange(12).reshape(3, 4).astype(float)
+    with step("last row"):
+        expect_allclose(ns["take_last_position_logits"](logits), [8, 9, 10, 11])
+
+
+def test_0160_apply_temperature(ns):
+    logits = np.array([2.0, 4.0])
+    with step("divides by temperature"):
+        expect_allclose(ns["apply_temperature"](logits, 2.0), [1.0, 2.0])
+
+
+def test_0161_top_k_filter(ns):
+    logits = np.array([1.0, 3.0, 2.0, 0.0])
+    out = np.asarray(ns["top_k_filter"](logits, 2))
+    with step("keeps top 2, suppresses the rest"):
+        expect_true(out[1] == 3.0 and out[2] == 2.0, "top-2 should survive")
+        expect_true(out[0] < -1e8 and out[3] < -1e8, "others suppressed")
+
+
+def test_0162_softmax_to_probs(ns):
+    out = ns["softmax_to_probs"](np.array([0.0, 0.0, 0.0]))
+    with step("uniform when equal, sums to 1"):
+        expect_allclose(out, [1 / 3, 1 / 3, 1 / 3])
+
+
+def test_0163_sample_one_token(ns):
+    probs = np.array([0.0, 1.0, 0.0])
+    with step("samples the certain token"):
+        expect_eq(ns["sample_one_token"](probs, np.random.default_rng(0)), 1)
+
+
+def test_0164_append_token_to_sequence(ns):
+    with step("appends"):
+        expect_allclose(ns["append_token_to_sequence"](np.array([1, 2]), 3), [1, 2, 3])
+
+
+def test_0165_generation_loop_for_n_steps(ns):
+    params = _small_params(ns, seed=64)
+    prompt = np.array([0, 1])
+    out = ns["generation_loop_for_n_steps"](params, prompt, 5, params["block_size"],
+                                            temperature=1.0, top_k=3, rng=np.random.default_rng(2))
+    with step("keeps prompt, adds n tokens, all valid ids"):
+        expect_eq(len(out), 7)
+        expect_allclose(out[:2], [0, 1])
+        expect_true(all(0 <= int(t) < 6 for t in out), "ids must be valid")
+
+
+def test_0166_decode_final_sequence(ns):
+    itos = {0: "a", 1: "b", 2: "c"}
+    with step("decodes to text"):
+        expect_eq(ns["decode_final_sequence"](np.array([2, 0, 1]), itos), "cab")
