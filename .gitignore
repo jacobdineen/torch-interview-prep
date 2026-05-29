@@ -7,3 +7,7 @@ __pycache__/
 .hint_state.json
 .solution_unlock.json
 .notes.json
+
+# project mode (generated/per-user)
+projects/*/.project_progress.json
+projects/*/solution.py

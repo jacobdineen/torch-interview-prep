@@ -1,0 +1,1368 @@
+{
+  "name": "tiny-gpt-from-scratch",
+  "title": "Tiny GPT From Scratch",
+  "parts": [
+    {
+      "title": "Tokenizer",
+      "description": "Build a tiny character-level tokenizer with vocab, stoi/itos, and encode/decode helpers."
+    },
+    {
+      "title": "NumPy and Softmax Foundations",
+      "description": "Get fluent with NumPy arrays, indexing, broadcasting, reductions, and numerically stable softmax."
+    },
+    {
+      "title": "Data Pipeline and Bigram Baseline",
+      "description": "Load the corpus, build batched (X, Y) sequences, and train a counting-based bigram model."
+    },
+    {
+      "title": "Single-Layer Neural Bigram",
+      "description": "Replace the count table with a learned weight matrix; derive cross-entropy, gradients, SGD."
+    },
+    {
+      "title": "Layer Primitives and Backprop",
+      "description": "Forward and backward for linear, bias, ReLU, softmax+CE, and LayerNorm building blocks."
+    },
+    {
+      "title": "Embeddings and Self-Attention",
+      "description": "Token/positional embeddings, then masked single- and multi-head self-attention with backward."
+    },
+    {
+      "title": "FFN, Blocks, and Full Model",
+      "description": "Feed-forward, residuals, pre-LN Transformer blocks, and the complete GPT forward/backward."
+    },
+    {
+      "title": "Adam, Training Loop, and Generation",
+      "description": "Adam, the full training/validation loop, and sampling with temperature and top-k decoding."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "build_vocab",
+      "part": 0,
+      "points": 5,
+      "signature": "build_vocab(text)",
+      "doc": "Return the sorted list of unique characters in ``text``."
+    },
+    {
+      "id": "0002",
+      "name": "build_stoi",
+      "part": 0,
+      "points": 5,
+      "signature": "build_stoi(vocab)",
+      "doc": "Map each character to its index: {char: i} for the vocab list."
+    },
+    {
+      "id": "0003",
+      "name": "build_itos",
+      "part": 0,
+      "points": 5,
+      "signature": "build_itos(vocab)",
+      "doc": "Inverse map index -> character: {i: char} for the vocab list."
+    },
+    {
+      "id": "0004",
+      "name": "encode_char",
+      "part": 0,
+      "points": 5,
+      "signature": "encode_char(ch, stoi)",
+      "doc": "Encode a single character to its integer id."
+    },
+    {
+      "id": "0005",
+      "name": "encode_string",
+      "part": 0,
+      "points": 5,
+      "signature": "encode_string(s, stoi)",
+      "doc": "Encode a string to a list of integer ids."
+    },
+    {
+      "id": "0006",
+      "name": "decode_int",
+      "part": 0,
+      "points": 5,
+      "signature": "decode_int(i, itos)",
+      "doc": "Decode a single integer id back to its character."
+    },
+    {
+      "id": "0007",
+      "name": "decode_ids",
+      "part": 0,
+      "points": 5,
+      "signature": "decode_ids(ids, itos)",
+      "doc": "Decode a sequence of integer ids back into a string."
+    },
+    {
+      "id": "0008",
+      "name": "make_1d_array",
+      "part": 1,
+      "points": 5,
+      "signature": "make_1d_array(values)",
+      "doc": "Make a 1-D float array from a Python list of numbers."
+    },
+    {
+      "id": "0009",
+      "name": "get_array_shape",
+      "part": 1,
+      "points": 5,
+      "signature": "get_array_shape(a)",
+      "doc": "Return the shape tuple of an array."
+    },
+    {
+      "id": "0010",
+      "name": "get_array_dtype",
+      "part": 1,
+      "points": 5,
+      "signature": "get_array_dtype(a)",
+      "doc": "Return the dtype of an array."
+    },
+    {
+      "id": "0011",
+      "name": "make_2d_zeros",
+      "part": 1,
+      "points": 5,
+      "signature": "make_2d_zeros(rows, cols)",
+      "doc": "Return a (rows, cols) array of zeros."
+    },
+    {
+      "id": "0012",
+      "name": "make_2d_random",
+      "part": 1,
+      "points": 5,
+      "signature": "make_2d_random(rows, cols, rng)",
+      "doc": "Return a (rows, cols) array of standard-normal samples drawn from ``rng``."
+    },
+    {
+      "id": "0013",
+      "name": "index_element",
+      "part": 1,
+      "points": 5,
+      "signature": "index_element(a, i, j)",
+      "doc": "Return the scalar at row i, column j."
+    },
+    {
+      "id": "0014",
+      "name": "slice_row",
+      "part": 1,
+      "points": 5,
+      "signature": "slice_row(a, i)",
+      "doc": "Return row i of a 2-D array."
+    },
+    {
+      "id": "0015",
+      "name": "slice_column",
+      "part": 1,
+      "points": 5,
+      "signature": "slice_column(a, j)",
+      "doc": "Return column j of a 2-D array (as a 1-D array)."
+    },
+    {
+      "id": "0016",
+      "name": "slice_subblock",
+      "part": 1,
+      "points": 5,
+      "signature": "slice_subblock(a, r0, r1, c0, c1)",
+      "doc": "Return the sub-block a[r0:r1, c0:c1]."
+    },
+    {
+      "id": "0017",
+      "name": "elementwise_add",
+      "part": 1,
+      "points": 5,
+      "signature": "elementwise_add(a, b)",
+      "doc": "Element-wise sum of two same-shaped arrays."
+    },
+    {
+      "id": "0018",
+      "name": "elementwise_multiply",
+      "part": 1,
+      "points": 5,
+      "signature": "elementwise_multiply(a, b)",
+      "doc": "Element-wise (Hadamard) product of two same-shaped arrays."
+    },
+    {
+      "id": "0019",
+      "name": "scalar_broadcast_add",
+      "part": 1,
+      "points": 5,
+      "signature": "scalar_broadcast_add(a, s)",
+      "doc": "Add a scalar to every element (broadcasting)."
+    },
+    {
+      "id": "0020",
+      "name": "vector_matrix_broadcast_add",
+      "part": 1,
+      "points": 5,
+      "signature": "vector_matrix_broadcast_add(m, v)",
+      "doc": "Add a length-``cols`` vector to each row of matrix ``m`` (broadcasting)."
+    },
+    {
+      "id": "0021",
+      "name": "array_exp",
+      "part": 1,
+      "points": 5,
+      "signature": "array_exp(a)",
+      "doc": "Element-wise exponential."
+    },
+    {
+      "id": "0022",
+      "name": "array_log",
+      "part": 1,
+      "points": 5,
+      "signature": "array_log(a)",
+      "doc": "Element-wise natural log."
+    },
+    {
+      "id": "0023",
+      "name": "sum_all",
+      "part": 1,
+      "points": 5,
+      "signature": "sum_all(a)",
+      "doc": "Sum of every element (a scalar)."
+    },
+    {
+      "id": "0024",
+      "name": "sum_axis0",
+      "part": 1,
+      "points": 5,
+      "signature": "sum_axis0(a)",
+      "doc": "Sum down columns (over axis 0) -> shape (cols,)."
+    },
+    {
+      "id": "0025",
+      "name": "sum_axis1",
+      "part": 1,
+      "points": 5,
+      "signature": "sum_axis1(a)",
+      "doc": "Sum across rows (over axis 1) -> shape (rows,)."
+    },
+    {
+      "id": "0026",
+      "name": "max_along_axis",
+      "part": 1,
+      "points": 5,
+      "signature": "max_along_axis(a, axis)",
+      "doc": "Maximum over the given axis."
+    },
+    {
+      "id": "0027",
+      "name": "matmul",
+      "part": 1,
+      "points": 5,
+      "signature": "matmul(a, b)",
+      "doc": "Matrix product a @ b."
+    },
+    {
+      "id": "0028",
+      "name": "transpose_matrix",
+      "part": 1,
+      "points": 5,
+      "signature": "transpose_matrix(a)",
+      "doc": "Transpose of a 2-D array."
+    },
+    {
+      "id": "0029",
+      "name": "sum_keepdims",
+      "part": 1,
+      "points": 5,
+      "signature": "sum_keepdims(a, axis)",
+      "doc": "Sum over ``axis`` while keeping that dimension (size 1) for broadcasting."
+    },
+    {
+      "id": "0030",
+      "name": "naive_softmax_1d",
+      "part": 1,
+      "points": 5,
+      "signature": "naive_softmax_1d(z)",
+      "doc": "Softmax of a 1-D vector, the textbook (overflow-prone) way: exp / sum(exp)."
+    },
+    {
+      "id": "0031",
+      "name": "softmax_overflow_demo",
+      "part": 1,
+      "points": 5,
+      "signature": "softmax_overflow_demo()",
+      "doc": "Show why naive softmax overflows: run it on large logits and return the\n(nan/inf-polluted) result so the test can confirm the failure mode."
+    },
+    {
+      "id": "0032",
+      "name": "stable_softmax_1d",
+      "part": 1,
+      "points": 5,
+      "signature": "stable_softmax_1d(z)",
+      "doc": "Numerically stable softmax: subtract the max before exponentiating."
+    },
+    {
+      "id": "0033",
+      "name": "stable_softmax_2d_rowwise",
+      "part": 1,
+      "points": 5,
+      "signature": "stable_softmax_2d_rowwise(z)",
+      "doc": "Row-wise stable softmax of a 2-D array: each row sums to 1."
+    },
+    {
+      "id": "0034",
+      "name": "read_text_file",
+      "part": 2,
+      "points": 5,
+      "signature": "read_text_file(path_or_text)",
+      "doc": "Return the corpus text. Here the corpus is passed in directly as a string,\nso this is effectively identity (real datasets would read from ``path``)."
+    },
+    {
+      "id": "0035",
+      "name": "encode_corpus_to_int_array",
+      "part": 2,
+      "points": 5,
+      "signature": "encode_corpus_to_int_array(text, stoi)",
+      "doc": "Encode the whole corpus into a 1-D int array of token ids."
+    },
+    {
+      "id": "0036",
+      "name": "pick_split_point",
+      "part": 2,
+      "points": 5,
+      "signature": "pick_split_point(n, frac)",
+      "doc": "Index that splits ``n`` tokens into a ``frac`` train / rest val."
+    },
+    {
+      "id": "0037",
+      "name": "slice_train_and_val",
+      "part": 2,
+      "points": 5,
+      "signature": "slice_train_and_val(data, split_idx)",
+      "doc": "Split the token array into (train, val) at ``split_idx``."
+    },
+    {
+      "id": "0038",
+      "name": "pick_block_size",
+      "part": 2,
+      "points": 5,
+      "signature": "pick_block_size(n)",
+      "doc": "The context length (block size). Passed through here."
+    },
+    {
+      "id": "0039",
+      "name": "slice_x_at_offset",
+      "part": 2,
+      "points": 5,
+      "signature": "slice_x_at_offset(data, i, block_size)",
+      "doc": "Input window: tokens [i, i+block_size)."
+    },
+    {
+      "id": "0040",
+      "name": "slice_y_at_offset",
+      "part": 2,
+      "points": 5,
+      "signature": "slice_y_at_offset(data, i, block_size)",
+      "doc": "Target window: the inputs shifted by one, tokens [i+1, i+block_size+1)."
+    },
+    {
+      "id": "0041",
+      "name": "sample_random_batch_offsets",
+      "part": 2,
+      "points": 5,
+      "signature": "sample_random_batch_offsets(n, block_size, batch_size, rng)",
+      "doc": "Sample ``batch_size`` random start offsets so each window fits in ``n``."
+    },
+    {
+      "id": "0042",
+      "name": "stack_x_batch",
+      "part": 2,
+      "points": 5,
+      "signature": "stack_x_batch(data, offsets, block_size)",
+      "doc": "Stack input windows for each offset into a (batch, block) array."
+    },
+    {
+      "id": "0043",
+      "name": "stack_y_batch",
+      "part": 2,
+      "points": 5,
+      "signature": "stack_y_batch(data, offsets, block_size)",
+      "doc": "Stack target windows (shifted by one) into a (batch, block) array."
+    },
+    {
+      "id": "0044",
+      "name": "get_batch",
+      "part": 2,
+      "points": 5,
+      "signature": "get_batch(data, block_size, batch_size, rng)",
+      "doc": "Sample a random (X, Y) batch of (batch_size, block_size) token windows."
+    },
+    {
+      "id": "0045",
+      "name": "allocate_count_matrix",
+      "part": 2,
+      "points": 5,
+      "signature": "allocate_count_matrix(vocab_size)",
+      "doc": "A (vocab, vocab) matrix of zeros to tally bigram counts into."
+    },
+    {
+      "id": "0046",
+      "name": "loop_fill_counts",
+      "part": 2,
+      "points": 5,
+      "signature": "loop_fill_counts(data, counts)",
+      "doc": "Tally bigram (current -> next) counts with an explicit Python loop."
+    },
+    {
+      "id": "0047",
+      "name": "vectorize_counts_add_at",
+      "part": 2,
+      "points": 5,
+      "signature": "vectorize_counts_add_at(data, counts)",
+      "doc": "Same tally, vectorized with np.add.at over all adjacent pairs."
+    },
+    {
+      "id": "0048",
+      "name": "add_one_smoothing",
+      "part": 2,
+      "points": 5,
+      "signature": "add_one_smoothing(counts)",
+      "doc": "Laplace smoothing: add 1 to every count so no bigram has zero probability."
+    },
+    {
+      "id": "0049",
+      "name": "row_sums_of_counts",
+      "part": 2,
+      "points": 5,
+      "signature": "row_sums_of_counts(counts)",
+      "doc": "Per-row totals, kept 2-D (vocab, 1) for broadcasting."
+    },
+    {
+      "id": "0050",
+      "name": "normalize_counts_to_probs",
+      "part": 2,
+      "points": 5,
+      "signature": "normalize_counts_to_probs(counts)",
+      "doc": "Normalize each row of counts into a probability distribution."
+    },
+    {
+      "id": "0051",
+      "name": "sample_next_token",
+      "part": 2,
+      "points": 5,
+      "signature": "sample_next_token(probs_row, rng)",
+      "doc": "Sample one token id from a probability row."
+    },
+    {
+      "id": "0052",
+      "name": "generate_sequence",
+      "part": 2,
+      "points": 5,
+      "signature": "generate_sequence(probs, start_token, n, rng)",
+      "doc": "Generate ``n`` tokens from the bigram table, starting at ``start_token``."
+    },
+    {
+      "id": "0053",
+      "name": "decode_generated_sequence",
+      "part": 2,
+      "points": 5,
+      "signature": "decode_generated_sequence(ids, itos)",
+      "doc": "Decode generated ids back to text."
+    },
+    {
+      "id": "0054",
+      "name": "log_prob_of_pair",
+      "part": 2,
+      "points": 5,
+      "signature": "log_prob_of_pair(probs, a, b)",
+      "doc": "Log probability the model assigns to the bigram (a -> b)."
+    },
+    {
+      "id": "0055",
+      "name": "sum_negative_log_probs",
+      "part": 2,
+      "points": 5,
+      "signature": "sum_negative_log_probs(probs, data)",
+      "doc": "Total negative log-likelihood of every adjacent pair in ``data``."
+    },
+    {
+      "id": "0056",
+      "name": "average_nll",
+      "part": 2,
+      "points": 5,
+      "signature": "average_nll(probs, data)",
+      "doc": "Mean negative log-likelihood per bigram (the bigram model's loss)."
+    },
+    {
+      "id": "0057",
+      "name": "initialize_w_random",
+      "part": 3,
+      "points": 5,
+      "signature": "initialize_w_random(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0058",
+      "name": "scale_w_small",
+      "part": 3,
+      "points": 5,
+      "signature": "scale_w_small(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0059",
+      "name": "one_hot_encode_batch",
+      "part": 3,
+      "points": 5,
+      "signature": "one_hot_encode_batch(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0060",
+      "name": "forward_logits_onehot",
+      "part": 3,
+      "points": 5,
+      "signature": "forward_logits_onehot(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0061",
+      "name": "observe_lookup_equivalence",
+      "part": 3,
+      "points": 5,
+      "signature": "observe_lookup_equivalence(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0062",
+      "name": "forward_logits_lookup",
+      "part": 3,
+      "points": 5,
+      "signature": "forward_logits_lookup(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0063",
+      "name": "logits_to_probs_rowwise",
+      "part": 3,
+      "points": 5,
+      "signature": "logits_to_probs_rowwise(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0064",
+      "name": "gather_correct_token_probs",
+      "part": 3,
+      "points": 5,
+      "signature": "gather_correct_token_probs(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0065",
+      "name": "cross_entropy_loss",
+      "part": 3,
+      "points": 5,
+      "signature": "cross_entropy_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0066",
+      "name": "derive_dlogits_on_paper",
+      "part": 3,
+      "points": 5,
+      "signature": "derive_dlogits_on_paper(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0067",
+      "name": "compute_dlogits",
+      "part": 3,
+      "points": 5,
+      "signature": "compute_dlogits(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0068",
+      "name": "derive_dw_on_paper",
+      "part": 3,
+      "points": 5,
+      "signature": "derive_dw_on_paper(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0069",
+      "name": "compute_dw_scatter_add",
+      "part": 3,
+      "points": 5,
+      "signature": "compute_dw_scatter_add(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0070",
+      "name": "sgd_update_w",
+      "part": 3,
+      "points": 5,
+      "signature": "sgd_update_w(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0071",
+      "name": "run_one_training_step",
+      "part": 3,
+      "points": 5,
+      "signature": "run_one_training_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0072",
+      "name": "train_neural_bigram_loop",
+      "part": 3,
+      "points": 5,
+      "signature": "train_neural_bigram_loop(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0073",
+      "name": "sample_from_neural_bigram",
+      "part": 3,
+      "points": 5,
+      "signature": "sample_from_neural_bigram(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0074",
+      "name": "linear_forward",
+      "part": 4,
+      "points": 5,
+      "signature": "linear_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0075",
+      "name": "derive_dx_on_paper",
+      "part": 4,
+      "points": 5,
+      "signature": "derive_dx_on_paper(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0076",
+      "name": "derive_linear_dw_on_paper",
+      "part": 4,
+      "points": 5,
+      "signature": "derive_linear_dw_on_paper(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0077",
+      "name": "linear_backward_dx",
+      "part": 4,
+      "points": 5,
+      "signature": "linear_backward_dx(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0078",
+      "name": "linear_backward_dw",
+      "part": 4,
+      "points": 5,
+      "signature": "linear_backward_dw(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0079",
+      "name": "bias_add_forward",
+      "part": 4,
+      "points": 5,
+      "signature": "bias_add_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0080",
+      "name": "bias_add_backward_db",
+      "part": 4,
+      "points": 5,
+      "signature": "bias_add_backward_db(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0081",
+      "name": "relu_forward",
+      "part": 4,
+      "points": 5,
+      "signature": "relu_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0082",
+      "name": "relu_backward",
+      "part": 4,
+      "points": 5,
+      "signature": "relu_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0083",
+      "name": "softmax_cross_entropy_backward",
+      "part": 4,
+      "points": 5,
+      "signature": "softmax_cross_entropy_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0084",
+      "name": "layernorm_forward_mean",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_forward_mean(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0085",
+      "name": "layernorm_forward_variance",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_forward_variance(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0086",
+      "name": "layernorm_forward_normalize",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_forward_normalize(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0087",
+      "name": "layernorm_forward_affine",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_forward_affine(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0088",
+      "name": "layernorm_backward_subtract_mean",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_backward_subtract_mean(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0089",
+      "name": "layernorm_backward_divide_std",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_backward_divide_std(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0090",
+      "name": "layernorm_backward_full",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_backward_full(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0091",
+      "name": "layernorm_backward_implementation",
+      "part": 4,
+      "points": 5,
+      "signature": "layernorm_backward_implementation(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0092",
+      "name": "create_token_embedding",
+      "part": 5,
+      "points": 5,
+      "signature": "create_token_embedding(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0093",
+      "name": "token_embedding_forward",
+      "part": 5,
+      "points": 5,
+      "signature": "token_embedding_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0094",
+      "name": "token_embedding_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "token_embedding_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0095",
+      "name": "create_positional_embedding",
+      "part": 5,
+      "points": 5,
+      "signature": "create_positional_embedding(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0096",
+      "name": "slice_positional_embedding",
+      "part": 5,
+      "points": 5,
+      "signature": "slice_positional_embedding(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0097",
+      "name": "add_token_and_positional_embeddings",
+      "part": 5,
+      "points": 5,
+      "signature": "add_token_and_positional_embeddings(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0098",
+      "name": "embedding_sum_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "embedding_sum_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0099",
+      "name": "create_qkv_projections",
+      "part": 5,
+      "points": 5,
+      "signature": "create_qkv_projections(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0100",
+      "name": "compute_query",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_query(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0101",
+      "name": "compute_key",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_key(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0102",
+      "name": "compute_value",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_value(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0103",
+      "name": "compute_attention_scores",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_attention_scores(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0104",
+      "name": "scale_attention_scores",
+      "part": 5,
+      "points": 5,
+      "signature": "scale_attention_scores(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0105",
+      "name": "build_causal_mask",
+      "part": 5,
+      "points": 5,
+      "signature": "build_causal_mask(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0106",
+      "name": "apply_causal_mask",
+      "part": 5,
+      "points": 5,
+      "signature": "apply_causal_mask(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0107",
+      "name": "softmax_attention_weights",
+      "part": 5,
+      "points": 5,
+      "signature": "softmax_attention_weights(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0108",
+      "name": "attention_weighted_values",
+      "part": 5,
+      "points": 5,
+      "signature": "attention_weighted_values(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0109",
+      "name": "apply_output_projection",
+      "part": 5,
+      "points": 5,
+      "signature": "apply_output_projection(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0110",
+      "name": "output_projection_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "output_projection_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0111",
+      "name": "attention_value_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "attention_value_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0112",
+      "name": "masked_softmax_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "masked_softmax_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0113",
+      "name": "scale_scores_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "scale_scores_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0114",
+      "name": "qk_scores_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "qk_scores_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0115",
+      "name": "qkv_projection_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "qkv_projection_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0116",
+      "name": "choose_attention_head_config",
+      "part": 5,
+      "points": 5,
+      "signature": "choose_attention_head_config(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0117",
+      "name": "create_multihead_qkv_projections",
+      "part": 5,
+      "points": 5,
+      "signature": "create_multihead_qkv_projections(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0118",
+      "name": "create_multihead_output_projection",
+      "part": 5,
+      "points": 5,
+      "signature": "create_multihead_output_projection(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0119",
+      "name": "reshape_to_heads",
+      "part": 5,
+      "points": 5,
+      "signature": "reshape_to_heads(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0120",
+      "name": "transpose_heads_to_front",
+      "part": 5,
+      "points": 5,
+      "signature": "transpose_heads_to_front(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0121",
+      "name": "get_multihead_n_heads",
+      "part": 5,
+      "points": 5,
+      "signature": "get_multihead_n_heads(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0122",
+      "name": "get_multihead_sequence_length",
+      "part": 5,
+      "points": 5,
+      "signature": "get_multihead_sequence_length(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0123",
+      "name": "compute_d_head",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_d_head(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0124",
+      "name": "multihead_masked_softmax_scores",
+      "part": 5,
+      "points": 5,
+      "signature": "multihead_masked_softmax_scores(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0125",
+      "name": "multihead_weighted_sum",
+      "part": 5,
+      "points": 5,
+      "signature": "multihead_weighted_sum(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0126",
+      "name": "transpose_heads_to_back",
+      "part": 5,
+      "points": 5,
+      "signature": "transpose_heads_to_back(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0127",
+      "name": "get_multihead_output_sequence_length",
+      "part": 5,
+      "points": 5,
+      "signature": "get_multihead_output_sequence_length(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0128",
+      "name": "merge_heads_to_d_model",
+      "part": 5,
+      "points": 5,
+      "signature": "merge_heads_to_d_model(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0129",
+      "name": "multihead_output_projection_forward",
+      "part": 5,
+      "points": 5,
+      "signature": "multihead_output_projection_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0130",
+      "name": "multihead_reshape_transpose_backward",
+      "part": 5,
+      "points": 5,
+      "signature": "multihead_reshape_transpose_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0131",
+      "name": "ffn_linear_one_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "ffn_linear_one_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0132",
+      "name": "ffn_activation_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "ffn_activation_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0133",
+      "name": "ffn_linear_two_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "ffn_linear_two_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0134",
+      "name": "ffn_backward",
+      "part": 6,
+      "points": 5,
+      "signature": "ffn_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0135",
+      "name": "residual_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "residual_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0136",
+      "name": "residual_backward",
+      "part": 6,
+      "points": 5,
+      "signature": "residual_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0137",
+      "name": "pre_layernorm_sublayer_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "pre_layernorm_sublayer_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0138",
+      "name": "transformer_block_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "transformer_block_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0139",
+      "name": "transformer_block_backward",
+      "part": 6,
+      "points": 5,
+      "signature": "transformer_block_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0140",
+      "name": "stack_transformer_blocks",
+      "part": 6,
+      "points": 5,
+      "signature": "stack_transformer_blocks(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0141",
+      "name": "forward_through_all_blocks",
+      "part": 6,
+      "points": 5,
+      "signature": "forward_through_all_blocks(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0142",
+      "name": "backward_through_all_blocks",
+      "part": 6,
+      "points": 5,
+      "signature": "backward_through_all_blocks(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0143",
+      "name": "final_layernorm_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "final_layernorm_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0144",
+      "name": "lm_head_linear_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "lm_head_linear_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0145",
+      "name": "full_model_forward",
+      "part": 6,
+      "points": 5,
+      "signature": "full_model_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0146",
+      "name": "full_model_backward",
+      "part": 6,
+      "points": 5,
+      "signature": "full_model_backward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0147",
+      "name": "initialize_adam_moments",
+      "part": 7,
+      "points": 5,
+      "signature": "initialize_adam_moments(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0148",
+      "name": "initialize_adam_step_counter",
+      "part": 7,
+      "points": 5,
+      "signature": "initialize_adam_step_counter(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0149",
+      "name": "adam_increment_step",
+      "part": 7,
+      "points": 5,
+      "signature": "adam_increment_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0150",
+      "name": "adam_update_first_moment",
+      "part": 7,
+      "points": 5,
+      "signature": "adam_update_first_moment(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0151",
+      "name": "adam_update_second_moment",
+      "part": 7,
+      "points": 5,
+      "signature": "adam_update_second_moment(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0152",
+      "name": "adam_bias_correction",
+      "part": 7,
+      "points": 5,
+      "signature": "adam_bias_correction(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0153",
+      "name": "adam_parameter_update",
+      "part": 7,
+      "points": 5,
+      "signature": "adam_parameter_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0154",
+      "name": "wire_full_training_loop",
+      "part": 7,
+      "points": 5,
+      "signature": "wire_full_training_loop(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0155",
+      "name": "logging_and_validation_loss",
+      "part": 7,
+      "points": 5,
+      "signature": "logging_and_validation_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0156",
+      "name": "encode_prompt",
+      "part": 7,
+      "points": 5,
+      "signature": "encode_prompt(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0157",
+      "name": "crop_context_to_block_size",
+      "part": 7,
+      "points": 5,
+      "signature": "crop_context_to_block_size(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0158",
+      "name": "forward_to_get_logits",
+      "part": 7,
+      "points": 5,
+      "signature": "forward_to_get_logits(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0159",
+      "name": "take_last_position_logits",
+      "part": 7,
+      "points": 5,
+      "signature": "take_last_position_logits(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0160",
+      "name": "apply_temperature",
+      "part": 7,
+      "points": 5,
+      "signature": "apply_temperature(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0161",
+      "name": "top_k_filter",
+      "part": 7,
+      "points": 5,
+      "signature": "top_k_filter(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0162",
+      "name": "softmax_to_probs",
+      "part": 7,
+      "points": 5,
+      "signature": "softmax_to_probs(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0163",
+      "name": "sample_one_token",
+      "part": 7,
+      "points": 5,
+      "signature": "sample_one_token(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0164",
+      "name": "append_token_to_sequence",
+      "part": 7,
+      "points": 5,
+      "signature": "append_token_to_sequence(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0165",
+      "name": "generation_loop_for_n_steps",
+      "part": 7,
+      "points": 5,
+      "signature": "generation_loop_for_n_steps(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0166",
+      "name": "decode_final_sequence",
+      "part": 7,
+      "points": 5,
+      "signature": "decode_final_sequence(*args)",
+      "doc": "TODO: not yet built."
+    }
+  ]
+}
