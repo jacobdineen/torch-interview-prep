@@ -34,6 +34,24 @@ def _find_project_root(step_path):
     return None
 
 
+def _ensure_compiled(project_root):
+    """Compile the hidden _ref sources to _compiled/*.pyc if missing or stale, so
+    the project works on a fresh checkout without running the build script."""
+    import py_compile
+    ref_dir = os.path.join(project_root, "tests", "_ref")
+    out_dir = os.path.join(project_root, "tests", "_compiled")
+    os.makedirs(out_dir, exist_ok=True)
+    for name in ("reference", "tests"):
+        src = os.path.join(ref_dir, f"{name}.py")
+        dst = os.path.join(out_dir, f"{name}.pyc")
+        if os.path.exists(src) and (not os.path.exists(dst)
+                                    or os.path.getmtime(dst) < os.path.getmtime(src)):
+            try:
+                py_compile.compile(src, cfile=dst, doraise=True)
+            except Exception:
+                pass
+
+
 def _load_compiled(path, mod_name):
     loader = SourcelessFileLoader(mod_name, path)
     spec = importlib.util.spec_from_loader(mod_name, loader)
@@ -209,6 +227,7 @@ def run_step(step_path):
 
     json_mode = os.environ.get("PREP_JSON") == "1"
     label = f"Step {step_id} ({name})"
+    _ensure_compiled(root)
 
     try:
         ref_funcs = _reference_funcs(root)
