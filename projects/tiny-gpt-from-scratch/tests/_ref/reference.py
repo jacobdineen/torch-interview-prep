@@ -313,3 +313,114 @@ def sum_negative_log_probs(probs, data):
 def average_nll(probs, data):
     """Mean negative log-likelihood per bigram (the bigram model's loss)."""
     return sum_negative_log_probs(probs, data) / (len(data) - 1)
+
+
+# ================= Part 4 — Single-Layer Neural Bigram =================
+
+def initialize_w_random(vocab_size, rng):
+    """Random (vocab, vocab) weight matrix — the learned bigram 'table'."""
+    return rng.standard_normal((vocab_size, vocab_size))
+
+
+def scale_w_small(w, scale):
+    """Scale the weights down so initial logits are small."""
+    return w * scale
+
+
+def one_hot_encode_batch(x, vocab_size):
+    """One-hot encode a batch of token ids (B,) into (B, vocab_size)."""
+    return np.eye(vocab_size)[x]
+
+
+def forward_logits_onehot(onehot, w):
+    """Logits as a matmul of one-hot inputs with the weights: (B,V) @ (V,V)."""
+    return onehot @ w
+
+
+def observe_lookup_equivalence(x, w):
+    """One-hot @ W equals a plain row lookup W[x]; return True to confirm."""
+    vocab_size = w.shape[0]
+    return bool(np.allclose(np.eye(vocab_size)[x] @ w, w[x]))
+
+
+def forward_logits_lookup(x, w):
+    """Logits via row lookup W[x] — same result as one-hot @ W, far cheaper."""
+    return w[x]
+
+
+def logits_to_probs_rowwise(logits):
+    """Row-wise softmax turning logits into next-token probabilities."""
+    return stable_softmax_2d_rowwise(logits)
+
+
+def gather_correct_token_probs(probs, y):
+    """Pick out the probability assigned to each true next token y. Shape (B,)."""
+    return probs[np.arange(len(y)), y]
+
+
+def cross_entropy_loss(probs, y):
+    """Mean negative log-prob of the correct tokens."""
+    return -np.mean(np.log(probs[np.arange(len(y)), y]))
+
+
+def derive_dlogits_on_paper(probs, y):
+    """Gradient of softmax+cross-entropy w.r.t. the logits: (probs - onehot)/N."""
+    n = len(y)
+    onehot = np.eye(probs.shape[1])[y]
+    return (probs - onehot) / n
+
+
+def compute_dlogits(probs, y):
+    """Implement dL/dlogits = (probs - onehot(y)) / N."""
+    n = len(y)
+    onehot = np.eye(probs.shape[1])[y]
+    return (probs - onehot) / n
+
+
+def derive_dw_on_paper(x, dlogits, vocab_size):
+    """Gradient w.r.t. W. Since logits = W[x], dW = onehot(x).T @ dlogits."""
+    return np.eye(vocab_size)[x].T @ dlogits
+
+
+def compute_dw_scatter_add(x, dlogits, vocab_size):
+    """Same dW, computed by scattering each row's dlogits into row W[x[b]]."""
+    dw = np.zeros((vocab_size, dlogits.shape[1]))
+    np.add.at(dw, x, dlogits)
+    return dw
+
+
+def sgd_update_w(w, dw, lr):
+    """One SGD step: W <- W - lr * dW."""
+    return w - lr * dw
+
+
+def run_one_training_step(w, x, y, lr):
+    """Forward, loss, backward, and SGD update for one batch. Returns (W, loss)."""
+    logits = forward_logits_lookup(x, w)
+    probs = logits_to_probs_rowwise(logits)
+    loss = cross_entropy_loss(probs, y)
+    dlogits = compute_dlogits(probs, y)
+    dw = compute_dw_scatter_add(x, dlogits, w.shape[0])
+    w = sgd_update_w(w, dw, lr)
+    return w, loss
+
+
+def train_neural_bigram_loop(w, data, n_steps, batch_size, lr, rng):
+    """Train the neural bigram for ``n_steps`` SGD steps. Returns (W, losses)."""
+    losses = []
+    for _ in range(n_steps):
+        idx = rng.integers(0, len(data) - 1, size=batch_size)
+        x, y = data[idx], data[idx + 1]
+        w, loss = run_one_training_step(w, x, y, lr)
+        losses.append(loss)
+    return w, losses
+
+
+def sample_from_neural_bigram(w, start_token, n, rng):
+    """Generate ``n`` tokens by softmaxing each row W[cur] and sampling."""
+    out = [start_token]
+    cur = start_token
+    for _ in range(n):
+        cur = sample_next_token(stable_softmax_1d(w[cur]), rng)
+        out.append(cur)
+    return out

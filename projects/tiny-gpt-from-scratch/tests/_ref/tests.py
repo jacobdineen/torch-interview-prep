@@ -470,3 +470,157 @@ def test_0056_average_nll(ns):
     with step("mean NLL per pair"):
         expect_allclose(ns["average_nll"](probs, data),
                         -(np.log(0.75) + np.log(0.5)) / 2)
+
+
+# ------------------- Part 4 — Single-Layer Neural Bigram -------------------
+
+def test_0057_initialize_w_random(ns):
+    got = ns["initialize_w_random"](4, np.random.default_rng(0))
+    want = np.random.default_rng(0).standard_normal((4, 4))
+    with step("(V,V) standard-normal from rng"):
+        expect_shape(got, (4, 4))
+        expect_allclose(got, want)
+
+
+def test_0058_scale_w_small(ns):
+    w = np.ones((2, 2))
+    with step("scales the weights"):
+        expect_allclose(ns["scale_w_small"](w, 0.01), np.full((2, 2), 0.01))
+
+
+def test_0059_one_hot_encode_batch(ns):
+    out = ns["one_hot_encode_batch"](np.array([0, 2]), 3)
+    with step("(B, V) one-hot"):
+        expect_allclose(out, [[1, 0, 0], [0, 0, 1]])
+
+
+def test_0060_forward_logits_onehot(ns):
+    w = np.arange(9).reshape(3, 3).astype(float)
+    oh = ns["one_hot_encode_batch"](np.array([0, 2]), 3)
+    with step("onehot @ W selects rows"):
+        expect_allclose(ns["forward_logits_onehot"](oh, w), [w[0], w[2]])
+
+
+def test_0061_observe_lookup_equivalence(ns):
+    w = np.random.default_rng(1).standard_normal((4, 4))
+    with step("one-hot matmul equals row lookup"):
+        expect_true(ns["observe_lookup_equivalence"](np.array([0, 3, 1]), w) is True
+                    or ns["observe_lookup_equivalence"](np.array([0, 3, 1]), w) == True,  # noqa: E712
+                    "should confirm equivalence (True)")
+
+
+def test_0062_forward_logits_lookup(ns):
+    w = np.arange(9).reshape(3, 3).astype(float)
+    with step("W[x] row lookup"):
+        expect_allclose(ns["forward_logits_lookup"](np.array([2, 0]), w), [w[2], w[0]])
+
+
+def test_0063_logits_to_probs_rowwise(ns):
+    logits = np.array([[1.0, 2.0, 3.0], [0.0, 0.0, 0.0]])
+    out = ns["logits_to_probs_rowwise"](logits)
+    with step("rows are softmax distributions"):
+        expect_allclose(out.sum(axis=1), [1.0, 1.0])
+        expect_allclose(out[1], [1 / 3, 1 / 3, 1 / 3])
+
+
+def test_0064_gather_correct_token_probs(ns):
+    probs = np.array([[0.1, 0.9], [0.7, 0.3]])
+    with step("gathers p[i, y[i]]"):
+        expect_allclose(ns["gather_correct_token_probs"](probs, np.array([1, 0])), [0.9, 0.7])
+
+
+def test_0065_cross_entropy_loss(ns):
+    probs = np.array([[0.1, 0.9], [0.7, 0.3]])
+    y = np.array([1, 0])
+    with step("mean -log p(correct)"):
+        expect_allclose(ns["cross_entropy_loss"](probs, y),
+                        -(np.log(0.9) + np.log(0.7)) / 2)
+
+
+def _ce_of_logits(ns, logits, y):
+    return ns["cross_entropy_loss"](ns["logits_to_probs_rowwise"](logits), y)
+
+
+def test_0066_derive_dlogits_on_paper(ns):
+    rng = np.random.default_rng(3)
+    logits = rng.standard_normal((4, 5))
+    y = rng.integers(0, 5, size=4)
+    probs = ns["logits_to_probs_rowwise"](logits)
+    analytic = ns["derive_dlogits_on_paper"](probs, y)
+    with step("matches numeric dL/dlogits (finite differences)"):
+        grad_check(lambda L: _ce_of_logits(ns, L, y), logits, 1.0, analytic, name="dlogits")
+
+
+def test_0067_compute_dlogits(ns):
+    rng = np.random.default_rng(4)
+    logits = rng.standard_normal((4, 5))
+    y = rng.integers(0, 5, size=4)
+    probs = ns["logits_to_probs_rowwise"](logits)
+    analytic = ns["compute_dlogits"](probs, y)
+    with step("gradient-checks against the loss"):
+        grad_check(lambda L: _ce_of_logits(ns, L, y), logits, 1.0, analytic, name="dlogits")
+
+
+def test_0068_derive_dw_on_paper(ns):
+    rng = np.random.default_rng(5)
+    x = rng.integers(0, 4, size=6)
+    dlogits = rng.standard_normal((6, 4))
+    with step("dW = onehot(x).T @ dlogits"):
+        expect_allclose(ns["derive_dw_on_paper"](x, dlogits, 4),
+                        np.eye(4)[x].T @ dlogits)
+
+
+def test_0069_compute_dw_scatter_add(ns):
+    rng = np.random.default_rng(6)
+    x = rng.integers(0, 4, size=6)
+    w = rng.standard_normal((4, 4))
+    y = rng.integers(0, 4, size=6)
+
+    def loss_of_w(W):
+        return _ce_of_logits(ns, ns["forward_logits_lookup"](x, W), y)
+
+    probs = ns["logits_to_probs_rowwise"](ns["forward_logits_lookup"](x, w))
+    dlogits = ns["compute_dlogits"](probs, y)
+    analytic = ns["compute_dw_scatter_add"](x, dlogits, 4)
+    with step("matches scatter form and gradient-checks vs W"):
+        expect_allclose(analytic, ns["derive_dw_on_paper"](x, dlogits, 4))
+        grad_check(loss_of_w, w, 1.0, analytic, name="dW")
+
+
+def test_0070_sgd_update_w(ns):
+    w = np.ones((2, 2))
+    dw = np.full((2, 2), 0.5)
+    with step("W - lr*dW"):
+        expect_allclose(ns["sgd_update_w"](w, dw, 0.1), np.full((2, 2), 0.95))
+
+
+def test_0071_run_one_training_step(ns):
+    rng = np.random.default_rng(7)
+    w = rng.standard_normal((4, 4)) * 0.1
+    x = np.array([0, 1, 2])
+    y = np.array([1, 2, 3])
+    w2, loss = ns["run_one_training_step"](w, x, y, 1.0)
+    with step("returns updated W (same shape) and a scalar loss"):
+        expect_shape(w2, (4, 4))
+        expect_true(np.isscalar(loss) or np.ndim(loss) == 0, "loss should be a scalar")
+        expect_true(not np.allclose(w2, w), "W should change after a step")
+
+
+def test_0072_train_neural_bigram_loop(ns):
+    rng = np.random.default_rng(8)
+    data = np.array([0, 1, 2, 3] * 50)  # strong bigram structure
+    w = rng.standard_normal((4, 4)) * 0.1
+    w2, losses = ns["train_neural_bigram_loop"](w, data, 300, 32, 1.0, rng)
+    with step("loss decreases over training"):
+        expect_true(losses[-1] < losses[0] * 0.7,
+                    f"expected loss to drop; start={losses[0]:.3f} end={losses[-1]:.3f}")
+
+
+def test_0073_sample_from_neural_bigram(ns):
+    rng = np.random.default_rng(9)
+    w = rng.standard_normal((4, 4))
+    out = ns["sample_from_neural_bigram"](w, 0, 5, rng)
+    with step("starts at start_token, length n+1, valid ids"):
+        expect_eq(out[0], 0)
+        expect_eq(len(out), 6)
+        expect_true(all(0 <= t < 4 for t in out), "ids must be in range")

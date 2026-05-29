@@ -489,136 +489,136 @@
       "name": "initialize_w_random",
       "part": 3,
       "points": 5,
-      "signature": "initialize_w_random(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "initialize_w_random(vocab_size, rng)",
+      "doc": "Random (vocab, vocab) weight matrix \u2014 the learned bigram 'table'."
     },
     {
       "id": "0058",
       "name": "scale_w_small",
       "part": 3,
       "points": 5,
-      "signature": "scale_w_small(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "scale_w_small(w, scale)",
+      "doc": "Scale the weights down so initial logits are small."
     },
     {
       "id": "0059",
       "name": "one_hot_encode_batch",
       "part": 3,
       "points": 5,
-      "signature": "one_hot_encode_batch(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "one_hot_encode_batch(x, vocab_size)",
+      "doc": "One-hot encode a batch of token ids (B,) into (B, vocab_size)."
     },
     {
       "id": "0060",
       "name": "forward_logits_onehot",
       "part": 3,
       "points": 5,
-      "signature": "forward_logits_onehot(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "forward_logits_onehot(onehot, w)",
+      "doc": "Logits as a matmul of one-hot inputs with the weights: (B,V) @ (V,V)."
     },
     {
       "id": "0061",
       "name": "observe_lookup_equivalence",
       "part": 3,
       "points": 5,
-      "signature": "observe_lookup_equivalence(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "observe_lookup_equivalence(x, w)",
+      "doc": "One-hot @ W equals a plain row lookup W[x]; return True to confirm."
     },
     {
       "id": "0062",
       "name": "forward_logits_lookup",
       "part": 3,
       "points": 5,
-      "signature": "forward_logits_lookup(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "forward_logits_lookup(x, w)",
+      "doc": "Logits via row lookup W[x] \u2014 same result as one-hot @ W, far cheaper."
     },
     {
       "id": "0063",
       "name": "logits_to_probs_rowwise",
       "part": 3,
       "points": 5,
-      "signature": "logits_to_probs_rowwise(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "logits_to_probs_rowwise(logits)",
+      "doc": "Row-wise softmax turning logits into next-token probabilities."
     },
     {
       "id": "0064",
       "name": "gather_correct_token_probs",
       "part": 3,
       "points": 5,
-      "signature": "gather_correct_token_probs(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "gather_correct_token_probs(probs, y)",
+      "doc": "Pick out the probability assigned to each true next token y. Shape (B,)."
     },
     {
       "id": "0065",
       "name": "cross_entropy_loss",
       "part": 3,
       "points": 5,
-      "signature": "cross_entropy_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "cross_entropy_loss(probs, y)",
+      "doc": "Mean negative log-prob of the correct tokens."
     },
     {
       "id": "0066",
       "name": "derive_dlogits_on_paper",
       "part": 3,
       "points": 5,
-      "signature": "derive_dlogits_on_paper(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "derive_dlogits_on_paper(probs, y)",
+      "doc": "Gradient of softmax+cross-entropy w.r.t. the logits: (probs - onehot)/N."
     },
     {
       "id": "0067",
       "name": "compute_dlogits",
       "part": 3,
       "points": 5,
-      "signature": "compute_dlogits(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_dlogits(probs, y)",
+      "doc": "Implement dL/dlogits = (probs - onehot(y)) / N."
     },
     {
       "id": "0068",
       "name": "derive_dw_on_paper",
       "part": 3,
       "points": 5,
-      "signature": "derive_dw_on_paper(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "derive_dw_on_paper(x, dlogits, vocab_size)",
+      "doc": "Gradient w.r.t. W. Since logits = W[x], dW = onehot(x).T @ dlogits."
     },
     {
       "id": "0069",
       "name": "compute_dw_scatter_add",
       "part": 3,
       "points": 5,
-      "signature": "compute_dw_scatter_add(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_dw_scatter_add(x, dlogits, vocab_size)",
+      "doc": "Same dW, computed by scattering each row's dlogits into row W[x[b]]."
     },
     {
       "id": "0070",
       "name": "sgd_update_w",
       "part": 3,
       "points": 5,
-      "signature": "sgd_update_w(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sgd_update_w(w, dw, lr)",
+      "doc": "One SGD step: W <- W - lr * dW."
     },
     {
       "id": "0071",
       "name": "run_one_training_step",
       "part": 3,
       "points": 5,
-      "signature": "run_one_training_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "run_one_training_step(w, x, y, lr)",
+      "doc": "Forward, loss, backward, and SGD update for one batch. Returns (W, loss)."
     },
     {
       "id": "0072",
       "name": "train_neural_bigram_loop",
       "part": 3,
       "points": 5,
-      "signature": "train_neural_bigram_loop(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_neural_bigram_loop(w, data, n_steps, batch_size, lr, rng)",
+      "doc": "Train the neural bigram for ``n_steps`` SGD steps. Returns (W, losses)."
     },
     {
       "id": "0073",
       "name": "sample_from_neural_bigram",
       "part": 3,
       "points": 5,
-      "signature": "sample_from_neural_bigram(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sample_from_neural_bigram(w, start_token, n, rng)",
+      "doc": "Generate ``n`` tokens by softmaxing each row W[cur] and sampling."
     },
     {
       "id": "0074",
