@@ -133,18 +133,22 @@ Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per 
 ## Projects (multi-step builds)
 
 Alongside the standalone problems, **projects** are long ordered sequences of small
-steps that accumulate into one working artifact. The first is **tiny-gpt-from-scratch**:
-166 steps across 8 parts that build a character-level GPT in pure NumPy — tokenizer,
-NumPy/softmax foundations, data pipeline + bigram baseline, a single-layer neural
-bigram, layer primitives with backprop, embeddings + single/multi-head self-attention,
-FFN/blocks/full model (forward **and** backward), and Adam + training loop + generation.
+steps that accumulate into one working artifact. Two are included (in pure NumPy):
 
-Each step is one function in `projects/<name>/steps/NNNN_<fn>.py`. You solve it like a
-problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that swaps
-your function over a reference implementation, so each step is checked in isolation. Every
-`*_backward*` step is validated by **finite-difference gradient checking**. As you pass
-steps, `solution.py` is re-assembled from your solved code; once enough is done, the
-end-to-end `scaffold.py` trains the GPT and samples text.
+- **tiny-gpt-from-scratch** — 166 steps / 8 parts: a character-level GPT (tokenizer,
+  NumPy/softmax foundations, data pipeline + bigram baseline, single-layer neural bigram,
+  layer primitives with backprop, embeddings + single/multi-head self-attention,
+  FFN/blocks/full model forward **and** backward, Adam + training loop + generation).
+- **tic-tac-toe-rl** — 87 steps / 6 parts: an RL lab from minimax to DQN (game engine,
+  random + minimax baselines, tabular Q-learning, self-play + evaluation, a from-scratch
+  DQN with replay/target-net, and policy gradients — SARSA, REINFORCE, symmetry augmentation).
+
+Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
+like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
+swaps your function over a reference implementation, so each step is checked in isolation.
+Every `*_backward*` / policy-gradient step is validated by **finite-difference gradient
+checking**. As you pass steps, `solution.py` is re-assembled from your solved code; once
+enough is done, the end-to-end `scaffold.py` runs the whole thing (trains the model/agents).
 
 ```bash
 uv run python projects.py                       # list projects
@@ -157,7 +161,8 @@ uv run python projects.py tiny-gpt-from-scratch 44 --solution --i-give-up  # ref
 uv run python projects.py tiny-gpt-from-scratch --scaffold # end-to-end demo (once solved)
 ```
 
-(When there's a single project, the name is optional: `python projects.py --next`.) The
+(Swap in `tic-tac-toe-rl` for the other project. With a single project the name is
+optional; with several, `python projects.py` lists them.) The
 nvim `<leader>p` keymaps work on step files too. Build/regenerate a project from its spec
 with `python projects/<name>/_build/gen.py`; `_build/verify.py` checks every reference
 passes its own test.
