@@ -299,7 +299,8 @@ def assemble_solution(project_root):
     parts = man["parts"]
     out = [f'"""{man.get("title", man["name"])} — assembled scaffold.',
            "This file is generated from your solved steps; edit the steps, not this.",
-           '"""', "", "import numpy as np", "import torch", "import torch.nn.functional as F", ""]
+           '"""', "", "import numpy as np", "import torch", "import torch.nn as nn",
+           "import torch.nn.functional as F", ""]
     cur_part = None
     for s in man["steps"]:
         sid, name, part = s["id"], s["name"], s["part"]

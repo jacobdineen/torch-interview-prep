@@ -133,7 +133,7 @@ Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per 
 ## Projects (multi-step builds)
 
 Alongside the standalone problems, **projects** are long ordered sequences of small
-steps that accumulate into one working artifact. Three are included:
+steps that accumulate into one working artifact. Four are included:
 
 - **tiny-gpt-from-scratch** (NumPy) — 166 steps / 8 parts: a character-level GPT (tokenizer,
   NumPy/softmax foundations, data pipeline + bigram baseline, single-layer neural bigram,
@@ -146,6 +146,9 @@ steps that accumulate into one working artifact. Three are included:
   distilgpt2 (decoding, SFT, LoRA, reward modeling, PPO, and preference optimization — DPO,
   IPO, KTO, ORPO, SimPO — plus evaluation and a chat interface). Needs `transformers` and
   downloads distilgpt2 (~350MB) on first run; uses CUDA if available.
+- **alphazero-connect4** (PyTorch) — 57 steps / 8 parts: an AlphaZero agent for Connect-4
+  (board engine, conv policy-value net, action masking, PUCT MCTS, self-play data generation,
+  the AlphaZero loss + training loop, the iterated self-play/train loop, and evaluation).
 
 Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
 like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
