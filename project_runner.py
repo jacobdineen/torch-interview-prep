@@ -62,9 +62,11 @@ def _load_compiled(path, mod_name):
 
 def _reference_funcs(project_root):
     pyc = os.path.join(project_root, "tests", "_compiled", "reference.pyc")
-    mod = _load_compiled(pyc, "_tgp_reference")
+    mod = _load_compiled(pyc, "_proj_reference")
     return {k: v for k, v in vars(mod).items()
-            if isinstance(v, types.FunctionType) and not k.startswith("_")}
+            if not k.startswith("_") and (
+                isinstance(v, types.FunctionType)
+                or (isinstance(v, type) and getattr(v, "__module__", "") == mod.__name__))}
 
 
 # ---------- failure context (numpy-aware) ----------

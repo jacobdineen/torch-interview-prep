@@ -1,0 +1,728 @@
+{
+  "name": "tic-tac-toe-rl",
+  "title": "Reinforcement Learning for Tic-Tac-Toe: From Minimax to DQN",
+  "parts": [
+    {
+      "title": "Board Representation & Game Engine",
+      "description": "Encode the 3x3 board, move legality, win/draw detection, turn tracking, and a Game class."
+    },
+    {
+      "title": "Random and Minimax Baselines",
+      "description": "A random agent, head-to-head rollouts, and full minimax with alpha-beta pruning."
+    },
+    {
+      "title": "Tabular Q-Learning Foundations",
+      "description": "State hashing with symmetry, hyperparameters, epsilon-greedy, rewards, and the Q-update loop."
+    },
+    {
+      "title": "Self-Play, Evaluation & Persistence",
+      "description": "Self-play with perspective flipping, evaluation vs random/minimax, and Q-table save/load."
+    },
+    {
+      "title": "Deep Q-Network Agent",
+      "description": "Board encodings, an MLP with backprop, replay buffer, target network, and DQN training."
+    },
+    {
+      "title": "Policy Gradients & Extensions",
+      "description": "SARSA, REINFORCE, value-vs-policy comparison, and 8-fold symmetry data augmentation."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "create_empty_board",
+      "part": 0,
+      "points": 5,
+      "signature": "create_empty_board()",
+      "doc": "A fresh 3x3 board of zeros (all cells empty)."
+    },
+    {
+      "id": "0002",
+      "name": "encode_player",
+      "part": 0,
+      "points": 5,
+      "signature": "encode_player(symbol)",
+      "doc": "Map a player symbol to its board mark: 'X' -> +1, 'O' -> -1."
+    },
+    {
+      "id": "0003",
+      "name": "print_board",
+      "part": 0,
+      "points": 5,
+      "signature": "print_board(board)",
+      "doc": "Render the board as a string using X / O / . , rows on separate lines."
+    },
+    {
+      "id": "0004",
+      "name": "is_cell_empty",
+      "part": 0,
+      "points": 5,
+      "signature": "is_cell_empty(board, action)",
+      "doc": "True if the cell at action 0..8 is empty."
+    },
+    {
+      "id": "0005",
+      "name": "place_move",
+      "part": 0,
+      "points": 5,
+      "signature": "place_move(board, action, player)",
+      "doc": "Return a NEW board with ``player``'s mark placed at ``action`` (no mutation)."
+    },
+    {
+      "id": "0006",
+      "name": "get_legal_moves",
+      "part": 0,
+      "points": 5,
+      "signature": "get_legal_moves(board)",
+      "doc": "List of empty action indices (0..8)."
+    },
+    {
+      "id": "0007",
+      "name": "check_row_win",
+      "part": 0,
+      "points": 5,
+      "signature": "check_row_win(board, player)",
+      "doc": "True if ``player`` occupies a full row."
+    },
+    {
+      "id": "0008",
+      "name": "check_column_win",
+      "part": 0,
+      "points": 5,
+      "signature": "check_column_win(board, player)",
+      "doc": "True if ``player`` occupies a full column."
+    },
+    {
+      "id": "0009",
+      "name": "check_main_diagonal_win",
+      "part": 0,
+      "points": 5,
+      "signature": "check_main_diagonal_win(board, player)",
+      "doc": "True if ``player`` occupies the main (top-left to bottom-right) diagonal."
+    },
+    {
+      "id": "0010",
+      "name": "check_anti_diagonal_win",
+      "part": 0,
+      "points": 5,
+      "signature": "check_anti_diagonal_win(board, player)",
+      "doc": "True if ``player`` occupies the anti (top-right to bottom-left) diagonal."
+    },
+    {
+      "id": "0011",
+      "name": "is_winner",
+      "part": 0,
+      "points": 5,
+      "signature": "is_winner(board, player)",
+      "doc": "True if ``player`` has any winning line (row, column, or diagonal)."
+    },
+    {
+      "id": "0012",
+      "name": "is_draw",
+      "part": 0,
+      "points": 5,
+      "signature": "is_draw(board)",
+      "doc": "True if the board is full and neither player has won."
+    },
+    {
+      "id": "0013",
+      "name": "get_game_status",
+      "part": 0,
+      "points": 5,
+      "signature": "get_game_status(board)",
+      "doc": "Game outcome: +1 (X wins), -1 (O wins), 0 (draw), or None (still in play)."
+    },
+    {
+      "id": "0014",
+      "name": "get_current_player",
+      "part": 0,
+      "points": 5,
+      "signature": "get_current_player(board)",
+      "doc": "Whose turn it is: +1 if X and O have played equally (X starts), else -1."
+    },
+    {
+      "id": "0015",
+      "name": "switch_player",
+      "part": 0,
+      "points": 5,
+      "signature": "switch_player(player)",
+      "doc": "The other player: +1 <-> -1."
+    },
+    {
+      "id": "0016",
+      "name": "play_hardcoded_game",
+      "part": 0,
+      "points": 5,
+      "signature": "play_hardcoded_game(moves)",
+      "doc": "Play a fixed list of actions, alternating from X, and return the final board."
+    },
+    {
+      "id": "0017",
+      "name": "play_interactive_game",
+      "part": 0,
+      "points": 5,
+      "signature": "play_interactive_game(get_move)",
+      "doc": "Play to termination, asking ``get_move(board, player)`` for each action.\nReturns the final game status (+1 / -1 / 0). ``get_move`` makes this testable\nwithout real stdin (pass a scripted callback)."
+    },
+    {
+      "id": "0018",
+      "name": "TicTacToeGame",
+      "part": 0,
+      "points": 5,
+      "signature": "TicTacToeGame()",
+      "doc": "A reusable game object wrapping the functional engine.\n\nAttributes: ``board`` (3x3) and ``current_player`` (+1/-1).\nMethods: reset(), legal_moves(), step(action) -> status, status()."
+    },
+    {
+      "id": "0019",
+      "name": "random_move_agent",
+      "part": 1,
+      "points": 5,
+      "signature": "random_move_agent(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0020",
+      "name": "play_random_vs_random_game",
+      "part": 1,
+      "points": 5,
+      "signature": "play_random_vs_random_game(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0021",
+      "name": "play_random_vs_random_matches",
+      "part": 1,
+      "points": 5,
+      "signature": "play_random_vs_random_matches(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0022",
+      "name": "compute_outcome_rates",
+      "part": 1,
+      "points": 5,
+      "signature": "compute_outcome_rates(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0023",
+      "name": "minimax_terminal_score",
+      "part": 1,
+      "points": 5,
+      "signature": "minimax_terminal_score(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0024",
+      "name": "minimax_recursive",
+      "part": 1,
+      "points": 5,
+      "signature": "minimax_recursive(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0025",
+      "name": "minimax_max_min_step",
+      "part": 1,
+      "points": 5,
+      "signature": "minimax_max_min_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0026",
+      "name": "minimax_best_move",
+      "part": 1,
+      "points": 5,
+      "signature": "minimax_best_move(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0027",
+      "name": "minimax_alpha_beta",
+      "part": 1,
+      "points": 5,
+      "signature": "minimax_alpha_beta(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0028",
+      "name": "play_minimax_vs_random_matches",
+      "part": 1,
+      "points": 5,
+      "signature": "play_minimax_vs_random_matches(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0029",
+      "name": "play_minimax_vs_minimax_matches",
+      "part": 1,
+      "points": 5,
+      "signature": "play_minimax_vs_minimax_matches(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0030",
+      "name": "encode_board_state_key",
+      "part": 2,
+      "points": 5,
+      "signature": "encode_board_state_key(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0031",
+      "name": "canonical_board_key",
+      "part": 2,
+      "points": 5,
+      "signature": "canonical_board_key(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0032",
+      "name": "initialize_q_table",
+      "part": 2,
+      "points": 5,
+      "signature": "initialize_q_table(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0033",
+      "name": "get_q_value",
+      "part": 2,
+      "points": 5,
+      "signature": "get_q_value(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0034",
+      "name": "set_q_value",
+      "part": 2,
+      "points": 5,
+      "signature": "set_q_value(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0035",
+      "name": "choose_learning_rate_alpha",
+      "part": 2,
+      "points": 5,
+      "signature": "choose_learning_rate_alpha(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0036",
+      "name": "choose_discount_factor_gamma",
+      "part": 2,
+      "points": 5,
+      "signature": "choose_discount_factor_gamma(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0037",
+      "name": "choose_initial_epsilon",
+      "part": 2,
+      "points": 5,
+      "signature": "choose_initial_epsilon(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0038",
+      "name": "epsilon_decay_schedule",
+      "part": 2,
+      "points": 5,
+      "signature": "epsilon_decay_schedule(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0039",
+      "name": "epsilon_greedy_explore_move",
+      "part": 2,
+      "points": 5,
+      "signature": "epsilon_greedy_explore_move(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0040",
+      "name": "epsilon_greedy_select_action",
+      "part": 2,
+      "points": 5,
+      "signature": "epsilon_greedy_select_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0041",
+      "name": "greedy_argmax_over_legal_actions",
+      "part": 2,
+      "points": 5,
+      "signature": "greedy_argmax_over_legal_actions(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0042",
+      "name": "random_tie_break_argmax",
+      "part": 2,
+      "points": 5,
+      "signature": "random_tie_break_argmax(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0043",
+      "name": "tic_tac_toe_reward",
+      "part": 2,
+      "points": 5,
+      "signature": "tic_tac_toe_reward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0044",
+      "name": "q_learning_nonterminal_target",
+      "part": 2,
+      "points": 5,
+      "signature": "q_learning_nonterminal_target(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0045",
+      "name": "q_learning_terminal_target",
+      "part": 2,
+      "points": 5,
+      "signature": "q_learning_terminal_target(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0046",
+      "name": "q_learning_update",
+      "part": 2,
+      "points": 5,
+      "signature": "q_learning_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0047",
+      "name": "episode_reset_game",
+      "part": 2,
+      "points": 5,
+      "signature": "episode_reset_game(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0048",
+      "name": "episode_agent_pick_action",
+      "part": 2,
+      "points": 5,
+      "signature": "episode_agent_pick_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0049",
+      "name": "episode_apply_action",
+      "part": 2,
+      "points": 5,
+      "signature": "episode_apply_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0050",
+      "name": "episode_apply_q_update",
+      "part": 2,
+      "points": 5,
+      "signature": "episode_apply_q_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0051",
+      "name": "episode_check_terminate",
+      "part": 2,
+      "points": 5,
+      "signature": "episode_check_terminate(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0052",
+      "name": "train_q_learning_agent",
+      "part": 2,
+      "points": 5,
+      "signature": "train_q_learning_agent(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0053",
+      "name": "compute_batched_outcome_stats",
+      "part": 2,
+      "points": 5,
+      "signature": "compute_batched_outcome_stats(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0054",
+      "name": "self_play_episode",
+      "part": 3,
+      "points": 5,
+      "signature": "self_play_episode(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0055",
+      "name": "flip_board_perspective",
+      "part": 3,
+      "points": 5,
+      "signature": "flip_board_perspective(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0056",
+      "name": "perspective_reward_sign",
+      "part": 3,
+      "points": 5,
+      "signature": "perspective_reward_sign(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0057",
+      "name": "train_q_agent_self_play",
+      "part": 3,
+      "points": 5,
+      "signature": "train_q_agent_self_play(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0058",
+      "name": "evaluate_q_agent_vs_random",
+      "part": 3,
+      "points": 5,
+      "signature": "evaluate_q_agent_vs_random(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0059",
+      "name": "evaluate_q_agent_vs_minimax",
+      "part": 3,
+      "points": 5,
+      "signature": "evaluate_q_agent_vs_minimax(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0060",
+      "name": "inspect_q_values_for_state",
+      "part": 3,
+      "points": 5,
+      "signature": "inspect_q_values_for_state(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0061",
+      "name": "serialize_q_table_to_dict",
+      "part": 3,
+      "points": 5,
+      "signature": "serialize_q_table_to_dict(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0062",
+      "name": "deserialize_q_table_from_dict",
+      "part": 3,
+      "points": 5,
+      "signature": "deserialize_q_table_from_dict(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0063",
+      "name": "encode_board_flat_length_nine",
+      "part": 4,
+      "points": 5,
+      "signature": "encode_board_flat_length_nine(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0064",
+      "name": "encode_board_one_hot_length_eighteen",
+      "part": 4,
+      "points": 5,
+      "signature": "encode_board_one_hot_length_eighteen(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0065",
+      "name": "build_mlp_architecture",
+      "part": 4,
+      "points": 5,
+      "signature": "build_mlp_architecture(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0066",
+      "name": "initialize_mlp_parameters",
+      "part": 4,
+      "points": 5,
+      "signature": "initialize_mlp_parameters(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0067",
+      "name": "mlp_forward_pass",
+      "part": 4,
+      "points": 5,
+      "signature": "mlp_forward_pass(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0068",
+      "name": "mask_illegal_actions_neg_inf",
+      "part": 4,
+      "points": 5,
+      "signature": "mask_illegal_actions_neg_inf(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0069",
+      "name": "argmax_action_from_q_values",
+      "part": 4,
+      "points": 5,
+      "signature": "argmax_action_from_q_values(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0070",
+      "name": "mse_loss_on_chosen_action",
+      "part": 4,
+      "points": 5,
+      "signature": "mse_loss_on_chosen_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0071",
+      "name": "mlp_backward_pass",
+      "part": 4,
+      "points": 5,
+      "signature": "mlp_backward_pass(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0072",
+      "name": "adam_update_step",
+      "part": 4,
+      "points": 5,
+      "signature": "adam_update_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0073",
+      "name": "create_replay_buffer",
+      "part": 4,
+      "points": 5,
+      "signature": "create_replay_buffer(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0074",
+      "name": "append_transition_to_buffer",
+      "part": 4,
+      "points": 5,
+      "signature": "append_transition_to_buffer(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0075",
+      "name": "cap_buffer_size_drop_oldest",
+      "part": 4,
+      "points": 5,
+      "signature": "cap_buffer_size_drop_oldest(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0076",
+      "name": "sample_minibatch_from_buffer",
+      "part": 4,
+      "points": 5,
+      "signature": "sample_minibatch_from_buffer(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0077",
+      "name": "build_target_network_copy",
+      "part": 4,
+      "points": 5,
+      "signature": "build_target_network_copy(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0078",
+      "name": "compute_target_q_with_target_network",
+      "part": 4,
+      "points": 5,
+      "signature": "compute_target_q_with_target_network(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0079",
+      "name": "sync_target_network_periodically",
+      "part": 4,
+      "points": 5,
+      "signature": "sync_target_network_periodically(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0080",
+      "name": "train_dqn_agent",
+      "part": 4,
+      "points": 5,
+      "signature": "train_dqn_agent(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0081",
+      "name": "compare_dqn_tabular_random_minimax",
+      "part": 4,
+      "points": 5,
+      "signature": "compare_dqn_tabular_random_minimax(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0082",
+      "name": "sarsa_on_policy_update",
+      "part": 5,
+      "points": 5,
+      "signature": "sarsa_on_policy_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0083",
+      "name": "reinforce_log_prob_of_action",
+      "part": 5,
+      "points": 5,
+      "signature": "reinforce_log_prob_of_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0084",
+      "name": "reinforce_collect_episode_returns",
+      "part": 5,
+      "points": 5,
+      "signature": "reinforce_collect_episode_returns(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0085",
+      "name": "reinforce_policy_gradient_update",
+      "part": 5,
+      "points": 5,
+      "signature": "reinforce_policy_gradient_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0086",
+      "name": "compare_value_vs_policy_learners",
+      "part": 5,
+      "points": 5,
+      "signature": "compare_value_vs_policy_learners(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0087",
+      "name": "symmetry_augmented_training",
+      "part": 5,
+      "points": 5,
+      "signature": "symmetry_augmented_training(*args)",
+      "doc": "TODO: not yet built."
+    }
+  ]
+}
