@@ -449,112 +449,112 @@
       "name": "dpo_logratios",
       "part": 6,
       "points": 5,
-      "signature": "dpo_logratios(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "dpo_logratios(policy_chosen_logps, policy_rejected_logps)",
+      "doc": "Policy log-ratio between chosen and rejected: logp_chosen - logp_rejected."
     },
     {
       "id": "0053",
       "name": "dpo_ref_logratios",
       "part": 6,
       "points": 5,
-      "signature": "dpo_ref_logratios(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "dpo_ref_logratios(ref_chosen_logps, ref_rejected_logps)",
+      "doc": "Reference model's log-ratio: ref_chosen - ref_rejected."
     },
     {
       "id": "0054",
       "name": "dpo_loss",
       "part": 6,
       "points": 5,
-      "signature": "dpo_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "dpo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_rejected_logps, beta)",
+      "doc": "DPO loss: -log sigmoid(beta * (policy_logratio - reference_logratio))."
     },
     {
       "id": "0055",
       "name": "ipo_loss",
       "part": 6,
       "points": 5,
-      "signature": "ipo_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ipo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_rejected_logps, tau)",
+      "doc": "IPO loss: (h - 1/(2*tau))^2 where h is the policy-minus-reference log-ratio gap."
     },
     {
       "id": "0056",
       "name": "kto_loss",
       "part": 6,
       "points": 5,
-      "signature": "kto_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "kto_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_rejected_logps, beta)",
+      "doc": "KTO-style loss: push desirable (chosen) log-ratios up and undesirable\n(rejected) log-ratios down via a value that saturates at 1."
     },
     {
       "id": "0057",
       "name": "orpo_loss",
       "part": 6,
       "points": 5,
-      "signature": "orpo_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "orpo_loss(policy_chosen_logps, policy_rejected_logps, beta)",
+      "doc": "ORPO (reference-free): chosen NLL plus an odds-ratio preference term.\nExpects average (length-normalized) log-probs, both < 0."
     },
     {
       "id": "0058",
       "name": "simpo_loss",
       "part": 6,
       "points": 5,
-      "signature": "simpo_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "simpo_loss(policy_chosen_logps, policy_rejected_logps, beta, gamma)",
+      "doc": "SimPO (reference-free, length-normalized): -log sigmoid(beta*(chosen-rejected) - gamma)."
     },
     {
       "id": "0059",
       "name": "build_eval_prompt_set",
       "part": 7,
       "points": 5,
-      "signature": "build_eval_prompt_set(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_eval_prompt_set()",
+      "doc": "A small held-out set of evaluation prompts."
     },
     {
       "id": "0060",
       "name": "generate_completions",
       "part": 7,
       "points": 5,
-      "signature": "generate_completions(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "generate_completions(model, tokenizer, prompts, max_new_tokens)",
+      "doc": "Greedy-generate a completion (the new text only) for each prompt."
     },
     {
       "id": "0061",
       "name": "score_with_reward",
       "part": 7,
       "points": 5,
-      "signature": "score_with_reward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "score_with_reward(reward_model, tokenizer, texts)",
+      "doc": "Score a list of texts with a reward model that maps input_ids -> (B,) rewards."
     },
     {
       "id": "0062",
       "name": "win_rate",
       "part": 7,
       "points": 5,
-      "signature": "win_rate(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "win_rate(rewards_a, rewards_b)",
+      "doc": "Fraction of items where model A's reward beats model B's."
     },
     {
       "id": "0063",
       "name": "stream_tokens",
       "part": 7,
       "points": 5,
-      "signature": "stream_tokens(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "stream_tokens(model, tokenizer, prompt, max_new_tokens)",
+      "doc": "Greedy generation as a generator: yield one decoded token string at a time."
     },
     {
       "id": "0064",
       "name": "apply_stop_tokens",
       "part": 7,
       "points": 5,
-      "signature": "apply_stop_tokens(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "apply_stop_tokens(text, stop_strings)",
+      "doc": "Truncate ``text`` at the earliest occurrence of any stop string."
     },
     {
       "id": "0065",
       "name": "chat",
       "part": 7,
       "points": 5,
-      "signature": "chat(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "chat(model, tokenizer, message, max_new_tokens)",
+      "doc": "Format a user message with the instruction template, generate, and return the\nmodel's response (without the prompt)."
     }
   ]
 }

@@ -12,7 +12,6 @@ namespace, so steps are checked in isolation.
 import torch
 import torch.nn.functional as F
 
-MODEL_NAME = "distilgpt2"
 
 
 # ============== Part 1 — Model Setup and Decoding Strategies ==============
@@ -20,13 +19,13 @@ MODEL_NAME = "distilgpt2"
 def load_distilgpt2_tokenizer():
     """Load the distilgpt2 tokenizer."""
     from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained(MODEL_NAME)
+    return AutoTokenizer.from_pretrained("distilgpt2")
 
 
 def load_distilgpt2_model():
     """Load the distilgpt2 causal-LM model."""
     from transformers import AutoModelForCausalLM
-    return AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    return AutoModelForCausalLM.from_pretrained("distilgpt2")
 
 
 def set_pad_token_to_eos(tokenizer):
@@ -74,7 +73,6 @@ def top_p_filter(logits, p):
 
 # ============== Part 2 — SFT Data Pipeline ==============
 
-_PROMPT_TEMPLATE = "### Instruction:\n{}\n### Response:\n"
 
 
 def build_synthetic_instruction_dataset(n):
@@ -94,7 +92,7 @@ def format_example(example):
 def apply_template(formatted):
     """Wrap a formatted example in the instruction template. Returns
     {'prompt_text', 'full_text'} (full = prompt + response)."""
-    prompt_text = _PROMPT_TEMPLATE.format(formatted["prompt"])
+    prompt_text = "### Instruction:\n{}\n### Response:\n".format(formatted["prompt"])
     return {"prompt_text": prompt_text, "full_text": prompt_text + formatted["response"]}
 
 
@@ -285,7 +283,7 @@ def build_synthetic_preference_dataset(n):
 
 def format_preference(example):
     """Build the chosen/rejected full texts from a preference example."""
-    prompt_text = _PROMPT_TEMPLATE.format(example["prompt"])
+    prompt_text = "### Instruction:\n{}\n### Response:\n".format(example["prompt"])
     return {"chosen_text": prompt_text + example["chosen"],
             "rejected_text": prompt_text + example["rejected"]}
 
@@ -399,3 +397,117 @@ def batch_sequence_logprob(model, input_ids, attention_mask=None):
     """Run the model and return the per-sequence log-prob of ``input_ids`` (B,)."""
     out = model(input_ids=input_ids, attention_mask=attention_mask)
     return sequence_logprob(out.logits, input_ids)
+
+
+# ============== Part 7 — Preference Optimization Alternatives ==============
+
+def dpo_logratios(policy_chosen_logps, policy_rejected_logps):
+    """Policy log-ratio between chosen and rejected: logp_chosen - logp_rejected."""
+    return policy_chosen_logps - policy_rejected_logps
+
+
+def dpo_ref_logratios(ref_chosen_logps, ref_rejected_logps):
+    """Reference model's log-ratio: ref_chosen - ref_rejected."""
+    return ref_chosen_logps - ref_rejected_logps
+
+
+def dpo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps,
+             ref_rejected_logps, beta):
+    """DPO loss: -log sigmoid(beta * (policy_logratio - reference_logratio))."""
+    pi = dpo_logratios(policy_chosen_logps, policy_rejected_logps)
+    ref = dpo_ref_logratios(ref_chosen_logps, ref_rejected_logps)
+    return -F.logsigmoid(beta * (pi - ref)).mean()
+
+
+def ipo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps,
+             ref_rejected_logps, tau):
+    """IPO loss: (h - 1/(2*tau))^2 where h is the policy-minus-reference log-ratio gap."""
+    h = (dpo_logratios(policy_chosen_logps, policy_rejected_logps)
+         - dpo_ref_logratios(ref_chosen_logps, ref_rejected_logps))
+    return ((h - 1.0 / (2.0 * tau)) ** 2).mean()
+
+
+def kto_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps,
+             ref_rejected_logps, beta):
+    """KTO-style loss: push desirable (chosen) log-ratios up and undesirable
+    (rejected) log-ratios down via a value that saturates at 1."""
+    chosen_lr = policy_chosen_logps - ref_chosen_logps
+    rejected_lr = policy_rejected_logps - ref_rejected_logps
+    return ((1 - torch.sigmoid(beta * chosen_lr)).mean()
+            + (1 - torch.sigmoid(-beta * rejected_lr)).mean())
+
+
+def orpo_loss(policy_chosen_logps, policy_rejected_logps, beta):
+    """ORPO (reference-free): chosen NLL plus an odds-ratio preference term.
+    Expects average (length-normalized) log-probs, both < 0."""
+    log_odds = ((policy_chosen_logps - torch.log1p(-torch.exp(policy_chosen_logps)))
+                - (policy_rejected_logps - torch.log1p(-torch.exp(policy_rejected_logps))))
+    or_loss = -F.logsigmoid(log_odds)
+    nll = -policy_chosen_logps
+    return (nll + beta * or_loss).mean()
+
+
+def simpo_loss(policy_chosen_logps, policy_rejected_logps, beta, gamma):
+    """SimPO (reference-free, length-normalized): -log sigmoid(beta*(chosen-rejected) - gamma)."""
+    return -F.logsigmoid(beta * (policy_chosen_logps - policy_rejected_logps) - gamma).mean()
+
+
+# ============== Part 8 — Evaluation and Chat Interface ==============
+
+def build_eval_prompt_set():
+    """A small held-out set of evaluation prompts."""
+    return [
+        "What is 2 plus 2?",
+        "Name a primary color.",
+        "Write a friendly greeting.",
+        "What is the capital of France?",
+    ]
+
+
+def generate_completions(model, tokenizer, prompts, max_new_tokens):
+    """Greedy-generate a completion (the new text only) for each prompt."""
+    out = []
+    for p in prompts:
+        full = generate_and_decode(model, tokenizer, p, max_new_tokens)
+        out.append(full[len(p):])
+    return out
+
+
+def score_with_reward(reward_model, tokenizer, texts):
+    """Score a list of texts with a reward model that maps input_ids -> (B,) rewards."""
+    enc = tokenizer(texts, return_tensors="pt", padding=True)
+    return reward_model(enc.input_ids)
+
+
+def win_rate(rewards_a, rewards_b):
+    """Fraction of items where model A's reward beats model B's."""
+    return (rewards_a > rewards_b).float().mean()
+
+
+def stream_tokens(model, tokenizer, prompt, max_new_tokens):
+    """Greedy generation as a generator: yield one decoded token string at a time."""
+    ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+    for _ in range(max_new_tokens):
+        with torch.no_grad():
+            logits = model(ids).logits[:, -1, :]
+        nxt = torch.argmax(logits, dim=-1)
+        ids = torch.cat([ids, nxt.unsqueeze(1)], dim=1)
+        yield tokenizer.decode(nxt)
+
+
+def apply_stop_tokens(text, stop_strings):
+    """Truncate ``text`` at the earliest occurrence of any stop string."""
+    cut = len(text)
+    for s in stop_strings:
+        j = text.find(s)
+        if j != -1:
+            cut = min(cut, j)
+    return text[:cut]
+
+
+def chat(model, tokenizer, message, max_new_tokens):
+    """Format a user message with the instruction template, generate, and return the
+    model's response (without the prompt)."""
+    prompt_text = "### Instruction:\n{}\n### Response:\n".format(message)
+    full = generate_and_decode(model, tokenizer, prompt_text, max_new_tokens)
+    return full[len(prompt_text):]

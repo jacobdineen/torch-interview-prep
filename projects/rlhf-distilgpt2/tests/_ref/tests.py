@@ -548,3 +548,112 @@ def test_0051_batch_sequence_logprob(ns):
     with step("matches sequence_logprob on the model's logits"):
         want = ns["sequence_logprob"](model(input_ids=ids).logits, ids)
         expect_allclose(ns["batch_sequence_logprob"](model, ids), want, atol=1e-4)
+
+
+# --------------------- Part 7 — Preference Optimization ---------------------
+
+def test_0052_dpo_logratios(ns):
+    with step("chosen - rejected"):
+        expect_allclose(ns["dpo_logratios"](torch.tensor([1.0, 2.0]), torch.tensor([0.5, 0.0])),
+                        [0.5, 2.0])
+
+
+def test_0053_dpo_ref_logratios(ns):
+    with step("ref chosen - ref rejected"):
+        expect_allclose(ns["dpo_ref_logratios"](torch.tensor([1.0]), torch.tensor([0.4])), [0.6])
+
+
+def test_0054_dpo_loss(ns):
+    import torch.nn.functional as F
+    pc, pr = torch.tensor([1.0, 2.0]), torch.tensor([0.0, 0.0])
+    rc, rr = torch.tensor([0.0, 0.0]), torch.tensor([0.0, 0.0])
+    want = -F.logsigmoid(0.1 * ((pc - pr) - (rc - rr))).mean()
+    with step("matches the DPO formula; bigger chosen margin -> lower loss"):
+        expect_allclose(ns["dpo_loss"](pc, pr, rc, rr, 0.1), want)
+        far = ns["dpo_loss"](torch.tensor([10.0]), torch.tensor([-10.0]),
+                             torch.tensor([0.0]), torch.tensor([0.0]), 0.5)
+        expect_true(far.item() < ns["dpo_loss"](pc, pr, rc, rr, 0.5).item(), "margin lowers loss")
+
+
+def test_0055_ipo_loss(ns):
+    pc, pr = torch.tensor([1.0]), torch.tensor([0.0])
+    rc, rr = torch.tensor([0.0]), torch.tensor([0.0])
+    h = (pc - pr) - (rc - rr)
+    with step("(h - 1/(2*tau))^2"):
+        expect_allclose(ns["ipo_loss"](pc, pr, rc, rr, 0.5), ((h - 1.0) ** 2).mean())
+
+
+def test_0056_kto_loss(ns):
+    pc, pr = torch.tensor([2.0]), torch.tensor([-2.0])
+    rc, rr = torch.tensor([0.0]), torch.tensor([0.0])
+    with step("desirable up / undesirable down; finite and non-negative"):
+        loss = ns["kto_loss"](pc, pr, rc, rr, 0.1)
+        expect_true(torch.isfinite(loss) and loss.item() >= 0, "valid KTO loss")
+        # well-separated pair should beat a flat one
+        flat = ns["kto_loss"](torch.tensor([0.0]), torch.tensor([0.0]),
+                              torch.tensor([0.0]), torch.tensor([0.0]), 0.1)
+        expect_true(loss.item() < flat.item(), "separation lowers KTO loss")
+
+
+def test_0057_orpo_loss(ns):
+    import torch.nn.functional as F
+    pc, pr = torch.tensor([-0.5, -0.7]), torch.tensor([-2.0, -1.5])  # avg logps < 0
+    log_odds = ((pc - torch.log1p(-torch.exp(pc))) - (pr - torch.log1p(-torch.exp(pr))))
+    want = (-pc + 0.1 * (-F.logsigmoid(log_odds))).mean()
+    with step("chosen NLL + beta * odds-ratio term (reference-free)"):
+        expect_allclose(ns["orpo_loss"](pc, pr, 0.1), want)
+
+
+def test_0058_simpo_loss(ns):
+    import torch.nn.functional as F
+    pc, pr = torch.tensor([-0.5]), torch.tensor([-2.0])
+    want = -F.logsigmoid(2.0 * (pc - pr) - 0.5).mean()
+    with step("length-normalized margin with gamma (reference-free)"):
+        expect_allclose(ns["simpo_loss"](pc, pr, 2.0, 0.5), want)
+
+
+# --------------------- Part 8 — Evaluation and Chat Interface ---------------------
+
+def test_0059_build_eval_prompt_set(ns):
+    prompts = ns["build_eval_prompt_set"]()
+    with step("a non-empty list of prompt strings"):
+        expect_true(len(prompts) > 0 and all(isinstance(p, str) for p in prompts), "prompt list")
+
+
+def test_0060_generate_completions(ns):
+    outs = ns["generate_completions"](_model(), _tok(), ["The sky is", "Two plus two is"], 4)
+    with step("one completion string per prompt"):
+        expect_eq(len(outs), 2)
+        expect_true(all(isinstance(o, str) for o in outs), "completions are strings")
+
+
+def test_0061_score_with_reward(ns):
+    rm = lambda ids: ids.float().mean(dim=1)  # noqa: E731  (toy reward model)
+    out = ns["score_with_reward"](rm, _tok(), ["hello world", "hi"])
+    with step("returns one reward per text"):
+        expect_shape(out, (2,))
+
+
+def test_0062_win_rate(ns):
+    with step("fraction where A beats B"):
+        expect_allclose(ns["win_rate"](torch.tensor([3.0, 1.0, 5.0]), torch.tensor([1.0, 2.0, 4.0])),
+                        2.0 / 3.0)
+
+
+def test_0063_stream_tokens(ns):
+    toks = list(ns["stream_tokens"](_model(), _tok(), "The capital of France is", 5))
+    with step("yields decoded tokens one at a time"):
+        expect_eq(len(toks), 5)
+        expect_true(all(isinstance(t, str) for t in toks), "tokens are strings")
+
+
+def test_0064_apply_stop_tokens(ns):
+    with step("truncates at the first stop string"):
+        expect_eq(ns["apply_stop_tokens"]("hello\nworld", ["\n"]), "hello")
+        expect_eq(ns["apply_stop_tokens"]("no stop here", ["###"]), "no stop here")
+
+
+def test_0065_chat(ns):
+    out = ns["chat"](_model(), _tok(), "Say hi", 5)
+    with step("returns a string response (prompt stripped)"):
+        expect_true(isinstance(out, str), "chat returns a string")
