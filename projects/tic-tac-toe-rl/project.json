@@ -681,48 +681,48 @@
       "name": "sarsa_on_policy_update",
       "part": 5,
       "points": 5,
-      "signature": "sarsa_on_policy_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sarsa_on_policy_update(q_old, alpha, reward, gamma, next_q)",
+      "doc": "On-policy SARSA update: uses Q(s',a') for the action actually taken next,\nnot the max. Q <- Q + alpha*(r + gamma*next_q - Q)."
     },
     {
       "id": "0083",
       "name": "reinforce_log_prob_of_action",
       "part": 5,
       "points": 5,
-      "signature": "reinforce_log_prob_of_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reinforce_log_prob_of_action(logits, action)",
+      "doc": "Log of the softmax probability assigned to ``action``."
     },
     {
       "id": "0084",
       "name": "reinforce_collect_episode_returns",
       "part": 5,
       "points": 5,
-      "signature": "reinforce_collect_episode_returns(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reinforce_collect_episode_returns(rewards, gamma)",
+      "doc": "Discounted returns-to-go: G_t = sum_{k>=t} gamma^(k-t) * r_k."
     },
     {
       "id": "0085",
       "name": "reinforce_policy_gradient_update",
       "part": 5,
       "points": 5,
-      "signature": "reinforce_policy_gradient_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reinforce_policy_gradient_update(logits_list, actions, returns)",
+      "doc": "Per-step gradient of the REINFORCE loss (-sum_t G_t log pi(a_t)) w.r.t. the\nlogits: G_t * (softmax(logits_t) - onehot(a_t)). Shape (T, num_actions)."
     },
     {
       "id": "0086",
       "name": "compare_value_vs_policy_learners",
       "part": 5,
       "points": 5,
-      "signature": "compare_value_vs_policy_learners(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compare_value_vs_policy_learners(n_episodes, rng)",
+      "doc": "Train a value-based (tabular Q-learning) and a policy-based (tabular\nREINFORCE) agent, evaluate both vs random, and return {'value','policy'} stats."
     },
     {
       "id": "0087",
       "name": "symmetry_augmented_training",
       "part": 5,
       "points": 5,
-      "signature": "symmetry_augmented_training(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "symmetry_augmented_training(n_episodes, alpha, gamma, epsilon, rng)",
+      "doc": "Q-learning that applies each update to all 8 symmetric (state, action) pairs,\nlearning ~8x faster per episode. Returns the Q-table."
     }
   ]
 }

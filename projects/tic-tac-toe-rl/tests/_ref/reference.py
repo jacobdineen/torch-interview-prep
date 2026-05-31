@@ -783,3 +783,135 @@ def compare_dqn_tabular_random_minimax(dqn_params, q_table, n_games, rng):
         "tabular": play_vs_random(lambda b: greedy_argmax_over_legal_actions(q_table, b)),
         "random": play_vs_random(lambda b: random_move_agent(b, rng)),
     }
+
+
+# ============== Part 6 — Policy Gradients & Extensions ==============
+
+def sarsa_on_policy_update(q_old, alpha, reward, gamma, next_q):
+    """On-policy SARSA update: uses Q(s',a') for the action actually taken next,
+    not the max. Q <- Q + alpha*(r + gamma*next_q - Q)."""
+    return q_old + alpha * (reward + gamma * next_q - q_old)
+
+
+def reinforce_log_prob_of_action(logits, action):
+    """Log of the softmax probability assigned to ``action``."""
+    z = logits - np.max(logits)
+    return z[action] - np.log(np.sum(np.exp(z)))
+
+
+def reinforce_collect_episode_returns(rewards, gamma):
+    """Discounted returns-to-go: G_t = sum_{k>=t} gamma^(k-t) * r_k."""
+    out = np.zeros(len(rewards))
+    g = 0.0
+    for t in reversed(range(len(rewards))):
+        g = rewards[t] + gamma * g
+        out[t] = g
+    return out
+
+
+def reinforce_policy_gradient_update(logits_list, actions, returns):
+    """Per-step gradient of the REINFORCE loss (-sum_t G_t log pi(a_t)) w.r.t. the
+    logits: G_t * (softmax(logits_t) - onehot(a_t)). Shape (T, num_actions)."""
+    logits_list = np.asarray(logits_list, dtype=float)
+    t, a = logits_list.shape
+    z = logits_list - logits_list.max(axis=1, keepdims=True)
+    e = np.exp(z)
+    probs = e / e.sum(axis=1, keepdims=True)
+    onehot = np.zeros((t, a))
+    onehot[np.arange(t), actions] = 1.0
+    return np.asarray(returns)[:, None] * (probs - onehot)
+
+
+def compare_value_vs_policy_learners(n_episodes, rng):
+    """Train a value-based (tabular Q-learning) and a policy-based (tabular
+    REINFORCE) agent, evaluate both vs random, and return {'value','policy'} stats."""
+    # value-based
+    q_table, _ = train_q_learning_agent(n_episodes, 0.2, 0.99, 0.2, rng)
+    value_stats = evaluate_q_agent_vs_random(q_table, 100, rng)
+
+    # policy-based: tabular softmax policy trained with REINFORCE
+    policy, lr, gamma = {}, 0.1, 0.99
+    for _ in range(n_episodes):
+        board = create_empty_board()
+        traj, rewards = [], []
+        while True:
+            key = encode_board_state_key(board)
+            masked = mask_illegal_actions_neg_inf(policy.get(key, np.zeros(9)), board)
+            z = masked - masked.max()
+            probs = np.exp(z) / np.exp(z).sum()
+            action = int(rng.choice(9, p=probs))
+            traj.append((key, masked, action))
+            board = place_move(board, action, 1)
+            status = get_game_status(board)
+            if status is not None:
+                rewards.append(tic_tac_toe_reward(status, 1))
+                break
+            board = place_move(board, random_move_agent(board, rng), -1)
+            status = get_game_status(board)
+            rewards.append(tic_tac_toe_reward(status, 1) if status is not None else 0.0)
+            if status is not None:
+                break
+        returns = reinforce_collect_episode_returns(rewards, gamma)
+        grads = reinforce_policy_gradient_update(
+            np.array([m for _, m, _ in traj]), np.array([a for _, _, a in traj]), returns)
+        for i, (key, _, _) in enumerate(traj):
+            if key not in policy:
+                policy[key] = np.zeros(9)
+            policy[key] = policy[key] - lr * grads[i]
+
+    def policy_move(board):
+        key = encode_board_state_key(board)
+        return argmax_action_from_q_values(
+            mask_illegal_actions_neg_inf(policy.get(key, np.zeros(9)), board))
+
+    statuses = []
+    for _ in range(100):
+        board = create_empty_board()
+        while get_game_status(board) is None:
+            board = place_move(board, policy_move(board), 1)
+            if get_game_status(board) is not None:
+                break
+            board = place_move(board, random_move_agent(board, rng), -1)
+        statuses.append(get_game_status(board))
+    return {"value": value_stats, "policy": compute_batched_outcome_stats(statuses, 1)}
+
+
+def symmetry_augmented_training(n_episodes, alpha, gamma, epsilon, rng):
+    """Q-learning that applies each update to all 8 symmetric (state, action) pairs,
+    learning ~8x faster per episode. Returns the Q-table."""
+    def augment(board, action):
+        marker = np.arange(9).reshape(3, 3)
+        out = []
+        b, m = board, marker
+        for _ in range(4):
+            for bb, mm in [(b, m), (np.fliplr(b), np.fliplr(m))]:
+                key = tuple(int(x) for x in bb.reshape(-1))
+                na = int(np.flatnonzero(mm.reshape(-1) == action)[0])
+                out.append((key, na))
+            b, m = np.rot90(b), np.rot90(m)
+        return out
+
+    q_table = initialize_q_table()
+    for _ in range(n_episodes):
+        board = create_empty_board()
+        while True:
+            action = epsilon_greedy_select_action(q_table, board, epsilon, rng)
+            nb = place_move(board, action, 1)
+            status = get_game_status(nb)
+            if status is not None:
+                target = q_learning_terminal_target(tic_tac_toe_reward(status, 1))
+            else:
+                nb = place_move(nb, random_move_agent(nb, rng), -1)
+                status = get_game_status(nb)
+                if status is not None:
+                    target = q_learning_terminal_target(tic_tac_toe_reward(status, 1))
+                else:
+                    nmax = max(get_q_value(q_table, encode_board_state_key(nb), a)
+                               for a in get_legal_moves(nb))
+                    target = q_learning_nonterminal_target(0.0, gamma, nmax)
+            for key, a in augment(board, action):
+                set_q_value(q_table, key, a, q_learning_update(get_q_value(q_table, key, a), alpha, target))
+            if status is not None:
+                break
+            board = nb
+    return q_table

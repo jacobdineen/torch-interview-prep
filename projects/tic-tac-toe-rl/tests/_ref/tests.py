@@ -742,3 +742,72 @@ def test_0081_compare_dqn_tabular_random_minimax(ns):
         for key in ("dqn", "tabular", "random"):
             expect_allclose(out[key]["win"] + out[key]["loss"] + out[key]["draw"], 1.0)
         expect_true(out["tabular"]["win"] > out["random"]["win"], "tabular should beat random more")
+
+
+# --------------------- Part 6 — Policy Gradients & Extensions ---------------------
+
+def test_0082_sarsa_on_policy_update(ns):
+    with step("Q + alpha*(r + gamma*next_q - Q)"):
+        expect_allclose(ns["sarsa_on_policy_update"](1.0, 0.1, 0.5, 0.9, 2.0),
+                        1.0 + 0.1 * (0.5 + 0.9 * 2.0 - 1.0))
+
+
+def test_0083_reinforce_log_prob_of_action(ns):
+    logits = np.array([1.0, 2.0, 0.5])
+    with step("log softmax probability"):
+        z = logits - logits.max()
+        expect_allclose(ns["reinforce_log_prob_of_action"](logits, 1),
+                        z[1] - np.log(np.exp(z).sum()))
+    with step("gradient w.r.t. logits is onehot - softmax"):
+        probs = np.exp(logits - logits.max())
+        probs = probs / probs.sum()
+        onehot = np.array([0.0, 1.0, 0.0])
+        grad_check(lambda L: ns["reinforce_log_prob_of_action"](L, 1), logits, 1.0,
+                   onehot - probs, name="dlogits")
+
+
+def test_0084_reinforce_collect_episode_returns(ns):
+    out = ns["reinforce_collect_episode_returns"]([0.0, 0.0, 1.0], 0.9)
+    with step("discounted returns-to-go"):
+        expect_allclose(out, [0.9 ** 2, 0.9, 1.0])
+
+
+def test_0085_reinforce_policy_gradient_update(ns):
+    rng = np.random.default_rng(85)
+    logits = rng.standard_normal((4, 5))
+    actions = rng.integers(0, 5, size=4)
+    returns = rng.standard_normal(4)
+    grads = ns["reinforce_policy_gradient_update"](logits, actions, returns)
+
+    def loss(L):
+        return -sum(returns[t] * ns["reinforce_log_prob_of_action"](L[t], actions[t])
+                    for t in range(len(actions)))
+
+    with step("gradient of the REINFORCE loss, finite-difference checked"):
+        grad_check(loss, logits, 1.0, grads, name="dlogits")
+
+
+def test_0086_compare_value_vs_policy_learners(ns):
+    out = ns["compare_value_vs_policy_learners"](3000, np.random.default_rng(0))
+    with step("both learners reported; both beat random"):
+        for key in ("value", "policy"):
+            expect_allclose(out[key]["win"] + out[key]["loss"] + out[key]["draw"], 1.0)
+        expect_true(out["value"]["win"] > out["value"]["loss"], "value learner should win more")
+        expect_true(out["policy"]["win"] > out["policy"]["loss"], "policy learner should win more")
+
+
+def test_0087_symmetry_augmented_training(ns):
+    rng = np.random.default_rng(0)
+    q = ns["symmetry_augmented_training"](1500, 0.2, 0.99, 0.2, rng)
+    losses = 0
+    for _ in range(200):
+        board = ns["create_empty_board"]()
+        while ns["get_game_status"](board) is None:
+            board = ns["place_move"](board, ns["greedy_argmax_over_legal_actions"](q, board), 1)
+            if ns["get_game_status"](board) is not None:
+                break
+            board = ns["place_move"](board, ns["random_move_agent"](board, rng), -1)
+        if ns["get_game_status"](board) == -1:
+            losses += 1
+    with step("symmetry augmentation learns fast; rarely loses to random"):
+        expect_true(losses / 200 < 0.15, f"too many losses: {losses}/200")
