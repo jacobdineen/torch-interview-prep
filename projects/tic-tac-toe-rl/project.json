@@ -457,72 +457,72 @@
       "name": "self_play_episode",
       "part": 3,
       "points": 5,
-      "signature": "self_play_episode(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "self_play_episode(q_table, alpha, gamma, epsilon, rng)",
+      "doc": "Run one self-play training episode (the agent plays both sides, learning\nfrom each via perspective flipping). Mutates and returns (q_table, status)."
     },
     {
       "id": "0055",
       "name": "flip_board_perspective",
       "part": 3,
       "points": 5,
-      "signature": "flip_board_perspective(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "flip_board_perspective(board, player)",
+      "doc": "View the board from ``player``'s side: multiply by player so the mover's\npieces are always +1. One Q-table can then serve both sides."
     },
     {
       "id": "0056",
       "name": "perspective_reward_sign",
       "part": 3,
       "points": 5,
-      "signature": "perspective_reward_sign(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "perspective_reward_sign(player)",
+      "doc": "Sign to convert an X-perspective reward to ``player``'s perspective (+1/-1)."
     },
     {
       "id": "0057",
       "name": "train_q_agent_self_play",
       "part": 3,
       "points": 5,
-      "signature": "train_q_agent_self_play(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_q_agent_self_play(n_episodes, alpha, gamma, epsilon, rng)",
+      "doc": "Train via self-play for ``n_episodes``; return (q_table, statuses)."
     },
     {
       "id": "0058",
       "name": "evaluate_q_agent_vs_random",
       "part": 3,
       "points": 5,
-      "signature": "evaluate_q_agent_vs_random(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "evaluate_q_agent_vs_random(q_table, n_games, rng)",
+      "doc": "Greedy agent (X) vs random (O); return win/loss/draw stats from X's view."
     },
     {
       "id": "0059",
       "name": "evaluate_q_agent_vs_minimax",
       "part": 3,
       "points": 5,
-      "signature": "evaluate_q_agent_vs_minimax(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "evaluate_q_agent_vs_minimax(q_table, n_games)",
+      "doc": "Greedy agent (X) vs optimal minimax (O); return stats from X's view.\nAgainst optimal play the agent can never win (best case is a draw)."
     },
     {
       "id": "0060",
       "name": "inspect_q_values_for_state",
       "part": 3,
       "points": 5,
-      "signature": "inspect_q_values_for_state(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "inspect_q_values_for_state(q_table, board)",
+      "doc": "The length-9 vector of Q-values for a board (zeros for unseen states)."
     },
     {
       "id": "0061",
       "name": "serialize_q_table_to_dict",
       "part": 3,
       "points": 5,
-      "signature": "serialize_q_table_to_dict(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "serialize_q_table_to_dict(q_table)",
+      "doc": "Convert a Q-table to a JSON-serializable {comma-joined key: list} dict."
     },
     {
       "id": "0062",
       "name": "deserialize_q_table_from_dict",
       "part": 3,
       "points": 5,
-      "signature": "deserialize_q_table_from_dict(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "deserialize_q_table_from_dict(d)",
+      "doc": "Inverse of serialize_q_table_to_dict."
     },
     {
       "id": "0063",

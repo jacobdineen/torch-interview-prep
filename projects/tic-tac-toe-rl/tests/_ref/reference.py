@@ -465,3 +465,105 @@ def compute_batched_outcome_stats(statuses, perspective):
         "loss": sum(s == -perspective for s in statuses) / n,
         "draw": sum(s == 0 for s in statuses) / n,
     }
+
+
+# ============== Part 4 — Self-Play, Evaluation & Persistence ==============
+
+def flip_board_perspective(board, player):
+    """View the board from ``player``'s side: multiply by player so the mover's
+    pieces are always +1. One Q-table can then serve both sides."""
+    return board * player
+
+
+def perspective_reward_sign(player):
+    """Sign to convert an X-perspective reward to ``player``'s perspective (+1/-1)."""
+    return player
+
+
+def self_play_episode(q_table, alpha, gamma, epsilon, rng):
+    """Run one self-play training episode (the agent plays both sides, learning
+    from each via perspective flipping). Mutates and returns (q_table, status)."""
+    board = create_empty_board()
+    player = 1
+    pending = {1: None, -1: None}  # each player's (state_key, action) awaiting a bootstrap
+    while True:
+        persp = flip_board_perspective(board, player)
+        state_key = encode_board_state_key(persp)
+        if pending[player] is not None:  # bootstrap this player's previous move
+            psk, pa = pending[player]
+            nmax = max(get_q_value(q_table, state_key, a) for a in get_legal_moves(persp))
+            q_table = episode_apply_q_update(
+                q_table, psk, pa, q_learning_nonterminal_target(0.0, gamma, nmax), alpha)
+        action = epsilon_greedy_select_action(q_table, persp, epsilon, rng)
+        board = place_move(board, action, player)
+        pending[player] = (state_key, action)
+        status = get_game_status(board)
+        if status is not None:
+            q_table = episode_apply_q_update(
+                q_table, state_key, action,
+                q_learning_terminal_target(tic_tac_toe_reward(status, player)), alpha)
+            opp = switch_player(player)
+            if pending[opp] is not None:
+                osk, oa = pending[opp]
+                q_table = episode_apply_q_update(
+                    q_table, osk, oa,
+                    q_learning_terminal_target(tic_tac_toe_reward(status, opp)), alpha)
+            return q_table, status
+        player = switch_player(player)
+
+
+def train_q_agent_self_play(n_episodes, alpha, gamma, epsilon, rng):
+    """Train via self-play for ``n_episodes``; return (q_table, statuses)."""
+    q_table = initialize_q_table()
+    statuses = []
+    for _ in range(n_episodes):
+        q_table, status = self_play_episode(q_table, alpha, gamma, epsilon, rng)
+        statuses.append(status)
+    return q_table, statuses
+
+
+def evaluate_q_agent_vs_random(q_table, n_games, rng):
+    """Greedy agent (X) vs random (O); return win/loss/draw stats from X's view."""
+    statuses = []
+    for _ in range(n_games):
+        board = create_empty_board()
+        while get_game_status(board) is None:
+            board = place_move(board, greedy_argmax_over_legal_actions(q_table, board), 1)
+            if get_game_status(board) is not None:
+                break
+            board = place_move(board, random_move_agent(board, rng), -1)
+        statuses.append(get_game_status(board))
+    return compute_batched_outcome_stats(statuses, 1)
+
+
+def evaluate_q_agent_vs_minimax(q_table, n_games):
+    """Greedy agent (X) vs optimal minimax (O); return stats from X's view.
+    Against optimal play the agent can never win (best case is a draw)."""
+    statuses = []
+    for _ in range(n_games):
+        board = create_empty_board()
+        while get_game_status(board) is None:
+            board = place_move(board, greedy_argmax_over_legal_actions(q_table, board), 1)
+            if get_game_status(board) is not None:
+                break
+            board = place_move(board, minimax_best_move(board, -1), -1)
+        statuses.append(get_game_status(board))
+    return compute_batched_outcome_stats(statuses, 1)
+
+
+def inspect_q_values_for_state(q_table, board):
+    """The length-9 vector of Q-values for a board (zeros for unseen states)."""
+    key = encode_board_state_key(board)
+    return np.array([get_q_value(q_table, key, a) for a in range(9)])
+
+
+def serialize_q_table_to_dict(q_table):
+    """Convert a Q-table to a JSON-serializable {comma-joined key: list} dict."""
+    return {",".join(str(int(x)) for x in key): list(map(float, vals))
+            for key, vals in q_table.items()}
+
+
+def deserialize_q_table_from_dict(d):
+    """Inverse of serialize_q_table_to_dict."""
+    return {tuple(int(x) for x in key.split(",")): np.array(vals, dtype=float)
+            for key, vals in d.items()}

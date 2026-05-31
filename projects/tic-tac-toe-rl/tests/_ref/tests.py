@@ -472,3 +472,89 @@ def test_0053_compute_batched_outcome_stats(ns):
         expect_allclose(r["win"], 0.5)
         expect_allclose(r["loss"], 0.25)
         expect_allclose(r["draw"], 0.25)
+
+
+# --------------------- Part 4 — Self-Play, Evaluation & Persistence ---------------------
+
+def test_0054_self_play_episode(ns):
+    q = ns["initialize_q_table"]()
+    q, status = ns["self_play_episode"](q, 0.2, 0.99, 0.5, np.random.default_rng(0))
+    with step("returns a terminal status and populates the Q-table"):
+        expect_true(status in (1, -1, 0), "valid status")
+        expect_true(len(q) > 0, "Q-table should have entries")
+
+
+def test_0055_flip_board_perspective(ns):
+    b = _board([[1, -1, 0], [0, 1, 0], [0, 0, -1]])
+    with step("player 1 identity; player -1 negates"):
+        expect_allclose(ns["flip_board_perspective"](b, 1), b)
+        expect_allclose(ns["flip_board_perspective"](b, -1), -b)
+
+
+def test_0056_perspective_reward_sign(ns):
+    with step("sign per player"):
+        expect_eq(ns["perspective_reward_sign"](1), 1)
+        expect_eq(ns["perspective_reward_sign"](-1), -1)
+
+
+def test_0057_train_q_agent_self_play(ns):
+    rng = np.random.default_rng(0)
+    q, statuses = ns["train_q_agent_self_play"](6000, 0.2, 0.99, 0.2, rng)
+    losses = 0
+    for _ in range(200):
+        board = ns["create_empty_board"]()
+        while ns["get_game_status"](board) is None:
+            board = ns["place_move"](board, ns["greedy_argmax_over_legal_actions"](q, board), 1)
+            if ns["get_game_status"](board) is not None:
+                break
+            board = ns["place_move"](board, ns["random_move_agent"](board, rng), -1)
+        if ns["get_game_status"](board) == -1:
+            losses += 1
+    with step("self-play agent rarely loses to random as X"):
+        expect_true(losses / 200 < 0.15, f"too many losses: {losses}/200")
+
+
+def test_0058_evaluate_q_agent_vs_random(ns):
+    rng = np.random.default_rng(1)
+    q, _ = ns["train_q_learning_agent"](3000, 0.2, 0.99, 0.2, rng)
+    r = ns["evaluate_q_agent_vs_random"](q, 100, rng)
+    with step("returns stats that sum to 1; trained agent wins most"):
+        expect_allclose(r["win"] + r["loss"] + r["draw"], 1.0)
+        expect_true(r["win"] > 0.5, f"expected a winning record, got {r}")
+
+
+def test_0059_evaluate_q_agent_vs_minimax(ns):
+    rng = np.random.default_rng(2)
+    q, _ = ns["train_q_learning_agent"](2000, 0.2, 0.99, 0.2, rng)
+    r = ns["evaluate_q_agent_vs_minimax"](q, 20)
+    with step("cannot beat optimal play; stats valid"):
+        expect_allclose(r["win"] + r["loss"] + r["draw"], 1.0)
+        expect_allclose(r["win"], 0.0)
+
+
+def test_0060_inspect_q_values_for_state(ns):
+    q = ns["initialize_q_table"]()
+    b = ns["create_empty_board"]()
+    ns["set_q_value"](q, ns["encode_board_state_key"](b), 4, 1.5)
+    out = ns["inspect_q_values_for_state"](q, b)
+    with step("length-9 vector with the set value"):
+        expect_shape(out, (9,))
+        expect_allclose(out[4], 1.5)
+
+
+def test_0061_serialize_q_table_to_dict(ns):
+    q = ns["initialize_q_table"]()
+    ns["set_q_value"](q, (0,) * 9, 4, 1.5)
+    d = ns["serialize_q_table_to_dict"](q)
+    import json
+    with step("JSON-serializable"):
+        json.dumps(d)  # must not raise
+
+
+def test_0062_deserialize_q_table_from_dict(ns):
+    q = ns["initialize_q_table"]()
+    ns["set_q_value"](q, (1, 0, -1, 0, 1, 0, 0, 0, -1), 4, 1.5)
+    d = ns["serialize_q_table_to_dict"](q)
+    q2 = ns["deserialize_q_table_from_dict"](d)
+    with step("round-trips the Q-table"):
+        expect_allclose(ns["get_q_value"](q2, (1, 0, -1, 0, 1, 0, 0, 0, -1), 4), 1.5)
