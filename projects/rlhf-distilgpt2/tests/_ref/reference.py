@@ -321,3 +321,81 @@ def reward_train_step(reward_model, batch, optimizer):
     loss.backward()
     optimizer.step()
     return loss.item()
+
+
+# ============== Part 6 — PPO-Based RLHF ==============
+
+def sequence_logprob(logits, input_ids):
+    """Sum of the log-probs of the realized next tokens. logits (B,T,V),
+    input_ids (B,T) -> (B,)."""
+    logp = F.log_softmax(logits[:, :-1, :], dim=-1)
+    gathered = logp.gather(-1, input_ids[:, 1:].unsqueeze(-1)).squeeze(-1)
+    return gathered.sum(dim=-1)
+
+
+def per_token_kl(logprobs, ref_logprobs):
+    """Per-token KL estimate between policy and reference: logp - logp_ref."""
+    return logprobs - ref_logprobs
+
+
+def compute_returns(rewards, gamma):
+    """Discounted returns-to-go G_t = sum_{k>=t} gamma^(k-t) r_k. rewards is 1-D (T,)."""
+    out = torch.zeros_like(rewards, dtype=torch.float)
+    g = 0.0
+    for t in reversed(range(len(rewards))):
+        g = rewards[t] + gamma * g
+        out[t] = g
+    return out
+
+
+def gae_advantages(rewards, values, gamma, lam):
+    """Generalized Advantage Estimation. rewards (T,), values (T+1,) with a bootstrap
+    value at the end. Returns advantages (T,)."""
+    t_len = rewards.shape[0]
+    adv = torch.zeros(t_len)
+    gae = 0.0
+    for t in reversed(range(t_len)):
+        delta = rewards[t] + gamma * values[t + 1] - values[t]
+        gae = delta + gamma * lam * gae
+        adv[t] = gae
+    return adv
+
+
+def policy_ratio(logprobs, old_logprobs):
+    """Importance ratio exp(logp - logp_old)."""
+    return torch.exp(logprobs - old_logprobs)
+
+
+def clipped_surrogate(ratio, advantages, clip_eps):
+    """PPO clipped surrogate objective (to MAXIMIZE):
+    mean(min(ratio*A, clip(ratio, 1-eps, 1+eps)*A))."""
+    unclipped = ratio * advantages
+    clipped = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages
+    return torch.min(unclipped, clipped).mean()
+
+
+def value_function_loss(values, returns):
+    """Critic loss: 0.5 * mean((values - returns)^2)."""
+    return 0.5 * ((values - returns) ** 2).mean()
+
+
+def entropy_bonus(logits):
+    """Mean entropy of the policy distribution (encourages exploration)."""
+    logp = F.log_softmax(logits, dim=-1)
+    return -(logp.exp() * logp).sum(dim=-1).mean()
+
+
+def ppo_loss(surrogate, value_loss, entropy, vf_coef, ent_coef):
+    """Total PPO loss to MINIMIZE: -surrogate + vf_coef*value_loss - ent_coef*entropy."""
+    return -surrogate + vf_coef * value_loss - ent_coef * entropy
+
+
+def kl_penalized_reward(rewards, logprobs, ref_logprobs, kl_coef):
+    """Shape the reward with a per-token KL-to-reference penalty."""
+    return rewards - kl_coef * per_token_kl(logprobs, ref_logprobs)
+
+
+def batch_sequence_logprob(model, input_ids, attention_mask=None):
+    """Run the model and return the per-sequence log-prob of ``input_ids`` (B,)."""
+    out = model(input_ids=input_ids, attention_mask=attention_mask)
+    return sequence_logprob(out.logits, input_ids)

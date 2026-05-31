@@ -464,3 +464,87 @@ def test_0040_reward_train_step(ns):
         last = ns["reward_train_step"](rm, batch, opt)
     with step("reward model learns to separate chosen from rejected"):
         expect_true(last < first - 0.1, f"loss should drop: first={first:.3f} last={last:.3f}")
+
+
+# --------------------- Part 6 — PPO-Based RLHF ---------------------
+
+def test_0041_sequence_logprob(ns):
+    import torch.nn.functional as F
+    logits = torch.randn(2, 4, 6)
+    ids = torch.randint(0, 6, (2, 4))
+    logp = F.log_softmax(logits[:, :-1, :], dim=-1)
+    want = logp.gather(-1, ids[:, 1:].unsqueeze(-1)).squeeze(-1).sum(-1)
+    with step("sum of realized-token log-probs, shape (B,)"):
+        expect_shape(ns["sequence_logprob"](logits, ids), (2,))
+        expect_allclose(ns["sequence_logprob"](logits, ids), want)
+
+
+def test_0042_per_token_kl(ns):
+    lp = torch.tensor([0.0, -1.0, -2.0])
+    ref = torch.tensor([-0.5, -1.0, -1.0])
+    with step("logp - logp_ref"):
+        expect_allclose(ns["per_token_kl"](lp, ref), lp - ref)
+
+
+def test_0043_compute_returns(ns):
+    out = ns["compute_returns"](torch.tensor([0.0, 0.0, 1.0]), 0.9)
+    with step("discounted returns-to-go"):
+        expect_allclose(out, [0.81, 0.9, 1.0])
+
+
+def test_0044_gae_advantages(ns):
+    # rewards [1,1], values [0,0,0], gamma=lam=1 -> deltas [1,1] -> adv [2,1]
+    adv = ns["gae_advantages"](torch.tensor([1.0, 1.0]), torch.tensor([0.0, 0.0, 0.0]), 1.0, 1.0)
+    with step("GAE recursion"):
+        expect_allclose(adv, [2.0, 1.0])
+
+
+def test_0045_policy_ratio(ns):
+    lp = torch.tensor([0.0, -1.0])
+    old = torch.tensor([-1.0, -1.0])
+    with step("exp(logp - logp_old)"):
+        expect_allclose(ns["policy_ratio"](lp, old), torch.exp(lp - old))
+
+
+def test_0046_clipped_surrogate(ns):
+    with step("clips the ratio on the advantage"):
+        # ratio 1.5, adv +1, eps .2 -> min(1.5, 1.2) = 1.2
+        expect_allclose(ns["clipped_surrogate"](torch.tensor([1.5]), torch.tensor([1.0]), 0.2), 1.2)
+        # ratio 1.5, adv -1 -> min(-1.5, -1.2) = -1.5
+        expect_allclose(ns["clipped_surrogate"](torch.tensor([1.5]), torch.tensor([-1.0]), 0.2), -1.5)
+
+
+def test_0047_value_function_loss(ns):
+    v = torch.tensor([1.0, 2.0])
+    r = torch.tensor([0.0, 0.0])
+    with step("0.5 * mean((v-r)^2)"):
+        expect_allclose(ns["value_function_loss"](v, r), 0.5 * ((v - r) ** 2).mean())
+
+
+def test_0048_entropy_bonus(ns):
+    logits = torch.zeros(1, 4)  # uniform -> entropy log(4)
+    with step("entropy of a uniform distribution is log(V)"):
+        expect_allclose(ns["entropy_bonus"](logits), torch.log(torch.tensor(4.0)))
+
+
+def test_0049_ppo_loss(ns):
+    with step("-surrogate + vf_coef*vloss - ent_coef*entropy"):
+        out = ns["ppo_loss"](torch.tensor(2.0), torch.tensor(1.0), torch.tensor(0.5), 0.5, 0.01)
+        expect_allclose(out, -2.0 + 0.5 * 1.0 - 0.01 * 0.5)
+
+
+def test_0050_kl_penalized_reward(ns):
+    rewards = torch.tensor([1.0, 1.0])
+    lp = torch.tensor([0.0, -1.0])
+    ref = torch.tensor([-1.0, -1.0])
+    with step("reward minus kl_coef * (logp - logp_ref)"):
+        expect_allclose(ns["kl_penalized_reward"](rewards, lp, ref, 0.2), rewards - 0.2 * (lp - ref))
+
+
+def test_0051_batch_sequence_logprob(ns):
+    torch.manual_seed(0)
+    model = _TinyLM()
+    ids = torch.randint(0, 20, (3, 5))
+    with step("matches sequence_logprob on the model's logits"):
+        want = ns["sequence_logprob"](model(input_ids=ids).logits, ids)
+        expect_allclose(ns["batch_sequence_logprob"](model, ids), want, atol=1e-4)

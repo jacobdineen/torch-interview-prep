@@ -361,88 +361,88 @@
       "name": "sequence_logprob",
       "part": 5,
       "points": 5,
-      "signature": "sequence_logprob(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sequence_logprob(logits, input_ids)",
+      "doc": "Sum of the log-probs of the realized next tokens. logits (B,T,V),\ninput_ids (B,T) -> (B,)."
     },
     {
       "id": "0042",
       "name": "per_token_kl",
       "part": 5,
       "points": 5,
-      "signature": "per_token_kl(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "per_token_kl(logprobs, ref_logprobs)",
+      "doc": "Per-token KL estimate between policy and reference: logp - logp_ref."
     },
     {
       "id": "0043",
       "name": "compute_returns",
       "part": 5,
       "points": 5,
-      "signature": "compute_returns(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_returns(rewards, gamma)",
+      "doc": "Discounted returns-to-go G_t = sum_{k>=t} gamma^(k-t) r_k. rewards is 1-D (T,)."
     },
     {
       "id": "0044",
       "name": "gae_advantages",
       "part": 5,
       "points": 5,
-      "signature": "gae_advantages(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "gae_advantages(rewards, values, gamma, lam)",
+      "doc": "Generalized Advantage Estimation. rewards (T,), values (T+1,) with a bootstrap\nvalue at the end. Returns advantages (T,)."
     },
     {
       "id": "0045",
       "name": "policy_ratio",
       "part": 5,
       "points": 5,
-      "signature": "policy_ratio(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "policy_ratio(logprobs, old_logprobs)",
+      "doc": "Importance ratio exp(logp - logp_old)."
     },
     {
       "id": "0046",
       "name": "clipped_surrogate",
       "part": 5,
       "points": 5,
-      "signature": "clipped_surrogate(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "clipped_surrogate(ratio, advantages, clip_eps)",
+      "doc": "PPO clipped surrogate objective (to MAXIMIZE):\nmean(min(ratio*A, clip(ratio, 1-eps, 1+eps)*A))."
     },
     {
       "id": "0047",
       "name": "value_function_loss",
       "part": 5,
       "points": 5,
-      "signature": "value_function_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "value_function_loss(values, returns)",
+      "doc": "Critic loss: 0.5 * mean((values - returns)^2)."
     },
     {
       "id": "0048",
       "name": "entropy_bonus",
       "part": 5,
       "points": 5,
-      "signature": "entropy_bonus(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "entropy_bonus(logits)",
+      "doc": "Mean entropy of the policy distribution (encourages exploration)."
     },
     {
       "id": "0049",
       "name": "ppo_loss",
       "part": 5,
       "points": 5,
-      "signature": "ppo_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "ppo_loss(surrogate, value_loss, entropy, vf_coef, ent_coef)",
+      "doc": "Total PPO loss to MINIMIZE: -surrogate + vf_coef*value_loss - ent_coef*entropy."
     },
     {
       "id": "0050",
       "name": "kl_penalized_reward",
       "part": 5,
       "points": 5,
-      "signature": "kl_penalized_reward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "kl_penalized_reward(rewards, logprobs, ref_logprobs, kl_coef)",
+      "doc": "Shape the reward with a per-token KL-to-reference penalty."
     },
     {
       "id": "0051",
       "name": "batch_sequence_logprob",
       "part": 5,
       "points": 5,
-      "signature": "batch_sequence_logprob(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "batch_sequence_logprob(model, input_ids, attention_mask=None)",
+      "doc": "Run the model and return the per-sequence log-prob of ``input_ids`` (B,)."
     },
     {
       "id": "0052",
