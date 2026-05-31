@@ -318,3 +318,164 @@ def mcts_choose_action(root, temperature, rng=None):
         return int(np.argmax(pi))
     rng = rng or np.random.default_rng()
     return int(rng.choice(len(pi), p=pi))
+
+
+# ============== Part 5 — Self-Play Data Generation ==============
+
+def record_self_play_step(buffer, state, policy, player):
+    """Append a (state, MCTS policy, player) tuple; the value target is filled in
+    later from the game outcome. Returns the buffer."""
+    buffer.append((state, policy, player))
+    return buffer
+
+
+def play_self_play_game(net, n_simulations, c_puct, temperature, rng):
+    """Play one MCTS self-play game. Returns (records, winner) where records are
+    (encoded_state, mcts_policy, player) tuples."""
+    board = make_empty_board()
+    player = 1
+    records = []
+    while not is_terminal(board):
+        root = make_mcts_node(board, player, 0.0)
+        run_mcts(root, net, n_simulations, c_puct)
+        record_self_play_step(records, encode_board(board, player),
+                              visit_count_policy(root, temperature), player)
+        action = mcts_choose_action(root, temperature, rng)
+        board = drop_piece(board, action, player)
+        player = other_player(player)
+    return records, check_winner(board)
+
+
+def assign_value_targets(records, winner):
+    """Turn (state, policy, player) records into (state, policy, value) where value is
+    +1 if that player won, -1 if they lost, 0 for a draw."""
+    return [(state, policy, float(winner * player)) for state, policy, player in records]
+
+
+def generate_self_play_batch(net, n_games, n_simulations, c_puct, temperature, rng):
+    """Play ``n_games`` self-play games and return all (state, policy, value) tuples."""
+    data = []
+    for _ in range(n_games):
+        records, winner = play_self_play_game(net, n_simulations, c_puct, temperature, rng)
+        data.extend(assign_value_targets(records, winner))
+    return data
+
+
+# ============== Part 6 — Losses and Training Loop ==============
+
+def value_loss_mse(pred_values, target_values):
+    """Mean squared error between predicted and target values."""
+    return F.mse_loss(pred_values, target_values)
+
+
+def policy_loss_cross_entropy(policy_logits, target_policy):
+    """Cross-entropy between the network policy and the MCTS target distribution."""
+    return -(target_policy * F.log_softmax(policy_logits, dim=-1)).sum(dim=-1).mean()
+
+
+def l2_regularization_loss(net, weight_decay):
+    """L2 penalty on all parameters."""
+    return weight_decay * sum((p ** 2).sum() for p in net.parameters())
+
+
+def combined_loss(value_loss, policy_loss, l2_loss):
+    """AlphaZero loss: value MSE + policy cross-entropy + L2."""
+    return value_loss + policy_loss + l2_loss
+
+
+def encode_batch_states(states):
+    """Stack a list of encoded (2,6,7) states into a (B,2,6,7) float tensor."""
+    return torch.from_numpy(np.stack(states)).float()
+
+
+def iterate_minibatches(data, batch_size, shuffle=False, generator=None):
+    """Split ``data`` into minibatches (optionally shuffled). Returns a list of batches."""
+    idx = (torch.randperm(len(data), generator=generator).tolist() if shuffle
+           else list(range(len(data))))
+    return [[data[j] for j in idx[i:i + batch_size]] for i in range(0, len(data), batch_size)]
+
+
+def training_step(net, batch, optimizer, weight_decay):
+    """One training step over a list of (state, policy, value) tuples. Returns loss."""
+    states = encode_batch_states([b[0] for b in batch])
+    target_pi = torch.tensor(np.stack([b[1] for b in batch]), dtype=torch.float32)
+    target_v = torch.tensor([b[2] for b in batch], dtype=torch.float32)
+    logits, value = policy_value_forward(net, states)
+    loss = combined_loss(value_loss_mse(value, target_v),
+                         policy_loss_cross_entropy(logits, target_pi),
+                         l2_regularization_loss(net, weight_decay))
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+
+
+def training_epoch(net, data, optimizer, batch_size, weight_decay, generator=None):
+    """One pass over ``data`` in minibatches. Returns the mean loss."""
+    losses = [training_step(net, batch, optimizer, weight_decay)
+              for batch in iterate_minibatches(data, batch_size, shuffle=True, generator=generator)]
+    return sum(losses) / len(losses)
+
+
+# ============== Part 7 — Iterated Training Loop ==============
+
+def self_play_iteration(net, optimizer, n_games, n_simulations, c_puct, temperature,
+                        batch_size, weight_decay, rng):
+    """One AlphaZero iteration: generate self-play data, then train one epoch on it.
+    Returns (mean_loss, data)."""
+    data = generate_self_play_batch(net, n_games, n_simulations, c_puct, temperature, rng)
+    loss = training_epoch(net, data, optimizer, batch_size, weight_decay)
+    return loss, data
+
+
+def train_loop(net, optimizer, n_iterations, n_games, n_simulations, c_puct, temperature,
+               batch_size, weight_decay, rng):
+    """Alternate self-play and training for ``n_iterations``. Returns (net, losses)."""
+    losses = []
+    for _ in range(n_iterations):
+        loss, _ = self_play_iteration(net, optimizer, n_games, n_simulations, c_puct,
+                                      temperature, batch_size, weight_decay, rng)
+        losses.append(loss)
+    return net, losses
+
+
+# ============== Part 8 — Agents and Evaluation ==============
+
+def random_policy_action(board, rng):
+    """A random legal column."""
+    return int(rng.choice(valid_moves(board)))
+
+
+def greedy_agent_action(net, board, player):
+    """Greedy column from the network's policy (no search)."""
+    x = board_to_torch_tensor(encode_board(board, player))
+    with torch.no_grad():
+        logits, _ = policy_value_forward(net, x)
+    return greedy_action_from_policy(logits[0], action_mask(board))
+
+
+def play_one_match(agent_a, agent_b, rng):
+    """Play a game: agent_a is player +1, agent_b is player -1. Each agent is a
+    callable(board, player) -> action. Returns the winner (+1/-1/0)."""
+    board = make_empty_board()
+    player = 1
+    while not is_terminal(board):
+        action = agent_a(board, player) if player == 1 else agent_b(board, player)
+        board = drop_piece(board, action, player)
+        player = other_player(player)
+    return check_winner(board)
+
+
+def match_win_rate(results, perspective):
+    """Fraction of games won by ``perspective`` (+1/-1)."""
+    return sum(r == perspective for r in results) / len(results)
+
+
+def evaluate_against_random(net, n_games, rng):
+    """Greedy network agent (as +1) vs a random opponent; return its win rate."""
+    results = []
+    for _ in range(n_games):
+        results.append(play_one_match(
+            lambda b, p: greedy_agent_action(net, b, p),
+            lambda b, p: random_policy_action(b, rng), rng))
+    return match_win_rate(results, 1)

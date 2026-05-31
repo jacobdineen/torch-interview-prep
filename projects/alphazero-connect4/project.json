@@ -345,152 +345,152 @@
       "name": "record_self_play_step",
       "part": 4,
       "points": 10,
-      "signature": "record_self_play_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "record_self_play_step(buffer, state, policy, player)",
+      "doc": "Append a (state, MCTS policy, player) tuple; the value target is filled in\nlater from the game outcome. Returns the buffer."
     },
     {
       "id": "0040",
       "name": "play_self_play_game",
       "part": 4,
       "points": 10,
-      "signature": "play_self_play_game(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_self_play_game(net, n_simulations, c_puct, temperature, rng)",
+      "doc": "Play one MCTS self-play game. Returns (records, winner) where records are\n(encoded_state, mcts_policy, player) tuples."
     },
     {
       "id": "0041",
       "name": "assign_value_targets",
       "part": 4,
       "points": 10,
-      "signature": "assign_value_targets(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "assign_value_targets(records, winner)",
+      "doc": "Turn (state, policy, player) records into (state, policy, value) where value is\n+1 if that player won, -1 if they lost, 0 for a draw."
     },
     {
       "id": "0042",
       "name": "generate_self_play_batch",
       "part": 4,
       "points": 10,
-      "signature": "generate_self_play_batch(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "generate_self_play_batch(net, n_games, n_simulations, c_puct, temperature, rng)",
+      "doc": "Play ``n_games`` self-play games and return all (state, policy, value) tuples."
     },
     {
       "id": "0043",
       "name": "value_loss_mse",
       "part": 5,
       "points": 10,
-      "signature": "value_loss_mse(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "value_loss_mse(pred_values, target_values)",
+      "doc": "Mean squared error between predicted and target values."
     },
     {
       "id": "0044",
       "name": "policy_loss_cross_entropy",
       "part": 5,
       "points": 10,
-      "signature": "policy_loss_cross_entropy(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "policy_loss_cross_entropy(policy_logits, target_policy)",
+      "doc": "Cross-entropy between the network policy and the MCTS target distribution."
     },
     {
       "id": "0045",
       "name": "l2_regularization_loss",
       "part": 5,
       "points": 10,
-      "signature": "l2_regularization_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "l2_regularization_loss(net, weight_decay)",
+      "doc": "L2 penalty on all parameters."
     },
     {
       "id": "0046",
       "name": "combined_loss",
       "part": 5,
       "points": 10,
-      "signature": "combined_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "combined_loss(value_loss, policy_loss, l2_loss)",
+      "doc": "AlphaZero loss: value MSE + policy cross-entropy + L2."
     },
     {
       "id": "0047",
       "name": "encode_batch_states",
       "part": 5,
       "points": 10,
-      "signature": "encode_batch_states(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "encode_batch_states(states)",
+      "doc": "Stack a list of encoded (2,6,7) states into a (B,2,6,7) float tensor."
     },
     {
       "id": "0048",
       "name": "iterate_minibatches",
       "part": 5,
       "points": 10,
-      "signature": "iterate_minibatches(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "iterate_minibatches(data, batch_size, shuffle=False, generator=None)",
+      "doc": "Split ``data`` into minibatches (optionally shuffled). Returns a list of batches."
     },
     {
       "id": "0049",
       "name": "training_step",
       "part": 5,
       "points": 10,
-      "signature": "training_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "training_step(net, batch, optimizer, weight_decay)",
+      "doc": "One training step over a list of (state, policy, value) tuples. Returns loss."
     },
     {
       "id": "0050",
       "name": "training_epoch",
       "part": 5,
       "points": 10,
-      "signature": "training_epoch(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "training_epoch(net, data, optimizer, batch_size, weight_decay, generator=None)",
+      "doc": "One pass over ``data`` in minibatches. Returns the mean loss."
     },
     {
       "id": "0051",
       "name": "self_play_iteration",
       "part": 6,
       "points": 10,
-      "signature": "self_play_iteration(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "self_play_iteration(net, optimizer, n_games, n_simulations, c_puct, temperature, batch_size, weight_decay, rng)",
+      "doc": "One AlphaZero iteration: generate self-play data, then train one epoch on it.\nReturns (mean_loss, data)."
     },
     {
       "id": "0052",
       "name": "train_loop",
       "part": 6,
       "points": 10,
-      "signature": "train_loop(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_loop(net, optimizer, n_iterations, n_games, n_simulations, c_puct, temperature, batch_size, weight_decay, rng)",
+      "doc": "Alternate self-play and training for ``n_iterations``. Returns (net, losses)."
     },
     {
       "id": "0053",
       "name": "random_policy_action",
       "part": 7,
       "points": 10,
-      "signature": "random_policy_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "random_policy_action(board, rng)",
+      "doc": "A random legal column."
     },
     {
       "id": "0054",
       "name": "greedy_agent_action",
       "part": 7,
       "points": 10,
-      "signature": "greedy_agent_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "greedy_agent_action(net, board, player)",
+      "doc": "Greedy column from the network's policy (no search)."
     },
     {
       "id": "0055",
       "name": "play_one_match",
       "part": 7,
       "points": 10,
-      "signature": "play_one_match(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_one_match(agent_a, agent_b, rng)",
+      "doc": "Play a game: agent_a is player +1, agent_b is player -1. Each agent is a\ncallable(board, player) -> action. Returns the winner (+1/-1/0)."
     },
     {
       "id": "0056",
       "name": "match_win_rate",
       "part": 7,
       "points": 10,
-      "signature": "match_win_rate(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "match_win_rate(results, perspective)",
+      "doc": "Fraction of games won by ``perspective`` (+1/-1)."
     },
     {
       "id": "0057",
       "name": "evaluate_against_random",
       "part": 7,
       "points": 10,
-      "signature": "evaluate_against_random(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "evaluate_against_random(net, n_games, rng)",
+      "doc": "Greedy network agent (as +1) vs a random opponent; return its win rate."
     }
   ]
 }

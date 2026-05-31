@@ -409,3 +409,182 @@ def test_0038_mcts_choose_action(ns):
     root["children"][2]["N"] = 1
     with step("temperature 0 picks the most-visited action"):
         expect_eq(ns["mcts_choose_action"](root, 0), 5)
+
+
+# --------------------- Part 5 — Self-Play Data Generation ---------------------
+
+def test_0039_record_self_play_step(ns):
+    buf = []
+    ns["record_self_play_step"](buf, "state", np.ones(7) / 7, 1)
+    with step("appends a (state, policy, player) tuple"):
+        expect_eq(len(buf), 1)
+        expect_eq(buf[0][2], 1)
+
+
+def test_0040_play_self_play_game(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    records, winner = ns["play_self_play_game"](net, 5, 1.5, 1.0, np.random.default_rng(0))
+    with step("records states/policies; winner is valid"):
+        expect_true(len(records) > 0, "should record moves")
+        expect_shape(records[0][0], (2, 6, 7))
+        expect_allclose(float(np.sum(records[0][1])), 1.0, atol=1e-5)
+        expect_true(winner in (1, -1, 0), "valid winner")
+
+
+def test_0041_assign_value_targets(ns):
+    records = [("s0", np.ones(7) / 7, 1), ("s1", np.ones(7) / 7, -1)]
+    out = ns["assign_value_targets"](records, winner=1)
+    with step("value is +1 for the winner, -1 for the loser"):
+        expect_allclose(out[0][2], 1.0)
+        expect_allclose(out[1][2], -1.0)
+
+
+def test_0042_generate_self_play_batch(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    data = ns["generate_self_play_batch"](net, 2, 5, 1.5, 1.0, np.random.default_rng(0))
+    with step("returns (state, policy, value) tuples with valid values"):
+        expect_true(len(data) > 0, "should produce data")
+        expect_true(all(d[2] in (1.0, -1.0, 0.0) for d in data), "values in {-1,0,1}")
+
+
+# --------------------- Part 6 — Losses and Training Loop ---------------------
+
+def test_0043_value_loss_mse(ns):
+    import torch.nn.functional as F
+    pred = torch.tensor([0.5, -0.5])
+    targ = torch.tensor([1.0, -1.0])
+    with step("MSE"):
+        expect_allclose(ns["value_loss_mse"](pred, targ), F.mse_loss(pred, targ))
+
+
+def test_0044_policy_loss_cross_entropy(ns):
+    import torch.nn.functional as F
+    logits = torch.randn(3, 7)
+    target = torch.softmax(torch.randn(3, 7), dim=-1)
+    want = -(target * F.log_softmax(logits, dim=-1)).sum(-1).mean()
+    with step("cross-entropy against the target distribution"):
+        expect_allclose(ns["policy_loss_cross_entropy"](logits, target), want)
+
+
+def test_0045_l2_regularization_loss(ns):
+    net = ns["build_policy_value_net"](2, 8, 7)
+    want = 1e-4 * sum((p ** 2).sum() for p in net.parameters())
+    with step("weight_decay * sum of squared params"):
+        expect_allclose(ns["l2_regularization_loss"](net, 1e-4), want)
+
+
+def test_0046_combined_loss(ns):
+    with step("sum of the three terms"):
+        expect_allclose(ns["combined_loss"](torch.tensor(1.0), torch.tensor(2.0), torch.tensor(0.5)), 3.5)
+
+
+def test_0047_encode_batch_states(ns):
+    states = [np.zeros((2, 6, 7), dtype=np.float32) for _ in range(4)]
+    with step("stacks to (B,2,6,7) float tensor"):
+        out = ns["encode_batch_states"](states)
+        expect_shape(out, (4, 2, 6, 7))
+        expect_true(out.dtype == torch.float32, "float tensor")
+
+
+def test_0048_iterate_minibatches(ns):
+    with step("batches of the given size"):
+        expect_eq([len(b) for b in ns["iterate_minibatches"](list(range(10)), 4)], [4, 4, 2])
+
+
+def _fake_dataset(ns, n=16, seed=0):
+    rng = np.random.default_rng(seed)
+    data = []
+    for _ in range(n):
+        board = ns["make_empty_board"]()
+        for c in rng.choice(7, size=3, replace=False):
+            board = ns["drop_piece"](board, int(c), 1)
+        pi = np.asarray(torch.softmax(torch.randn(7), dim=-1).numpy(), dtype=np.float32)
+        data.append((ns["encode_board"](board, 1), pi, float(rng.uniform(-1, 1))))
+    return data
+
+
+def test_0049_training_step(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    loss = ns["training_step"](net, _fake_dataset(ns, 8), opt, 1e-4)
+    with step("returns a finite scalar loss"):
+        expect_true(np.isfinite(loss), "loss finite")
+
+
+def test_0050_training_epoch(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    data = _fake_dataset(ns, 16)
+    first = ns["training_epoch"](net, data, opt, 8, 1e-5)
+    last = first
+    for _ in range(25):
+        last = ns["training_epoch"](net, data, opt, 8, 1e-5)
+    with step("loss decreases as the net fits the buffer"):
+        expect_true(last < first, f"loss should drop: first={first:.3f} last={last:.3f}")
+
+
+# --------------------- Part 7 — Iterated Training Loop ---------------------
+
+def test_0051_self_play_iteration(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    loss, data = ns["self_play_iteration"](net, opt, 1, 5, 1.5, 1.0, 8, 1e-4, np.random.default_rng(0))
+    with step("generates data and trains; returns (loss, data)"):
+        expect_true(np.isfinite(loss), "finite loss")
+        expect_true(len(data) > 0, "produced self-play data")
+
+
+def test_0052_train_loop(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    out_net, losses = ns["train_loop"](net, opt, 2, 1, 5, 1.5, 1.0, 8, 1e-4, np.random.default_rng(0))
+    with step("runs the requested iterations"):
+        expect_eq(len(losses), 2)
+
+
+# --------------------- Part 8 — Agents and Evaluation ---------------------
+
+def test_0053_random_policy_action(ns):
+    b = ns["make_empty_board"]()
+    b[:, 0] = 1  # column 0 full
+    rng = np.random.default_rng(0)
+    with step("returns a legal column"):
+        for _ in range(20):
+            expect_true(ns["random_policy_action"](b, rng) in range(1, 7), "must be legal")
+
+
+def test_0054_greedy_agent_action(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    b = ns["make_empty_board"]()
+    b[:, 3] = 1  # column 3 full
+    with step("returns a legal column"):
+        a = ns["greedy_agent_action"](net, b, 1)
+        expect_true(a in [0, 1, 2, 4, 5, 6], "should be legal")
+
+
+def test_0055_play_one_match(ns):
+    rng = np.random.default_rng(0)
+    winner = ns["play_one_match"](lambda b, p: ns["random_policy_action"](b, rng),
+                                  lambda b, p: ns["random_policy_action"](b, rng), rng)
+    with step("returns a valid winner"):
+        expect_true(winner in (1, -1, 0), "valid winner")
+
+
+def test_0056_match_win_rate(ns):
+    with step("fraction won by perspective"):
+        expect_allclose(ns["match_win_rate"]([1, 1, -1, 0], 1), 0.5)
+
+
+def test_0057_evaluate_against_random(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    rate = ns["evaluate_against_random"](net, 6, np.random.default_rng(0))
+    with step("returns a win rate in [0,1]"):
+        expect_true(0.0 <= rate <= 1.0, f"rate out of range: {rate}")
