@@ -1,0 +1,496 @@
+{
+  "name": "alphazero-connect4",
+  "title": "AlphaZero on Connect-4 from Scratch",
+  "parts": [
+    {
+      "title": "Connect-4 Game Engine",
+      "description": "Board representation, move mechanics, terminal detection, and the env step function."
+    },
+    {
+      "title": "Board Encoding and Policy-Value Network",
+      "description": "Encode boards as tensors and a conv backbone with policy and value heads."
+    },
+    {
+      "title": "Action Masking and Policy Sampling",
+      "description": "Mask illegal moves and turn logits into sampled or greedy column actions."
+    },
+    {
+      "title": "PUCT Monte Carlo Tree Search",
+      "description": "Nodes, PUCT selection, network-guided expansion, backup, and full MCTS rollouts."
+    },
+    {
+      "title": "Self-Play Data Generation",
+      "description": "MCTS self-play recording (state, policy, outcome) training tuples."
+    },
+    {
+      "title": "Losses and Training Loop",
+      "description": "Policy, value, and L2 losses and minibatched training over the self-play buffer."
+    },
+    {
+      "title": "Iterated Training Loop",
+      "description": "Alternate self-play generation and network training across iterations."
+    },
+    {
+      "title": "Agents and Evaluation",
+      "description": "Baseline agents, head-to-head matches, and win rate against a random policy."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "make_empty_board",
+      "part": 0,
+      "points": 10,
+      "signature": "make_empty_board()",
+      "doc": "A fresh 6x7 board of zeros."
+    },
+    {
+      "id": "0002",
+      "name": "column_top_row",
+      "part": 0,
+      "points": 10,
+      "signature": "column_top_row(board, col)",
+      "doc": "Row index a dropped piece would land in (lowest empty row), or -1 if full."
+    },
+    {
+      "id": "0003",
+      "name": "column_full",
+      "part": 0,
+      "points": 10,
+      "signature": "column_full(board, col)",
+      "doc": "True if a column has no empty cell."
+    },
+    {
+      "id": "0004",
+      "name": "valid_moves",
+      "part": 0,
+      "points": 10,
+      "signature": "valid_moves(board)",
+      "doc": "List of columns that are not full."
+    },
+    {
+      "id": "0005",
+      "name": "drop_piece",
+      "part": 0,
+      "points": 10,
+      "signature": "drop_piece(board, col, player)",
+      "doc": "Return a NEW board with ``player``'s piece dropped into ``col``."
+    },
+    {
+      "id": "0006",
+      "name": "four_in_a_row_horizontal",
+      "part": 0,
+      "points": 10,
+      "signature": "four_in_a_row_horizontal(board, player)",
+      "doc": "True if ``player`` has four consecutive pieces in any row."
+    },
+    {
+      "id": "0007",
+      "name": "four_in_a_row_vertical",
+      "part": 0,
+      "points": 10,
+      "signature": "four_in_a_row_vertical(board, player)",
+      "doc": "True if ``player`` has four consecutive pieces in any column."
+    },
+    {
+      "id": "0008",
+      "name": "four_in_a_row_diagonal_down_right",
+      "part": 0,
+      "points": 10,
+      "signature": "four_in_a_row_diagonal_down_right(board, player)",
+      "doc": "True if ``player`` has four in a row along a down-right (\\) diagonal."
+    },
+    {
+      "id": "0009",
+      "name": "four_in_a_row_diagonal_up_right",
+      "part": 0,
+      "points": 10,
+      "signature": "four_in_a_row_diagonal_up_right(board, player)",
+      "doc": "True if ``player`` has four in a row along an up-right (/) diagonal."
+    },
+    {
+      "id": "0010",
+      "name": "check_winner",
+      "part": 0,
+      "points": 10,
+      "signature": "check_winner(board)",
+      "doc": "Return the winning player (+1 / -1), or 0 if there is no winner."
+    },
+    {
+      "id": "0011",
+      "name": "board_is_full",
+      "part": 0,
+      "points": 10,
+      "signature": "board_is_full(board)",
+      "doc": "True if there are no empty cells."
+    },
+    {
+      "id": "0012",
+      "name": "is_terminal",
+      "part": 0,
+      "points": 10,
+      "signature": "is_terminal(board)",
+      "doc": "True if the game is over (someone won or the board is full)."
+    },
+    {
+      "id": "0013",
+      "name": "other_player",
+      "part": 0,
+      "points": 10,
+      "signature": "other_player(player)",
+      "doc": "The opponent of ``player``."
+    },
+    {
+      "id": "0014",
+      "name": "step_env",
+      "part": 0,
+      "points": 10,
+      "signature": "step_env(board, col, player)",
+      "doc": "Apply ``player``'s move in ``col``. Returns (next_board, reward, done) where\nreward is +1 if this move wins for ``player``, else 0."
+    },
+    {
+      "id": "0015",
+      "name": "encode_board",
+      "part": 1,
+      "points": 10,
+      "signature": "encode_board(board, player)",
+      "doc": "Two planes from ``player``'s perspective: [my pieces, opponent pieces].\nShape (2, 6, 7), float."
+    },
+    {
+      "id": "0016",
+      "name": "board_to_torch_tensor",
+      "part": 1,
+      "points": 10,
+      "signature": "board_to_torch_tensor(encoded)",
+      "doc": "Turn an encoded board into a batched float tensor (1, C, 6, 7)."
+    },
+    {
+      "id": "0017",
+      "name": "init_conv_backbone",
+      "part": 1,
+      "points": 10,
+      "signature": "init_conv_backbone(in_channels, hidden)",
+      "doc": "A small conv backbone preserving the 6x7 spatial size."
+    },
+    {
+      "id": "0018",
+      "name": "init_policy_head",
+      "part": 1,
+      "points": 10,
+      "signature": "init_policy_head(input_dim, n_actions)",
+      "doc": "Linear policy head over the flattened features -> action logits."
+    },
+    {
+      "id": "0019",
+      "name": "init_value_head",
+      "part": 1,
+      "points": 10,
+      "signature": "init_value_head(input_dim)",
+      "doc": "Value head -> a scalar in [-1, 1] via tanh."
+    },
+    {
+      "id": "0020",
+      "name": "build_policy_value_net",
+      "part": 1,
+      "points": 10,
+      "signature": "build_policy_value_net(in_channels=2, hidden=32, n_actions=7)",
+      "doc": "Assemble the conv backbone + policy and value heads into one module whose\nforward(x) returns (policy_logits (B, n_actions), value (B,))."
+    },
+    {
+      "id": "0021",
+      "name": "policy_value_forward",
+      "part": 1,
+      "points": 10,
+      "signature": "policy_value_forward(net, x)",
+      "doc": "Run the network: returns (policy_logits, value)."
+    },
+    {
+      "id": "0022",
+      "name": "action_mask",
+      "part": 2,
+      "points": 10,
+      "signature": "action_mask(board)",
+      "doc": "A length-7 float mask: 1 for legal (non-full) columns, 0 otherwise."
+    },
+    {
+      "id": "0023",
+      "name": "masked_policy_logits",
+      "part": 2,
+      "points": 10,
+      "signature": "masked_policy_logits(logits, mask)",
+      "doc": "Set logits of illegal actions (mask==0) to -inf."
+    },
+    {
+      "id": "0024",
+      "name": "masked_log_softmax",
+      "part": 2,
+      "points": 10,
+      "signature": "masked_log_softmax(logits, mask)",
+      "doc": "Log-softmax over legal actions only (illegal -> -inf)."
+    },
+    {
+      "id": "0025",
+      "name": "sample_action_from_policy",
+      "part": 2,
+      "points": 10,
+      "signature": "sample_action_from_policy(logits, mask, generator=None)",
+      "doc": "Sample a legal column from softmax(masked logits)."
+    },
+    {
+      "id": "0026",
+      "name": "greedy_action_from_policy",
+      "part": 2,
+      "points": 10,
+      "signature": "greedy_action_from_policy(logits, mask)",
+      "doc": "The legal column with the highest logit."
+    },
+    {
+      "id": "0027",
+      "name": "make_mcts_node",
+      "part": 3,
+      "points": 10,
+      "signature": "make_mcts_node(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0028",
+      "name": "node_q_value",
+      "part": 3,
+      "points": 10,
+      "signature": "node_q_value(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0029",
+      "name": "ucb_score",
+      "part": 3,
+      "points": 10,
+      "signature": "ucb_score(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0030",
+      "name": "select_best_child",
+      "part": 3,
+      "points": 10,
+      "signature": "select_best_child(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0031",
+      "name": "select_leaf",
+      "part": 3,
+      "points": 10,
+      "signature": "select_leaf(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0032",
+      "name": "evaluate_with_network",
+      "part": 3,
+      "points": 10,
+      "signature": "evaluate_with_network(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0033",
+      "name": "expand_node",
+      "part": 3,
+      "points": 10,
+      "signature": "expand_node(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0034",
+      "name": "backup_value",
+      "part": 3,
+      "points": 10,
+      "signature": "backup_value(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0035",
+      "name": "run_one_simulation",
+      "part": 3,
+      "points": 10,
+      "signature": "run_one_simulation(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0036",
+      "name": "run_mcts",
+      "part": 3,
+      "points": 10,
+      "signature": "run_mcts(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0037",
+      "name": "visit_count_policy",
+      "part": 3,
+      "points": 10,
+      "signature": "visit_count_policy(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0038",
+      "name": "mcts_choose_action",
+      "part": 3,
+      "points": 10,
+      "signature": "mcts_choose_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0039",
+      "name": "record_self_play_step",
+      "part": 4,
+      "points": 10,
+      "signature": "record_self_play_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0040",
+      "name": "play_self_play_game",
+      "part": 4,
+      "points": 10,
+      "signature": "play_self_play_game(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0041",
+      "name": "assign_value_targets",
+      "part": 4,
+      "points": 10,
+      "signature": "assign_value_targets(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0042",
+      "name": "generate_self_play_batch",
+      "part": 4,
+      "points": 10,
+      "signature": "generate_self_play_batch(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0043",
+      "name": "value_loss_mse",
+      "part": 5,
+      "points": 10,
+      "signature": "value_loss_mse(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0044",
+      "name": "policy_loss_cross_entropy",
+      "part": 5,
+      "points": 10,
+      "signature": "policy_loss_cross_entropy(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0045",
+      "name": "l2_regularization_loss",
+      "part": 5,
+      "points": 10,
+      "signature": "l2_regularization_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0046",
+      "name": "combined_loss",
+      "part": 5,
+      "points": 10,
+      "signature": "combined_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0047",
+      "name": "encode_batch_states",
+      "part": 5,
+      "points": 10,
+      "signature": "encode_batch_states(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0048",
+      "name": "iterate_minibatches",
+      "part": 5,
+      "points": 10,
+      "signature": "iterate_minibatches(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0049",
+      "name": "training_step",
+      "part": 5,
+      "points": 10,
+      "signature": "training_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0050",
+      "name": "training_epoch",
+      "part": 5,
+      "points": 10,
+      "signature": "training_epoch(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0051",
+      "name": "self_play_iteration",
+      "part": 6,
+      "points": 10,
+      "signature": "self_play_iteration(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0052",
+      "name": "train_loop",
+      "part": 6,
+      "points": 10,
+      "signature": "train_loop(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0053",
+      "name": "random_policy_action",
+      "part": 7,
+      "points": 10,
+      "signature": "random_policy_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0054",
+      "name": "greedy_agent_action",
+      "part": 7,
+      "points": 10,
+      "signature": "greedy_agent_action(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0055",
+      "name": "play_one_match",
+      "part": 7,
+      "points": 10,
+      "signature": "play_one_match(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0056",
+      "name": "match_win_rate",
+      "part": 7,
+      "points": 10,
+      "signature": "match_win_rate(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0057",
+      "name": "evaluate_against_random",
+      "part": 7,
+      "points": 10,
+      "signature": "evaluate_against_random(*args)",
+      "doc": "TODO: not yet built."
+    }
+  ]
+}
