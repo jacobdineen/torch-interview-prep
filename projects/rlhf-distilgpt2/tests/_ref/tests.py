@@ -58,6 +58,18 @@ def _tiny_batch(vocab=20, b=4, t=6, seed=0):
     return {"input_ids": ids, "labels": labels, "attention_mask": torch.ones(b, t, dtype=torch.long)}
 
 
+class _TinyReward(torch.nn.Module):
+    """Mean-pooled embedding -> scalar reward; for testing reward_train_step."""
+
+    def __init__(self, vocab=20, d=16):
+        super().__init__()
+        self.emb = torch.nn.Embedding(vocab, d)
+        self.head = torch.nn.Linear(d, 1)
+
+    def forward(self, input_ids):
+        return self.head(self.emb(input_ids).mean(dim=1)).squeeze(-1)
+
+
 # --------------------------- harness ---------------------------
 
 @contextmanager
@@ -328,3 +340,127 @@ def test_0027_evaluate_loss(ns):
     val = ns["evaluate_loss"](model, batches)
     with step("returns a finite mean loss"):
         expect_true(np.isfinite(val), "loss must be finite")
+
+
+# --------------------- Part 4 — LoRA Adapters ---------------------
+
+def test_0028_lora_delta(ns):
+    x = torch.randn(3, 8)
+    a = torch.randn(4, 8)   # (r, in)
+    b = torch.randn(6, 4)   # (out, r)
+    out = ns["lora_delta"](x, a, b, alpha=8, r=4)
+    with step("(alpha/r)*(x@A^T)@B^T, shape (3,6)"):
+        expect_shape(out, (3, 6))
+        expect_allclose(out, (8 / 4) * (x @ a.T) @ b.T)
+
+
+def test_0029_lora_linear_forward(ns):
+    x = torch.randn(3, 8)
+    w = torch.randn(6, 8)
+    bias = torch.randn(6)
+    a, b = torch.randn(4, 8), torch.randn(6, 4)
+    import torch.nn.functional as F
+    out = ns["lora_linear_forward"](x, w, bias, a, b, 8, 4)
+    with step("base linear + LoRA delta"):
+        expect_allclose(out, F.linear(x, w, bias) + (8 / 4) * (x @ a.T) @ b.T)
+
+
+def test_0030_init_lora_weights(ns):
+    a, b = ns["init_lora_weights"](8, 6, 4, torch.Generator().manual_seed(0))
+    with step("A small Gaussian (r,in); B zeros (out,r) -> zero initial delta"):
+        expect_shape(a, (4, 8))
+        expect_shape(b, (6, 4))
+        expect_allclose(b, torch.zeros(6, 4))
+        expect_allclose(ns["lora_delta"](torch.randn(2, 8), a, b, 8, 4), torch.zeros(2, 6))
+
+
+def test_0031_freeze_base_params(ns):
+    model = _TinyLM()
+    ns["freeze_base_params"](model)
+    with step("all params frozen"):
+        expect_true(all(not p.requires_grad for p in model.parameters()), "should all be frozen")
+
+
+def test_0032_count_trainable_params(ns):
+    model = _TinyLM(vocab=10, d=4)
+    full = ns["count_trainable_params"](model)
+    ns["freeze_base_params"](model)
+    with step("counts only requires_grad params"):
+        expect_true(full > 0, "fresh model has trainable params")
+        expect_eq(ns["count_trainable_params"](model), 0)
+
+
+def test_0033_merge_lora(ns):
+    x = torch.randn(3, 8)
+    w = torch.randn(6, 8)
+    a, b = torch.randn(4, 8), torch.randn(6, 4)
+    import torch.nn.functional as F
+    merged = ns["merge_lora"](w, a, b, 8, 4)
+    with step("merged weight reproduces base+LoRA forward"):
+        expect_shape(merged, (6, 8))
+        expect_allclose(F.linear(x, merged), ns["lora_linear_forward"](x, w, None, a, b, 8, 4), atol=1e-4)
+
+
+# --------------------- Part 5 — Reward Modeling ---------------------
+
+def test_0034_build_synthetic_preference_dataset(ns):
+    data = ns["build_synthetic_preference_dataset"](15)
+    with step("n examples with prompt/chosen/rejected"):
+        expect_eq(len(data), 15)
+        expect_true(all(k in data[0] for k in ("prompt", "chosen", "rejected")), "missing keys")
+
+
+def test_0035_format_preference(ns):
+    out = ns["format_preference"]({"prompt": "Q?", "chosen": "good", "rejected": "bad"})
+    with step("chosen/rejected texts share the prompt and append the response"):
+        expect_true(out["chosen_text"].endswith("good"), "chosen text")
+        expect_true(out["rejected_text"].endswith("bad"), "rejected text")
+        expect_true("Q?" in out["chosen_text"], "prompt present")
+
+
+def test_0036_reward_head_forward(ns):
+    h = torch.randn(2, 3, 4)
+    w = torch.randn(4)
+    b = torch.tensor(0.5)
+    out = ns["reward_head_forward"](h, w, b)
+    with step("scalar reward per sequence from the last token"):
+        expect_shape(out, (2,))
+        expect_allclose(out, h[:, -1, :] @ w + b)
+
+
+def test_0037_pairwise_reward_loss(ns):
+    import torch.nn.functional as F
+    c = torch.tensor([2.0, 1.0])
+    r = torch.tensor([0.0, -1.0])
+    with step("matches -logsigmoid(c-r); shrinks as the gap grows"):
+        expect_allclose(ns["pairwise_reward_loss"](c, r), -F.logsigmoid(c - r).mean())
+        big = ns["pairwise_reward_loss"](torch.tensor([10.0]), torch.tensor([-10.0]))
+        expect_true(big.item() < 0.01, "huge margin -> ~0 loss")
+
+
+def test_0038_reward_bce_loss(ns):
+    import torch.nn.functional as F
+    c = torch.tensor([2.0, 1.0])
+    r = torch.tensor([0.0, -1.0])
+    with step("pointwise BCE (chosen=1, rejected=0)"):
+        expect_allclose(ns["reward_bce_loss"](c, r), (-F.logsigmoid(c) - F.logsigmoid(-r)).mean())
+
+
+def test_0039_pairwise_accuracy(ns):
+    with step("fraction with chosen > rejected"):
+        expect_allclose(ns["pairwise_accuracy"](torch.tensor([3.0, 1.0]), torch.tensor([1.0, 2.0])), 0.5)
+
+
+def test_0040_reward_train_step(ns):
+    torch.manual_seed(0)
+    rm = _TinyReward()
+    opt = torch.optim.Adam(rm.parameters(), lr=1e-2)
+    g = torch.Generator().manual_seed(1)
+    batch = {"chosen": torch.randint(0, 20, (4, 5), generator=g),
+             "rejected": torch.randint(0, 20, (4, 5), generator=g)}
+    first = ns["reward_train_step"](rm, batch, opt)
+    last = first
+    for _ in range(60):
+        last = ns["reward_train_step"](rm, batch, opt)
+    with step("reward model learns to separate chosen from rejected"):
+        expect_true(last < first - 0.1, f"loss should drop: first={first:.3f} last={last:.3f}")

@@ -257,104 +257,104 @@
       "name": "lora_delta",
       "part": 3,
       "points": 5,
-      "signature": "lora_delta(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "lora_delta(x, lora_a, lora_b, alpha, r)",
+      "doc": "Low-rank update applied to x: (alpha/r) * (x @ A^T) @ B^T.\nA is (r, in), B is (out, r); result is (..., out)."
     },
     {
       "id": "0029",
       "name": "lora_linear_forward",
       "part": 3,
       "points": 5,
-      "signature": "lora_linear_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "lora_linear_forward(x, weight, bias, lora_a, lora_b, alpha, r)",
+      "doc": "Frozen base linear plus the LoRA delta: x@W^T + b + lora_delta(x)."
     },
     {
       "id": "0030",
       "name": "init_lora_weights",
       "part": 3,
       "points": 5,
-      "signature": "init_lora_weights(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "init_lora_weights(in_features, out_features, r, generator=None)",
+      "doc": "LoRA init: A ~ small Gaussian (r, in), B = zeros (out, r) so the initial\ndelta is exactly zero. Returns (A, B)."
     },
     {
       "id": "0031",
       "name": "freeze_base_params",
       "part": 3,
       "points": 5,
-      "signature": "freeze_base_params(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "freeze_base_params(model)",
+      "doc": "Freeze every parameter of the base model (requires_grad=False). Returns it."
     },
     {
       "id": "0032",
       "name": "count_trainable_params",
       "part": 3,
       "points": 5,
-      "signature": "count_trainable_params(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "count_trainable_params(model)",
+      "doc": "Total number of parameters with requires_grad=True."
     },
     {
       "id": "0033",
       "name": "merge_lora",
       "part": 3,
       "points": 5,
-      "signature": "merge_lora(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "merge_lora(weight, lora_a, lora_b, alpha, r)",
+      "doc": "Fold the LoRA update into the base weight: W + (alpha/r) * (B @ A). (out,in)."
     },
     {
       "id": "0034",
       "name": "build_synthetic_preference_dataset",
       "part": 4,
       "points": 5,
-      "signature": "build_synthetic_preference_dataset(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_synthetic_preference_dataset(n)",
+      "doc": "Synthetic preferences: each {'prompt','chosen','rejected'} where ``chosen`` is\nthe better (more helpful) response."
     },
     {
       "id": "0035",
       "name": "format_preference",
       "part": 4,
       "points": 5,
-      "signature": "format_preference(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "format_preference(example)",
+      "doc": "Build the chosen/rejected full texts from a preference example."
     },
     {
       "id": "0036",
       "name": "reward_head_forward",
       "part": 4,
       "points": 5,
-      "signature": "reward_head_forward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reward_head_forward(hidden_states, weight, bias)",
+      "doc": "Scalar reward per sequence from the last token's hidden state:\nh_last @ w + b. hidden_states (B,T,H), weight (H,), bias scalar -> (B,)."
     },
     {
       "id": "0037",
       "name": "pairwise_reward_loss",
       "part": 4,
       "points": 5,
-      "signature": "pairwise_reward_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "pairwise_reward_loss(chosen_rewards, rejected_rewards)",
+      "doc": "Bradley-Terry preference loss: -log sigmoid(r_chosen - r_rejected), averaged."
     },
     {
       "id": "0038",
       "name": "reward_bce_loss",
       "part": 4,
       "points": 5,
-      "signature": "reward_bce_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reward_bce_loss(chosen_rewards, rejected_rewards)",
+      "doc": "Pointwise BCE alternative: chosen labeled 1, rejected labeled 0."
     },
     {
       "id": "0039",
       "name": "pairwise_accuracy",
       "part": 4,
       "points": 5,
-      "signature": "pairwise_accuracy(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "pairwise_accuracy(chosen_rewards, rejected_rewards)",
+      "doc": "Fraction of pairs where the chosen reward exceeds the rejected reward."
     },
     {
       "id": "0040",
       "name": "reward_train_step",
       "part": 4,
       "points": 5,
-      "signature": "reward_train_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "reward_train_step(reward_model, batch, optimizer)",
+      "doc": "One reward-model step: score chosen/rejected, pairwise loss, update. Returns loss."
     },
     {
       "id": "0041",

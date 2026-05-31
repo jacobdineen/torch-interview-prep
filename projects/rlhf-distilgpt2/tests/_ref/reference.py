@@ -227,3 +227,97 @@ def evaluate_loss(model, batches):
             total += cross_entropy_loss(logits, labels).item()
             n += 1
     return total / n
+
+
+# ============== Part 4 — LoRA Adapters ==============
+
+def lora_delta(x, lora_a, lora_b, alpha, r):
+    """Low-rank update applied to x: (alpha/r) * (x @ A^T) @ B^T.
+    A is (r, in), B is (out, r); result is (..., out)."""
+    return (alpha / r) * (x @ lora_a.T) @ lora_b.T
+
+
+def lora_linear_forward(x, weight, bias, lora_a, lora_b, alpha, r):
+    """Frozen base linear plus the LoRA delta: x@W^T + b + lora_delta(x)."""
+    return F.linear(x, weight, bias) + lora_delta(x, lora_a, lora_b, alpha, r)
+
+
+def init_lora_weights(in_features, out_features, r, generator=None):
+    """LoRA init: A ~ small Gaussian (r, in), B = zeros (out, r) so the initial
+    delta is exactly zero. Returns (A, B)."""
+    a = torch.randn(r, in_features, generator=generator) * 0.01
+    b = torch.zeros(out_features, r)
+    return a, b
+
+
+def freeze_base_params(model):
+    """Freeze every parameter of the base model (requires_grad=False). Returns it."""
+    for p in model.parameters():
+        p.requires_grad = False
+    return model
+
+
+def count_trainable_params(model):
+    """Total number of parameters with requires_grad=True."""
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def merge_lora(weight, lora_a, lora_b, alpha, r):
+    """Fold the LoRA update into the base weight: W + (alpha/r) * (B @ A). (out,in)."""
+    return weight + (alpha / r) * (lora_b @ lora_a)
+
+
+# ============== Part 5 — Reward Modeling ==============
+
+def build_synthetic_preference_dataset(n):
+    """Synthetic preferences: each {'prompt','chosen','rejected'} where ``chosen`` is
+    the better (more helpful) response."""
+    data = []
+    for i in range(n):
+        a, b = i % 10, (i * 7) % 10
+        data.append({
+            "prompt": f"What is {a} plus {b}?",
+            "chosen": f"The answer is {a + b}.",
+            "rejected": "I don't know.",
+        })
+    return data
+
+
+def format_preference(example):
+    """Build the chosen/rejected full texts from a preference example."""
+    prompt_text = _PROMPT_TEMPLATE.format(example["prompt"])
+    return {"chosen_text": prompt_text + example["chosen"],
+            "rejected_text": prompt_text + example["rejected"]}
+
+
+def reward_head_forward(hidden_states, weight, bias):
+    """Scalar reward per sequence from the last token's hidden state:
+    h_last @ w + b. hidden_states (B,T,H), weight (H,), bias scalar -> (B,)."""
+    return hidden_states[:, -1, :] @ weight + bias
+
+
+def pairwise_reward_loss(chosen_rewards, rejected_rewards):
+    """Bradley-Terry preference loss: -log sigmoid(r_chosen - r_rejected), averaged."""
+    return -F.logsigmoid(chosen_rewards - rejected_rewards).mean()
+
+
+def reward_bce_loss(chosen_rewards, rejected_rewards):
+    """Pointwise BCE alternative: chosen labeled 1, rejected labeled 0."""
+    return (-F.logsigmoid(chosen_rewards) - F.logsigmoid(-rejected_rewards)).mean()
+
+
+def pairwise_accuracy(chosen_rewards, rejected_rewards):
+    """Fraction of pairs where the chosen reward exceeds the rejected reward."""
+    return (chosen_rewards > rejected_rewards).float().mean()
+
+
+def reward_train_step(reward_model, batch, optimizer):
+    """One reward-model step: score chosen/rejected, pairwise loss, update. Returns loss."""
+    reward_model.train()
+    chosen = reward_model(batch["chosen"])
+    rejected = reward_model(batch["rejected"])
+    loss = pairwise_reward_loss(chosen, rejected)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return loss.item()
