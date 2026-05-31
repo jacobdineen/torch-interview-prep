@@ -133,15 +133,19 @@ Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per 
 ## Projects (multi-step builds)
 
 Alongside the standalone problems, **projects** are long ordered sequences of small
-steps that accumulate into one working artifact. Two are included (in pure NumPy):
+steps that accumulate into one working artifact. Three are included:
 
-- **tiny-gpt-from-scratch** — 166 steps / 8 parts: a character-level GPT (tokenizer,
+- **tiny-gpt-from-scratch** (NumPy) — 166 steps / 8 parts: a character-level GPT (tokenizer,
   NumPy/softmax foundations, data pipeline + bigram baseline, single-layer neural bigram,
   layer primitives with backprop, embeddings + single/multi-head self-attention,
   FFN/blocks/full model forward **and** backward, Adam + training loop + generation).
-- **tic-tac-toe-rl** — 87 steps / 6 parts: an RL lab from minimax to DQN (game engine,
+- **tic-tac-toe-rl** (NumPy) — 87 steps / 6 parts: an RL lab from minimax to DQN (game engine,
   random + minimax baselines, tabular Q-learning, self-play + evaluation, a from-scratch
   DQN with replay/target-net, and policy gradients — SARSA, REINFORCE, symmetry augmentation).
+- **rlhf-distilgpt2** (PyTorch + HuggingFace) — 65 steps / 8 parts: the full RLHF pipeline on
+  distilgpt2 (decoding, SFT, LoRA, reward modeling, PPO, and preference optimization — DPO,
+  IPO, KTO, ORPO, SimPO — plus evaluation and a chat interface). Needs `transformers` and
+  downloads distilgpt2 (~350MB) on first run; uses CUDA if available.
 
 Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
 like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
