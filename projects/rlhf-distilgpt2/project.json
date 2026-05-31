@@ -105,152 +105,152 @@
       "name": "build_synthetic_instruction_dataset",
       "part": 1,
       "points": 5,
-      "signature": "build_synthetic_instruction_dataset(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_synthetic_instruction_dataset(n)",
+      "doc": "A deterministic synthetic instruction dataset (simple arithmetic Q&A)."
     },
     {
       "id": "0010",
       "name": "format_example",
       "part": 1,
       "points": 5,
-      "signature": "format_example(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "format_example(example)",
+      "doc": "Normalize a raw example to {'prompt', 'response'} strings."
     },
     {
       "id": "0011",
       "name": "apply_template",
       "part": 1,
       "points": 5,
-      "signature": "apply_template(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "apply_template(formatted)",
+      "doc": "Wrap a formatted example in the instruction template. Returns\n{'prompt_text', 'full_text'} (full = prompt + response)."
     },
     {
       "id": "0012",
       "name": "tokenize_example",
       "part": 1,
       "points": 5,
-      "signature": "tokenize_example(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "tokenize_example(templated, tokenizer)",
+      "doc": "Tokenize the full text; record how many tokens belong to the prompt.\nReturns {'input_ids', 'prompt_len'}."
     },
     {
       "id": "0013",
       "name": "build_labels",
       "part": 1,
       "points": 5,
-      "signature": "build_labels(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_labels(input_ids)",
+      "doc": "Labels for causal LM are a copy of the input ids (loss shifts them)."
     },
     {
       "id": "0014",
       "name": "mask_prompt_labels",
       "part": 1,
       "points": 5,
-      "signature": "mask_prompt_labels(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "mask_prompt_labels(labels, prompt_len, ignore_index=-100)",
+      "doc": "Set the prompt-token labels to ignore_index so loss only covers the response."
     },
     {
       "id": "0015",
       "name": "pad_batch",
       "part": 1,
       "points": 5,
-      "signature": "pad_batch(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "pad_batch(sequences, pad_value)",
+      "doc": "Right-pad a list of variable-length id sequences to a (batch, maxlen) tensor."
     },
     {
       "id": "0016",
       "name": "make_attention_mask",
       "part": 1,
       "points": 5,
-      "signature": "make_attention_mask(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "make_attention_mask(input_ids, pad_id)",
+      "doc": "1 for real tokens, 0 for padding."
     },
     {
       "id": "0017",
       "name": "collate_lm_batch",
       "part": 1,
       "points": 5,
-      "signature": "collate_lm_batch(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "collate_lm_batch(tokenized_examples, pad_id, ignore_index=-100)",
+      "doc": "Pad a batch of tokenized examples into input_ids / labels / attention_mask\ntensors, masking prompt tokens and padding in the labels."
     },
     {
       "id": "0018",
       "name": "iterate_minibatches",
       "part": 1,
       "points": 5,
-      "signature": "iterate_minibatches(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "iterate_minibatches(data, batch_size, shuffle=False, generator=None)",
+      "doc": "Split ``data`` into minibatches (optionally shuffled). Returns a list of batches."
     },
     {
       "id": "0019",
       "name": "train_val_split",
       "part": 1,
       "points": 5,
-      "signature": "train_val_split(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_val_split(data, val_fraction)",
+      "doc": "Split into (train, val); the last ``val_fraction`` of examples are validation."
     },
     {
       "id": "0020",
       "name": "shift_logits_and_labels",
       "part": 2,
       "points": 5,
-      "signature": "shift_logits_and_labels(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "shift_logits_and_labels(logits, labels)",
+      "doc": "Align next-token prediction: drop the last logit and the first label.\n(B,T,V),(B,T) -> (B,T-1,V),(B,T-1)."
     },
     {
       "id": "0021",
       "name": "cross_entropy_loss",
       "part": 2,
       "points": 5,
-      "signature": "cross_entropy_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "cross_entropy_loss(logits, labels, ignore_index=-100)",
+      "doc": "Mean cross-entropy over all positions, ignoring ``ignore_index`` labels."
     },
     {
       "id": "0022",
       "name": "adamw_update",
       "part": 2,
       "points": 5,
-      "signature": "adamw_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adamw_update(param, grad, m, v, t, lr=0.001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01)",
+      "doc": "One AdamW step (decoupled weight decay) for one tensor. Returns (param, m, v)."
     },
     {
       "id": "0023",
       "name": "linear_warmup_schedule",
       "part": 2,
       "points": 5,
-      "signature": "linear_warmup_schedule(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "linear_warmup_schedule(step, warmup_steps, base_lr)",
+      "doc": "Linearly ramp the LR from 0 to base_lr over warmup_steps, then hold."
     },
     {
       "id": "0024",
       "name": "clip_grad_norm",
       "part": 2,
       "points": 5,
-      "signature": "clip_grad_norm(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "clip_grad_norm(grads, max_norm)",
+      "doc": "Scale a list of gradient tensors so their global L2 norm is at most max_norm."
     },
     {
       "id": "0025",
       "name": "accumulate_gradients",
       "part": 2,
       "points": 5,
-      "signature": "accumulate_gradients(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "accumulate_gradients(microbatch_grads)",
+      "doc": "Average a list of per-microbatch gradient lists into one gradient list."
     },
     {
       "id": "0026",
       "name": "sft_train_step",
       "part": 2,
       "points": 5,
-      "signature": "sft_train_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sft_train_step(model, batch, optimizer)",
+      "doc": "One supervised fine-tuning step (shifted next-token loss). Returns the loss value."
     },
     {
       "id": "0027",
       "name": "evaluate_loss",
       "part": 2,
       "points": 5,
-      "signature": "evaluate_loss(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "evaluate_loss(model, batches)",
+      "doc": "Mean SFT loss over a list of batches (no gradient)."
     },
     {
       "id": "0028",
