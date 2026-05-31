@@ -567,3 +567,219 @@ def deserialize_q_table_from_dict(d):
     """Inverse of serialize_q_table_to_dict."""
     return {tuple(int(x) for x in key.split(",")): np.array(vals, dtype=float)
             for key, vals in d.items()}
+
+
+# ============== Part 5 — Deep Q-Network Agent ==============
+
+def encode_board_flat_length_nine(board):
+    """Flatten the board to a length-9 float vector."""
+    return board.reshape(-1).astype(float)
+
+
+def encode_board_one_hot_length_eighteen(board):
+    """Two channels per cell: [is_X, is_O], flattened to length 18."""
+    flat = board.reshape(-1)
+    out = np.zeros(18)
+    for i, c in enumerate(flat):
+        if c == 1:
+            out[2 * i] = 1.0
+        elif c == -1:
+            out[2 * i + 1] = 1.0
+    return out
+
+
+def build_mlp_architecture(input_dim, hidden_dim, output_dim):
+    """Layer sizes for a 1-hidden-layer MLP: [input, hidden, output]."""
+    return [input_dim, hidden_dim, output_dim]
+
+
+def initialize_mlp_parameters(arch, rng):
+    """He-initialized parameters {W1,b1,W2,b2} for the architecture."""
+    i, h, o = arch
+    return {
+        "W1": rng.standard_normal((i, h)) * np.sqrt(2.0 / i),
+        "b1": np.zeros(h),
+        "W2": rng.standard_normal((h, o)) * np.sqrt(2.0 / h),
+        "b2": np.zeros(o),
+    }
+
+
+def mlp_forward_pass(params, x):
+    """Forward pass of the MLP: relu(x@W1+b1)@W2+b2. x is (batch, input_dim)."""
+    h = np.maximum(x @ params["W1"] + params["b1"], 0.0)
+    return h @ params["W2"] + params["b2"]
+
+
+def mask_illegal_actions_neg_inf(q_values, board):
+    """Set Q-values of illegal (occupied) cells to -inf so they're never chosen."""
+    masked = np.array(q_values, dtype=float)
+    legal = set(get_legal_moves(board))
+    for a in range(9):
+        if a not in legal:
+            masked[a] = -np.inf
+    return masked
+
+
+def argmax_action_from_q_values(q_values):
+    """The action with the highest Q-value."""
+    return int(np.argmax(q_values))
+
+
+def mse_loss_on_chosen_action(q_pred, actions, targets):
+    """Mean squared error on the taken action only (DQN updates that action).
+    q_pred (batch,9), actions (batch,), targets (batch,)."""
+    idx = np.arange(len(actions))
+    return float(np.mean((q_pred[idx, actions] - targets) ** 2))
+
+
+def mlp_backward_pass(params, x, actions, targets):
+    """Gradients of the chosen-action MSE loss. Returns {W1,b1,W2,b2}."""
+    z1 = x @ params["W1"] + params["b1"]
+    h = np.maximum(z1, 0.0)
+    q = h @ params["W2"] + params["b2"]
+    b = x.shape[0]
+    idx = np.arange(b)
+    dq = np.zeros_like(q)
+    dq[idx, actions] = 2.0 * (q[idx, actions] - targets) / b
+    dw2 = h.T @ dq
+    db2 = dq.sum(axis=0)
+    dh = dq @ params["W2"].T
+    dz1 = dh * (z1 > 0)
+    dw1 = x.T @ dz1
+    db1 = dz1.sum(axis=0)
+    return {"W1": dw1, "b1": db1, "W2": dw2, "b2": db2}
+
+
+def adam_update_step(params, grads, state, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+    """One Adam step over the parameter dict. ``state`` is None on the first call.
+    Returns (new_params, state)."""
+    b1, b2 = betas
+    if state is None:
+        state = {"m": {k: np.zeros_like(v) for k, v in params.items()},
+                 "v": {k: np.zeros_like(v) for k, v in params.items()}, "t": 0}
+    state["t"] += 1
+    t = state["t"]
+    new_params = {}
+    for k in params:
+        g = grads[k]
+        state["m"][k] = b1 * state["m"][k] + (1 - b1) * g
+        state["v"][k] = b2 * state["v"][k] + (1 - b2) * g ** 2
+        mhat = state["m"][k] / (1 - b1 ** t)
+        vhat = state["v"][k] / (1 - b2 ** t)
+        new_params[k] = params[k] - lr * mhat / (np.sqrt(vhat) + eps)
+    return new_params, state
+
+
+def create_replay_buffer():
+    """An empty replay buffer (list of transitions)."""
+    return []
+
+
+def append_transition_to_buffer(buffer, transition):
+    """Append a (state, action, reward, next_state, done) transition; return buffer."""
+    buffer.append(transition)
+    return buffer
+
+
+def cap_buffer_size_drop_oldest(buffer, max_size):
+    """Keep the buffer at most ``max_size`` by dropping the oldest transitions."""
+    while len(buffer) > max_size:
+        buffer.pop(0)
+    return buffer
+
+
+def sample_minibatch_from_buffer(buffer, batch_size, rng):
+    """Sample ``batch_size`` transitions uniformly (with replacement)."""
+    idx = rng.integers(0, len(buffer), size=batch_size)
+    return [buffer[i] for i in idx]
+
+
+def build_target_network_copy(params):
+    """A detached copy of the parameters for the target network."""
+    return {k: v.copy() for k, v in params.items()}
+
+
+def compute_target_q_with_target_network(target_params, next_states, rewards, dones, gamma):
+    """DQN targets: r + gamma * max_a Q_target(s') * (1 - done). Batched."""
+    qn = mlp_forward_pass(target_params, next_states)
+    return rewards + gamma * qn.max(axis=1) * (1.0 - dones)
+
+
+def sync_target_network_periodically(params, target_params, step, sync_every):
+    """Every ``sync_every`` steps, copy the online params into the target net."""
+    if step % sync_every == 0:
+        return build_target_network_copy(params)
+    return target_params
+
+
+def train_dqn_agent(n_episodes, rng):
+    """Train a DQN agent (X) vs a random opponent (O). Returns the online params."""
+    params = initialize_mlp_parameters(build_mlp_architecture(18, 64, 9), rng)
+    target = build_target_network_copy(params)
+    buffer = create_replay_buffer()
+    opt_state = None
+    epsilon, gamma, batch, sync_every, max_buf = 1.0, 0.99, 32, 250, 2000
+    stepc = 0
+    for _ in range(n_episodes):
+        board = create_empty_board()
+        while True:
+            s = encode_board_one_hot_length_eighteen(board)
+            if rng.random() < epsilon:
+                action = random_move_agent(board, rng)
+            else:
+                q = mlp_forward_pass(params, s[None, :])[0]
+                action = argmax_action_from_q_values(mask_illegal_actions_neg_inf(q, board))
+            board = place_move(board, action, 1)
+            status = get_game_status(board)
+            if status is not None:
+                reward, done = tic_tac_toe_reward(status, 1), 1.0
+            else:
+                board = place_move(board, random_move_agent(board, rng), -1)
+                status = get_game_status(board)
+                reward = tic_tac_toe_reward(status, 1) if status is not None else 0.0
+                done = 1.0 if status is not None else 0.0
+            ns_vec = encode_board_one_hot_length_eighteen(board)
+            buffer = append_transition_to_buffer(buffer, (s, action, reward, ns_vec, done))
+            buffer = cap_buffer_size_drop_oldest(buffer, max_buf)
+            stepc += 1
+            if len(buffer) >= batch:
+                mb = sample_minibatch_from_buffer(buffer, batch, rng)
+                states = np.array([t[0] for t in mb])
+                actions = np.array([t[1] for t in mb])
+                rewards = np.array([t[2] for t in mb])
+                next_states = np.array([t[3] for t in mb])
+                dones = np.array([t[4] for t in mb])
+                targets = compute_target_q_with_target_network(target, next_states, rewards, dones, gamma)
+                grads = mlp_backward_pass(params, states, actions, targets)
+                params, opt_state = adam_update_step(params, grads, opt_state, 1e-3)
+                target = sync_target_network_periodically(params, target, stepc, sync_every)
+            if done:
+                break
+        epsilon = max(0.1, epsilon * 0.9995)
+    return params
+
+
+def compare_dqn_tabular_random_minimax(dqn_params, q_table, n_games, rng):
+    """Win/loss/draw vs a random opponent for each agent (DQN, tabular, random).
+    Returns a dict keyed by agent name."""
+    def dqn_move(board):
+        q = mlp_forward_pass(dqn_params, encode_board_one_hot_length_eighteen(board)[None, :])[0]
+        return argmax_action_from_q_values(mask_illegal_actions_neg_inf(q, board))
+
+    def play_vs_random(move_fn):
+        statuses = []
+        for _ in range(n_games):
+            board = create_empty_board()
+            while get_game_status(board) is None:
+                board = place_move(board, move_fn(board), 1)
+                if get_game_status(board) is not None:
+                    break
+                board = place_move(board, random_move_agent(board, rng), -1)
+            statuses.append(get_game_status(board))
+        return compute_batched_outcome_stats(statuses, 1)
+
+    return {
+        "dqn": play_vs_random(dqn_move),
+        "tabular": play_vs_random(lambda b: greedy_argmax_over_legal_actions(q_table, b)),
+        "random": play_vs_random(lambda b: random_move_agent(b, rng)),
+    }

@@ -529,152 +529,152 @@
       "name": "encode_board_flat_length_nine",
       "part": 4,
       "points": 5,
-      "signature": "encode_board_flat_length_nine(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "encode_board_flat_length_nine(board)",
+      "doc": "Flatten the board to a length-9 float vector."
     },
     {
       "id": "0064",
       "name": "encode_board_one_hot_length_eighteen",
       "part": 4,
       "points": 5,
-      "signature": "encode_board_one_hot_length_eighteen(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "encode_board_one_hot_length_eighteen(board)",
+      "doc": "Two channels per cell: [is_X, is_O], flattened to length 18."
     },
     {
       "id": "0065",
       "name": "build_mlp_architecture",
       "part": 4,
       "points": 5,
-      "signature": "build_mlp_architecture(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_mlp_architecture(input_dim, hidden_dim, output_dim)",
+      "doc": "Layer sizes for a 1-hidden-layer MLP: [input, hidden, output]."
     },
     {
       "id": "0066",
       "name": "initialize_mlp_parameters",
       "part": 4,
       "points": 5,
-      "signature": "initialize_mlp_parameters(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "initialize_mlp_parameters(arch, rng)",
+      "doc": "He-initialized parameters {W1,b1,W2,b2} for the architecture."
     },
     {
       "id": "0067",
       "name": "mlp_forward_pass",
       "part": 4,
       "points": 5,
-      "signature": "mlp_forward_pass(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "mlp_forward_pass(params, x)",
+      "doc": "Forward pass of the MLP: relu(x@W1+b1)@W2+b2. x is (batch, input_dim)."
     },
     {
       "id": "0068",
       "name": "mask_illegal_actions_neg_inf",
       "part": 4,
       "points": 5,
-      "signature": "mask_illegal_actions_neg_inf(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "mask_illegal_actions_neg_inf(q_values, board)",
+      "doc": "Set Q-values of illegal (occupied) cells to -inf so they're never chosen."
     },
     {
       "id": "0069",
       "name": "argmax_action_from_q_values",
       "part": 4,
       "points": 5,
-      "signature": "argmax_action_from_q_values(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "argmax_action_from_q_values(q_values)",
+      "doc": "The action with the highest Q-value."
     },
     {
       "id": "0070",
       "name": "mse_loss_on_chosen_action",
       "part": 4,
       "points": 5,
-      "signature": "mse_loss_on_chosen_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "mse_loss_on_chosen_action(q_pred, actions, targets)",
+      "doc": "Mean squared error on the taken action only (DQN updates that action).\nq_pred (batch,9), actions (batch,), targets (batch,)."
     },
     {
       "id": "0071",
       "name": "mlp_backward_pass",
       "part": 4,
       "points": 5,
-      "signature": "mlp_backward_pass(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "mlp_backward_pass(params, x, actions, targets)",
+      "doc": "Gradients of the chosen-action MSE loss. Returns {W1,b1,W2,b2}."
     },
     {
       "id": "0072",
       "name": "adam_update_step",
       "part": 4,
       "points": 5,
-      "signature": "adam_update_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "adam_update_step(params, grads, state, lr=0.001, betas=(0.9, 0.999), eps=1e-08)",
+      "doc": "One Adam step over the parameter dict. ``state`` is None on the first call.\nReturns (new_params, state)."
     },
     {
       "id": "0073",
       "name": "create_replay_buffer",
       "part": 4,
       "points": 5,
-      "signature": "create_replay_buffer(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "create_replay_buffer()",
+      "doc": "An empty replay buffer (list of transitions)."
     },
     {
       "id": "0074",
       "name": "append_transition_to_buffer",
       "part": 4,
       "points": 5,
-      "signature": "append_transition_to_buffer(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "append_transition_to_buffer(buffer, transition)",
+      "doc": "Append a (state, action, reward, next_state, done) transition; return buffer."
     },
     {
       "id": "0075",
       "name": "cap_buffer_size_drop_oldest",
       "part": 4,
       "points": 5,
-      "signature": "cap_buffer_size_drop_oldest(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "cap_buffer_size_drop_oldest(buffer, max_size)",
+      "doc": "Keep the buffer at most ``max_size`` by dropping the oldest transitions."
     },
     {
       "id": "0076",
       "name": "sample_minibatch_from_buffer",
       "part": 4,
       "points": 5,
-      "signature": "sample_minibatch_from_buffer(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sample_minibatch_from_buffer(buffer, batch_size, rng)",
+      "doc": "Sample ``batch_size`` transitions uniformly (with replacement)."
     },
     {
       "id": "0077",
       "name": "build_target_network_copy",
       "part": 4,
       "points": 5,
-      "signature": "build_target_network_copy(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "build_target_network_copy(params)",
+      "doc": "A detached copy of the parameters for the target network."
     },
     {
       "id": "0078",
       "name": "compute_target_q_with_target_network",
       "part": 4,
       "points": 5,
-      "signature": "compute_target_q_with_target_network(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_target_q_with_target_network(target_params, next_states, rewards, dones, gamma)",
+      "doc": "DQN targets: r + gamma * max_a Q_target(s') * (1 - done). Batched."
     },
     {
       "id": "0079",
       "name": "sync_target_network_periodically",
       "part": 4,
       "points": 5,
-      "signature": "sync_target_network_periodically(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "sync_target_network_periodically(params, target_params, step, sync_every)",
+      "doc": "Every ``sync_every`` steps, copy the online params into the target net."
     },
     {
       "id": "0080",
       "name": "train_dqn_agent",
       "part": 4,
       "points": 5,
-      "signature": "train_dqn_agent(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_dqn_agent(n_episodes, rng)",
+      "doc": "Train a DQN agent (X) vs a random opponent (O). Returns the online params."
     },
     {
       "id": "0081",
       "name": "compare_dqn_tabular_random_minimax",
       "part": 4,
       "points": 5,
-      "signature": "compare_dqn_tabular_random_minimax(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compare_dqn_tabular_random_minimax(dqn_params, q_table, n_games, rng)",
+      "doc": "Win/loss/draw vs a random opponent for each agent (DQN, tabular, random).\nReturns a dict keyed by agent name."
     },
     {
       "id": "0082",

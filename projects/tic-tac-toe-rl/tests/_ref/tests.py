@@ -558,3 +558,187 @@ def test_0062_deserialize_q_table_from_dict(ns):
     q2 = ns["deserialize_q_table_from_dict"](d)
     with step("round-trips the Q-table"):
         expect_allclose(ns["get_q_value"](q2, (1, 0, -1, 0, 1, 0, 0, 0, -1), 4), 1.5)
+
+
+# --------------------- Part 5 — Deep Q-Network Agent ---------------------
+
+def test_0063_encode_board_flat_length_nine(ns):
+    b = _board([[1, 0, -1], [0, 1, 0], [0, 0, -1]])
+    with step("length-9 flat float vector"):
+        expect_shape(ns["encode_board_flat_length_nine"](b), (9,))
+        expect_allclose(ns["encode_board_flat_length_nine"](b), [1, 0, -1, 0, 1, 0, 0, 0, -1])
+
+
+def test_0064_encode_board_one_hot_length_eighteen(ns):
+    b = _board([[1, -1, 0], [0, 0, 0], [0, 0, 0]])
+    out = ns["encode_board_one_hot_length_eighteen"](b)
+    with step("length 18: [is_X, is_O] per cell"):
+        expect_shape(out, (18,))
+        expect_allclose(out[0:2], [1, 0])   # cell 0 = X
+        expect_allclose(out[2:4], [0, 1])   # cell 1 = O
+        expect_allclose(out[4:6], [0, 0])   # cell 2 = empty
+
+
+def test_0065_build_mlp_architecture(ns):
+    with step("layer sizes"):
+        expect_eq(list(ns["build_mlp_architecture"](18, 64, 9)), [18, 64, 9])
+
+
+def test_0066_initialize_mlp_parameters(ns):
+    p = ns["initialize_mlp_parameters"]([18, 64, 9], np.random.default_rng(0))
+    with step("shapes W1/b1/W2/b2"):
+        expect_shape(p["W1"], (18, 64))
+        expect_shape(p["b1"], (64,))
+        expect_shape(p["W2"], (64, 9))
+        expect_shape(p["b2"], (9,))
+
+
+def test_0067_mlp_forward_pass(ns):
+    p = ns["initialize_mlp_parameters"]([18, 8, 9], np.random.default_rng(1))
+    x = np.random.default_rng(2).standard_normal((4, 18))
+    with step("(batch, 9) output matching the manual computation"):
+        out = ns["mlp_forward_pass"](p, x)
+        expect_shape(out, (4, 9))
+        manual = np.maximum(x @ p["W1"] + p["b1"], 0) @ p["W2"] + p["b2"]
+        expect_allclose(out, manual)
+
+
+def test_0068_mask_illegal_actions_neg_inf(ns):
+    b = _board([[1, 0, 0], [0, 0, 0], [0, 0, 0]])  # cell 0 occupied
+    q = np.ones(9)
+    masked = ns["mask_illegal_actions_neg_inf"](q, b)
+    with step("occupied cells become -inf"):
+        expect_true(masked[0] == -np.inf, "illegal action should be -inf")
+        expect_true(masked[1] == 1.0, "legal action unchanged")
+
+
+def test_0069_argmax_action_from_q_values(ns):
+    with step("argmax"):
+        expect_eq(ns["argmax_action_from_q_values"](np.array([0.0, 5.0, 2.0, -np.inf])), 1)
+
+
+def test_0070_mse_loss_on_chosen_action(ns):
+    q = np.array([[1.0, 2.0, 3.0], [0.0, 0.0, 0.0]])
+    actions = np.array([0, 2])
+    targets = np.array([2.0, 1.0])
+    with step("MSE on the chosen action"):
+        expect_allclose(ns["mse_loss_on_chosen_action"](q, actions, targets),
+                        np.mean([(1.0 - 2.0) ** 2, (0.0 - 1.0) ** 2]))
+
+
+def test_0071_mlp_backward_pass(ns):
+    rng = np.random.default_rng(71)
+    params = ns["initialize_mlp_parameters"]([18, 8, 9], rng)
+    x = rng.standard_normal((5, 18))
+    actions = rng.integers(0, 9, size=5)
+    targets = rng.standard_normal(5)
+    grads = ns["mlp_backward_pass"](params, x, actions, targets)
+
+    def loss_with(key, val):
+        p = {**params, key: val}
+        return ns["mse_loss_on_chosen_action"](ns["mlp_forward_pass"](p, x), actions, targets)
+
+    with step("all parameter gradients pass a finite-difference check"):
+        for k in ("W1", "b1", "W2", "b2"):
+            grad_check(lambda v, _k=k: loss_with(_k, v), params[k], 1.0, grads[k], name=f"d{k}")
+
+
+def test_0072_adam_update_step(ns):
+    # Minimize (x - 3)^2 with Adam; x should approach 3.
+    params = {"x": np.array([0.0])}
+    state = None
+    for _ in range(400):
+        grads = {"x": 2.0 * (params["x"] - 3.0)}
+        params, state = ns["adam_update_step"](params, grads, state, lr=0.1)
+    with step("Adam minimizes a simple quadratic"):
+        expect_true(abs(params["x"][0] - 3.0) < 0.1, f"x={params['x'][0]}")
+
+
+def test_0073_create_replay_buffer(ns):
+    with step("empty"):
+        expect_eq(len(ns["create_replay_buffer"]()), 0)
+
+
+def test_0074_append_transition_to_buffer(ns):
+    buf = ns["create_replay_buffer"]()
+    ns["append_transition_to_buffer"](buf, ("s", 0, 1.0, "s2", 1.0))
+    with step("grows by one"):
+        expect_eq(len(buf), 1)
+
+
+def test_0075_cap_buffer_size_drop_oldest(ns):
+    buf = [i for i in range(10)]
+    ns["cap_buffer_size_drop_oldest"](buf, 4)
+    with step("keeps the newest max_size"):
+        expect_eq(list(buf), [6, 7, 8, 9])
+
+
+def test_0076_sample_minibatch_from_buffer(ns):
+    buf = [(i,) for i in range(20)]
+    mb = ns["sample_minibatch_from_buffer"](buf, 8, np.random.default_rng(0))
+    with step("returns batch_size transitions from the buffer"):
+        expect_eq(len(mb), 8)
+        expect_true(all(t in buf for t in mb), "samples must come from the buffer")
+
+
+def test_0077_build_target_network_copy(ns):
+    p = ns["initialize_mlp_parameters"]([18, 8, 9], np.random.default_rng(0))
+    t = ns["build_target_network_copy"](p)
+    with step("equal values but a distinct array (detached)"):
+        expect_allclose(t["W1"], p["W1"])
+        t["W1"][0, 0] += 1.0
+        expect_true(t["W1"][0, 0] != p["W1"][0, 0], "should be a copy, not a view")
+
+
+def test_0078_compute_target_q_with_target_network(ns):
+    tp = ns["initialize_mlp_parameters"]([18, 8, 9], np.random.default_rng(0))
+    ns_states = np.random.default_rng(1).standard_normal((3, 18))
+    rewards = np.array([1.0, 0.0, -1.0])
+    dones = np.array([1.0, 0.0, 0.0])
+    out = ns["compute_target_q_with_target_network"](tp, ns_states, rewards, dones, 0.99)
+    qn = ns["mlp_forward_pass"](tp, ns_states)
+    with step("r + gamma*max*(1-done); terminal uses reward only"):
+        expect_allclose(out[0], 1.0)  # done -> just reward
+        expect_allclose(out[1], 0.0 + 0.99 * qn[1].max())
+        expect_allclose(out[2], -1.0 + 0.99 * qn[2].max())
+
+
+def test_0079_sync_target_network_periodically(ns):
+    p = ns["initialize_mlp_parameters"]([18, 8, 9], np.random.default_rng(0))
+    old = ns["build_target_network_copy"](p)
+    with step("copies on sync step, otherwise unchanged"):
+        synced = ns["sync_target_network_periodically"](p, old, 250, 250)
+        expect_allclose(synced["W1"], p["W1"])
+        same = ns["sync_target_network_periodically"](p, old, 251, 250)
+        expect_true(same is old, "should return the existing target between syncs")
+
+
+def test_0080_train_dqn_agent(ns):
+    rng = np.random.default_rng(0)
+    params = ns["train_dqn_agent"](4000, rng)
+    wins = losses = 0
+    for _ in range(200):
+        board = ns["create_empty_board"]()
+        while ns["get_game_status"](board) is None:
+            q = ns["mlp_forward_pass"](params, ns["encode_board_one_hot_length_eighteen"](board)[None, :])[0]
+            a = ns["argmax_action_from_q_values"](ns["mask_illegal_actions_neg_inf"](q, board))
+            board = ns["place_move"](board, a, 1)
+            if ns["get_game_status"](board) is not None:
+                break
+            board = ns["place_move"](board, ns["random_move_agent"](board, rng), -1)
+        s = ns["get_game_status"](board)
+        wins += s == 1
+        losses += s == -1
+    with step("trained DQN beats random more than it loses"):
+        expect_true(wins > losses, f"DQN should outperform random: wins={wins} losses={losses}")
+
+
+def test_0081_compare_dqn_tabular_random_minimax(ns):
+    rng = np.random.default_rng(1)
+    dqn = ns["train_dqn_agent"](1500, rng)
+    q, _ = ns["train_q_learning_agent"](1500, 0.2, 0.99, 0.2, rng)
+    out = ns["compare_dqn_tabular_random_minimax"](dqn, q, 50, rng)
+    with step("reports stats per agent; tabular beats random"):
+        for key in ("dqn", "tabular", "random"):
+            expect_allclose(out[key]["win"] + out[key]["loss"] + out[key]["draw"], 1.0)
+        expect_true(out["tabular"]["win"] > out["random"]["win"], "tabular should beat random more")
