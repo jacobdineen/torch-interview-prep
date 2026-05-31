@@ -1,0 +1,560 @@
+{
+  "name": "rlhf-distilgpt2",
+  "title": "RLHF from Scratch on DistilGPT2",
+  "parts": [
+    {
+      "title": "Model Setup and Decoding Strategies",
+      "description": "Load distilgpt2, sanity-check generation, and implement greedy/temperature/top-k/top-p decoding."
+    },
+    {
+      "title": "SFT Data Pipeline",
+      "description": "A synthetic instruction dataset plus formatting, tokenization, label masking, padding, batching, splits."
+    },
+    {
+      "title": "SFT Training Loop",
+      "description": "Shifted next-token loss, AdamW, warmup, grad clipping, accumulation, train/eval steps."
+    },
+    {
+      "title": "LoRA Adapters",
+      "description": "Low-rank adapters: the LoRA delta, forward, init, freezing, counting, and merge-back."
+    },
+    {
+      "title": "Reward Modeling",
+      "description": "A synthetic preference dataset and a reward head with pairwise / BCE losses and accuracy."
+    },
+    {
+      "title": "PPO-Based RLHF",
+      "description": "PPO ingredients: log-probs, KL penalty, returns, GAE, clipped surrogate, value loss, entropy, ppo_loss."
+    },
+    {
+      "title": "Preference Optimization Alternatives",
+      "description": "Reference-based and reference-free preference losses: DPO, IPO, KTO, ORPO, SimPO."
+    },
+    {
+      "title": "Evaluation and Chat Interface",
+      "description": "Held-out generation, reward scoring, win rate, token streaming, stop-token handling, and chat."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "load_distilgpt2_tokenizer",
+      "part": 0,
+      "points": 5,
+      "signature": "load_distilgpt2_tokenizer()",
+      "doc": "Load the distilgpt2 tokenizer."
+    },
+    {
+      "id": "0002",
+      "name": "load_distilgpt2_model",
+      "part": 0,
+      "points": 5,
+      "signature": "load_distilgpt2_model()",
+      "doc": "Load the distilgpt2 causal-LM model."
+    },
+    {
+      "id": "0003",
+      "name": "set_pad_token_to_eos",
+      "part": 0,
+      "points": 5,
+      "signature": "set_pad_token_to_eos(tokenizer)",
+      "doc": "GPT-2 has no pad token; reuse the EOS token for padding. Returns the tokenizer."
+    },
+    {
+      "id": "0004",
+      "name": "generate_and_decode",
+      "part": 0,
+      "points": 5,
+      "signature": "generate_and_decode(model, tokenizer, prompt, max_new_tokens)",
+      "doc": "Greedy-generate a continuation of ``prompt`` and return the decoded string."
+    },
+    {
+      "id": "0005",
+      "name": "greedy_decode",
+      "part": 0,
+      "points": 5,
+      "signature": "greedy_decode(logits)",
+      "doc": "Greedy next-token id(s): argmax over the vocabulary axis."
+    },
+    {
+      "id": "0006",
+      "name": "sample_with_temperature",
+      "part": 0,
+      "points": 5,
+      "signature": "sample_with_temperature(logits, temperature, generator=None)",
+      "doc": "Sample a token id from softmax(logits / temperature)."
+    },
+    {
+      "id": "0007",
+      "name": "top_k_filter",
+      "part": 0,
+      "points": 5,
+      "signature": "top_k_filter(logits, k)",
+      "doc": "Keep the top-k logits per row; set the rest to -inf."
+    },
+    {
+      "id": "0008",
+      "name": "top_p_filter",
+      "part": 0,
+      "points": 5,
+      "signature": "top_p_filter(logits, p)",
+      "doc": "Nucleus filtering: keep the smallest set of tokens whose cumulative\nprobability reaches ``p``; set the rest to -inf."
+    },
+    {
+      "id": "0009",
+      "name": "build_synthetic_instruction_dataset",
+      "part": 1,
+      "points": 5,
+      "signature": "build_synthetic_instruction_dataset(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0010",
+      "name": "format_example",
+      "part": 1,
+      "points": 5,
+      "signature": "format_example(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0011",
+      "name": "apply_template",
+      "part": 1,
+      "points": 5,
+      "signature": "apply_template(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0012",
+      "name": "tokenize_example",
+      "part": 1,
+      "points": 5,
+      "signature": "tokenize_example(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0013",
+      "name": "build_labels",
+      "part": 1,
+      "points": 5,
+      "signature": "build_labels(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0014",
+      "name": "mask_prompt_labels",
+      "part": 1,
+      "points": 5,
+      "signature": "mask_prompt_labels(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0015",
+      "name": "pad_batch",
+      "part": 1,
+      "points": 5,
+      "signature": "pad_batch(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0016",
+      "name": "make_attention_mask",
+      "part": 1,
+      "points": 5,
+      "signature": "make_attention_mask(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0017",
+      "name": "collate_lm_batch",
+      "part": 1,
+      "points": 5,
+      "signature": "collate_lm_batch(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0018",
+      "name": "iterate_minibatches",
+      "part": 1,
+      "points": 5,
+      "signature": "iterate_minibatches(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0019",
+      "name": "train_val_split",
+      "part": 1,
+      "points": 5,
+      "signature": "train_val_split(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0020",
+      "name": "shift_logits_and_labels",
+      "part": 2,
+      "points": 5,
+      "signature": "shift_logits_and_labels(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0021",
+      "name": "cross_entropy_loss",
+      "part": 2,
+      "points": 5,
+      "signature": "cross_entropy_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0022",
+      "name": "adamw_update",
+      "part": 2,
+      "points": 5,
+      "signature": "adamw_update(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0023",
+      "name": "linear_warmup_schedule",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_warmup_schedule(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0024",
+      "name": "clip_grad_norm",
+      "part": 2,
+      "points": 5,
+      "signature": "clip_grad_norm(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0025",
+      "name": "accumulate_gradients",
+      "part": 2,
+      "points": 5,
+      "signature": "accumulate_gradients(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0026",
+      "name": "sft_train_step",
+      "part": 2,
+      "points": 5,
+      "signature": "sft_train_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0027",
+      "name": "evaluate_loss",
+      "part": 2,
+      "points": 5,
+      "signature": "evaluate_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0028",
+      "name": "lora_delta",
+      "part": 3,
+      "points": 5,
+      "signature": "lora_delta(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0029",
+      "name": "lora_linear_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "lora_linear_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0030",
+      "name": "init_lora_weights",
+      "part": 3,
+      "points": 5,
+      "signature": "init_lora_weights(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0031",
+      "name": "freeze_base_params",
+      "part": 3,
+      "points": 5,
+      "signature": "freeze_base_params(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0032",
+      "name": "count_trainable_params",
+      "part": 3,
+      "points": 5,
+      "signature": "count_trainable_params(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0033",
+      "name": "merge_lora",
+      "part": 3,
+      "points": 5,
+      "signature": "merge_lora(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0034",
+      "name": "build_synthetic_preference_dataset",
+      "part": 4,
+      "points": 5,
+      "signature": "build_synthetic_preference_dataset(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0035",
+      "name": "format_preference",
+      "part": 4,
+      "points": 5,
+      "signature": "format_preference(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0036",
+      "name": "reward_head_forward",
+      "part": 4,
+      "points": 5,
+      "signature": "reward_head_forward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0037",
+      "name": "pairwise_reward_loss",
+      "part": 4,
+      "points": 5,
+      "signature": "pairwise_reward_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0038",
+      "name": "reward_bce_loss",
+      "part": 4,
+      "points": 5,
+      "signature": "reward_bce_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0039",
+      "name": "pairwise_accuracy",
+      "part": 4,
+      "points": 5,
+      "signature": "pairwise_accuracy(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0040",
+      "name": "reward_train_step",
+      "part": 4,
+      "points": 5,
+      "signature": "reward_train_step(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0041",
+      "name": "sequence_logprob",
+      "part": 5,
+      "points": 5,
+      "signature": "sequence_logprob(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0042",
+      "name": "per_token_kl",
+      "part": 5,
+      "points": 5,
+      "signature": "per_token_kl(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0043",
+      "name": "compute_returns",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_returns(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0044",
+      "name": "gae_advantages",
+      "part": 5,
+      "points": 5,
+      "signature": "gae_advantages(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0045",
+      "name": "policy_ratio",
+      "part": 5,
+      "points": 5,
+      "signature": "policy_ratio(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0046",
+      "name": "clipped_surrogate",
+      "part": 5,
+      "points": 5,
+      "signature": "clipped_surrogate(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0047",
+      "name": "value_function_loss",
+      "part": 5,
+      "points": 5,
+      "signature": "value_function_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0048",
+      "name": "entropy_bonus",
+      "part": 5,
+      "points": 5,
+      "signature": "entropy_bonus(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0049",
+      "name": "ppo_loss",
+      "part": 5,
+      "points": 5,
+      "signature": "ppo_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0050",
+      "name": "kl_penalized_reward",
+      "part": 5,
+      "points": 5,
+      "signature": "kl_penalized_reward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0051",
+      "name": "batch_sequence_logprob",
+      "part": 5,
+      "points": 5,
+      "signature": "batch_sequence_logprob(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0052",
+      "name": "dpo_logratios",
+      "part": 6,
+      "points": 5,
+      "signature": "dpo_logratios(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0053",
+      "name": "dpo_ref_logratios",
+      "part": 6,
+      "points": 5,
+      "signature": "dpo_ref_logratios(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0054",
+      "name": "dpo_loss",
+      "part": 6,
+      "points": 5,
+      "signature": "dpo_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0055",
+      "name": "ipo_loss",
+      "part": 6,
+      "points": 5,
+      "signature": "ipo_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0056",
+      "name": "kto_loss",
+      "part": 6,
+      "points": 5,
+      "signature": "kto_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0057",
+      "name": "orpo_loss",
+      "part": 6,
+      "points": 5,
+      "signature": "orpo_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0058",
+      "name": "simpo_loss",
+      "part": 6,
+      "points": 5,
+      "signature": "simpo_loss(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0059",
+      "name": "build_eval_prompt_set",
+      "part": 7,
+      "points": 5,
+      "signature": "build_eval_prompt_set(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0060",
+      "name": "generate_completions",
+      "part": 7,
+      "points": 5,
+      "signature": "generate_completions(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0061",
+      "name": "score_with_reward",
+      "part": 7,
+      "points": 5,
+      "signature": "score_with_reward(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0062",
+      "name": "win_rate",
+      "part": 7,
+      "points": 5,
+      "signature": "win_rate(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0063",
+      "name": "stream_tokens",
+      "part": 7,
+      "points": 5,
+      "signature": "stream_tokens(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0064",
+      "name": "apply_stop_tokens",
+      "part": 7,
+      "points": 5,
+      "signature": "apply_stop_tokens(*args)",
+      "doc": "TODO: not yet built."
+    },
+    {
+      "id": "0065",
+      "name": "chat",
+      "part": 7,
+      "points": 5,
+      "signature": "chat(*args)",
+      "doc": "TODO: not yet built."
+    }
+  ]
+}
