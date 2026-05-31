@@ -286,3 +286,182 @@ def play_minimax_vs_minimax_matches(n_games):
             player = switch_player(player)
         results.append(get_game_status(board))
     return results
+
+
+# ============== Part 3 — Tabular Q-Learning Foundations ==============
+
+def encode_board_state_key(board):
+    """A hashable key for a board: the tuple of its 9 cells (row-major)."""
+    return tuple(int(x) for x in board.reshape(-1))
+
+
+def canonical_board_key(board):
+    """Canonical key under the board's 8 symmetries (4 rotations x mirror): the
+    lexicographically smallest cell-tuple over all transforms. Shrinks the state space."""
+    keys = []
+    b = board
+    for _ in range(4):
+        keys.append(tuple(int(x) for x in b.reshape(-1)))
+        keys.append(tuple(int(x) for x in np.fliplr(b).reshape(-1)))
+        b = np.rot90(b)
+    return min(keys)
+
+
+def initialize_q_table():
+    """An empty Q-table (dict mapping state key -> length-9 action-value array)."""
+    return {}
+
+
+def get_q_value(q_table, state_key, action):
+    """Q(state, action), defaulting to 0.0 for unseen states."""
+    if state_key not in q_table:
+        return 0.0
+    return float(q_table[state_key][action])
+
+
+def set_q_value(q_table, state_key, action, value):
+    """Set Q(state, action) (creating a zero row for unseen states); return the table."""
+    if state_key not in q_table:
+        q_table[state_key] = np.zeros(9)
+    q_table[state_key][action] = value
+    return q_table
+
+
+def choose_learning_rate_alpha():
+    """A sensible tabular learning rate."""
+    return 0.1
+
+
+def choose_discount_factor_gamma():
+    """A sensible discount factor."""
+    return 0.99
+
+
+def choose_initial_epsilon():
+    """Start fully exploratory."""
+    return 1.0
+
+
+def epsilon_decay_schedule(epsilon, decay, min_epsilon):
+    """Multiplicative epsilon decay with a floor."""
+    return max(min_epsilon, epsilon * decay)
+
+
+def epsilon_greedy_explore_move(board, rng):
+    """The explore branch: a uniformly random legal move."""
+    return random_move_agent(board, rng)
+
+
+def greedy_argmax_over_legal_actions(q_table, board):
+    """The legal action with the highest Q-value (first if tied)."""
+    legal = get_legal_moves(board)
+    key = encode_board_state_key(board)
+    qs = [get_q_value(q_table, key, a) for a in legal]
+    return legal[int(np.argmax(qs))]
+
+
+def random_tie_break_argmax(values, rng):
+    """Argmax index with ties broken uniformly at random."""
+    values = np.asarray(values)
+    ties = np.flatnonzero(values == values.max())
+    return int(rng.choice(ties))
+
+
+def epsilon_greedy_select_action(q_table, board, epsilon, rng):
+    """With prob epsilon explore a random legal move, else act greedily."""
+    if rng.random() < epsilon:
+        return epsilon_greedy_explore_move(board, rng)
+    return greedy_argmax_over_legal_actions(q_table, board)
+
+
+def tic_tac_toe_reward(status, player):
+    """Reward for ``player`` given a game status: +1 win, -1 loss, 0 otherwise."""
+    if status == player:
+        return 1.0
+    if status == -player:
+        return -1.0
+    return 0.0
+
+
+def q_learning_nonterminal_target(reward, gamma, next_max_q):
+    """TD target with bootstrapping: r + gamma * max_a' Q(s', a')."""
+    return reward + gamma * next_max_q
+
+
+def q_learning_terminal_target(reward):
+    """TD target at a terminal state: just the reward (no bootstrap)."""
+    return reward
+
+
+def q_learning_update(q_old, alpha, target):
+    """Q-learning update: Q <- Q + alpha * (target - Q)."""
+    return q_old + alpha * (target - q_old)
+
+
+def episode_reset_game():
+    """Start-of-episode board."""
+    return create_empty_board()
+
+
+def episode_agent_pick_action(q_table, board, epsilon, rng):
+    """The agent's action for this step (epsilon-greedy)."""
+    return epsilon_greedy_select_action(q_table, board, epsilon, rng)
+
+
+def episode_apply_action(board, action, player):
+    """Apply an action; return (next_board, status)."""
+    nb = place_move(board, action, player)
+    return nb, get_game_status(nb)
+
+
+def episode_apply_q_update(q_table, state_key, action, target, alpha):
+    """Apply one Q-learning update for (state_key, action) toward ``target``."""
+    old = get_q_value(q_table, state_key, action)
+    return set_q_value(q_table, state_key, action, q_learning_update(old, alpha, target))
+
+
+def episode_check_terminate(status):
+    """Whether the episode has ended."""
+    return status is not None
+
+
+def train_q_learning_agent(n_episodes, alpha, gamma, epsilon, rng):
+    """Train a Q-learning agent (X) against a random opponent (O). Returns
+    (q_table, episode_rewards) where rewards are the agent's terminal rewards."""
+    q_table = initialize_q_table()
+    rewards = []
+    for _ in range(n_episodes):
+        board = episode_reset_game()
+        while True:
+            state_key = encode_board_state_key(board)
+            action = episode_agent_pick_action(q_table, board, epsilon, rng)
+            board, status = episode_apply_action(board, action, 1)
+            if episode_check_terminate(status):
+                r = tic_tac_toe_reward(status, 1)
+                q_table = episode_apply_q_update(q_table, state_key, action,
+                                                 q_learning_terminal_target(r), alpha)
+                rewards.append(r)
+                break
+            # opponent (random) replies
+            board, status = episode_apply_action(board, random_move_agent(board, rng), -1)
+            if episode_check_terminate(status):
+                r = tic_tac_toe_reward(status, 1)
+                q_table = episode_apply_q_update(q_table, state_key, action,
+                                                 q_learning_terminal_target(r), alpha)
+                rewards.append(r)
+                break
+            next_key = encode_board_state_key(board)
+            next_max = max(get_q_value(q_table, next_key, a) for a in get_legal_moves(board))
+            target = q_learning_nonterminal_target(0.0, gamma, next_max)
+            q_table = episode_apply_q_update(q_table, state_key, action, target, alpha)
+    return q_table, rewards
+
+
+def compute_batched_outcome_stats(statuses, perspective):
+    """Win/loss/draw rates for ``perspective`` (+1 or -1) over a list of statuses."""
+    n = len(statuses)
+    return {
+        "win": sum(s == perspective for s in statuses) / n,
+        "loss": sum(s == -perspective for s in statuses) / n,
+        "draw": sum(s == 0 for s in statuses) / n,
+    }

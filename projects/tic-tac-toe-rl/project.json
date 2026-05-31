@@ -265,192 +265,192 @@
       "name": "encode_board_state_key",
       "part": 2,
       "points": 5,
-      "signature": "encode_board_state_key(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "encode_board_state_key(board)",
+      "doc": "A hashable key for a board: the tuple of its 9 cells (row-major)."
     },
     {
       "id": "0031",
       "name": "canonical_board_key",
       "part": 2,
       "points": 5,
-      "signature": "canonical_board_key(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "canonical_board_key(board)",
+      "doc": "Canonical key under the board's 8 symmetries (4 rotations x mirror): the\nlexicographically smallest cell-tuple over all transforms. Shrinks the state space."
     },
     {
       "id": "0032",
       "name": "initialize_q_table",
       "part": 2,
       "points": 5,
-      "signature": "initialize_q_table(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "initialize_q_table()",
+      "doc": "An empty Q-table (dict mapping state key -> length-9 action-value array)."
     },
     {
       "id": "0033",
       "name": "get_q_value",
       "part": 2,
       "points": 5,
-      "signature": "get_q_value(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "get_q_value(q_table, state_key, action)",
+      "doc": "Q(state, action), defaulting to 0.0 for unseen states."
     },
     {
       "id": "0034",
       "name": "set_q_value",
       "part": 2,
       "points": 5,
-      "signature": "set_q_value(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "set_q_value(q_table, state_key, action, value)",
+      "doc": "Set Q(state, action) (creating a zero row for unseen states); return the table."
     },
     {
       "id": "0035",
       "name": "choose_learning_rate_alpha",
       "part": 2,
       "points": 5,
-      "signature": "choose_learning_rate_alpha(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "choose_learning_rate_alpha()",
+      "doc": "A sensible tabular learning rate."
     },
     {
       "id": "0036",
       "name": "choose_discount_factor_gamma",
       "part": 2,
       "points": 5,
-      "signature": "choose_discount_factor_gamma(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "choose_discount_factor_gamma()",
+      "doc": "A sensible discount factor."
     },
     {
       "id": "0037",
       "name": "choose_initial_epsilon",
       "part": 2,
       "points": 5,
-      "signature": "choose_initial_epsilon(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "choose_initial_epsilon()",
+      "doc": "Start fully exploratory."
     },
     {
       "id": "0038",
       "name": "epsilon_decay_schedule",
       "part": 2,
       "points": 5,
-      "signature": "epsilon_decay_schedule(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "epsilon_decay_schedule(epsilon, decay, min_epsilon)",
+      "doc": "Multiplicative epsilon decay with a floor."
     },
     {
       "id": "0039",
       "name": "epsilon_greedy_explore_move",
       "part": 2,
       "points": 5,
-      "signature": "epsilon_greedy_explore_move(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "epsilon_greedy_explore_move(board, rng)",
+      "doc": "The explore branch: a uniformly random legal move."
     },
     {
       "id": "0040",
       "name": "epsilon_greedy_select_action",
       "part": 2,
       "points": 5,
-      "signature": "epsilon_greedy_select_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "epsilon_greedy_select_action(q_table, board, epsilon, rng)",
+      "doc": "With prob epsilon explore a random legal move, else act greedily."
     },
     {
       "id": "0041",
       "name": "greedy_argmax_over_legal_actions",
       "part": 2,
       "points": 5,
-      "signature": "greedy_argmax_over_legal_actions(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "greedy_argmax_over_legal_actions(q_table, board)",
+      "doc": "The legal action with the highest Q-value (first if tied)."
     },
     {
       "id": "0042",
       "name": "random_tie_break_argmax",
       "part": 2,
       "points": 5,
-      "signature": "random_tie_break_argmax(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "random_tie_break_argmax(values, rng)",
+      "doc": "Argmax index with ties broken uniformly at random."
     },
     {
       "id": "0043",
       "name": "tic_tac_toe_reward",
       "part": 2,
       "points": 5,
-      "signature": "tic_tac_toe_reward(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "tic_tac_toe_reward(status, player)",
+      "doc": "Reward for ``player`` given a game status: +1 win, -1 loss, 0 otherwise."
     },
     {
       "id": "0044",
       "name": "q_learning_nonterminal_target",
       "part": 2,
       "points": 5,
-      "signature": "q_learning_nonterminal_target(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "q_learning_nonterminal_target(reward, gamma, next_max_q)",
+      "doc": "TD target with bootstrapping: r + gamma * max_a' Q(s', a')."
     },
     {
       "id": "0045",
       "name": "q_learning_terminal_target",
       "part": 2,
       "points": 5,
-      "signature": "q_learning_terminal_target(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "q_learning_terminal_target(reward)",
+      "doc": "TD target at a terminal state: just the reward (no bootstrap)."
     },
     {
       "id": "0046",
       "name": "q_learning_update",
       "part": 2,
       "points": 5,
-      "signature": "q_learning_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "q_learning_update(q_old, alpha, target)",
+      "doc": "Q-learning update: Q <- Q + alpha * (target - Q)."
     },
     {
       "id": "0047",
       "name": "episode_reset_game",
       "part": 2,
       "points": 5,
-      "signature": "episode_reset_game(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "episode_reset_game()",
+      "doc": "Start-of-episode board."
     },
     {
       "id": "0048",
       "name": "episode_agent_pick_action",
       "part": 2,
       "points": 5,
-      "signature": "episode_agent_pick_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "episode_agent_pick_action(q_table, board, epsilon, rng)",
+      "doc": "The agent's action for this step (epsilon-greedy)."
     },
     {
       "id": "0049",
       "name": "episode_apply_action",
       "part": 2,
       "points": 5,
-      "signature": "episode_apply_action(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "episode_apply_action(board, action, player)",
+      "doc": "Apply an action; return (next_board, status)."
     },
     {
       "id": "0050",
       "name": "episode_apply_q_update",
       "part": 2,
       "points": 5,
-      "signature": "episode_apply_q_update(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "episode_apply_q_update(q_table, state_key, action, target, alpha)",
+      "doc": "Apply one Q-learning update for (state_key, action) toward ``target``."
     },
     {
       "id": "0051",
       "name": "episode_check_terminate",
       "part": 2,
       "points": 5,
-      "signature": "episode_check_terminate(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "episode_check_terminate(status)",
+      "doc": "Whether the episode has ended."
     },
     {
       "id": "0052",
       "name": "train_q_learning_agent",
       "part": 2,
       "points": 5,
-      "signature": "train_q_learning_agent(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "train_q_learning_agent(n_episodes, alpha, gamma, epsilon, rng)",
+      "doc": "Train a Q-learning agent (X) against a random opponent (O). Returns\n(q_table, episode_rewards) where rewards are the agent's terminal rewards."
     },
     {
       "id": "0053",
       "name": "compute_batched_outcome_stats",
       "part": 2,
       "points": 5,
-      "signature": "compute_batched_outcome_stats(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_batched_outcome_stats(statuses, perspective)",
+      "doc": "Win/loss/draw rates for ``perspective`` (+1 or -1) over a list of statuses."
     },
     {
       "id": "0054",

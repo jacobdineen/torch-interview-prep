@@ -300,3 +300,175 @@ def test_0029_play_minimax_vs_minimax_matches(ns):
     res = ns["play_minimax_vs_minimax_matches"](3)
     with step("optimal vs optimal is always a draw"):
         expect_true(all(s == 0 for s in res), f"all draws expected, got {res}")
+
+
+# --------------------- Part 3 — Tabular Q-Learning Foundations ---------------------
+
+def test_0030_encode_board_state_key(ns):
+    b = _board([[1, 0, -1], [0, 1, 0], [0, 0, -1]])
+    with step("hashable 9-tuple of cells"):
+        expect_eq(ns["encode_board_state_key"](b), (1, 0, -1, 0, 1, 0, 0, 0, -1))
+
+
+def test_0031_canonical_board_key(ns):
+    b = _board([[1, 0, 0], [0, 0, 0], [0, 0, 0]])
+    rot = np.rot90(b)  # a symmetric variant
+    with step("symmetric boards share a canonical key"):
+        expect_eq(ns["canonical_board_key"](b), ns["canonical_board_key"](rot))
+
+
+def test_0032_initialize_q_table(ns):
+    with step("empty table"):
+        expect_eq(ns["initialize_q_table"](), {})
+
+
+def test_0033_get_q_value(ns):
+    q = ns["initialize_q_table"]()
+    with step("defaults to 0 for unseen states"):
+        expect_allclose(ns["get_q_value"](q, (0,) * 9, 4), 0.0)
+
+
+def test_0034_set_q_value(ns):
+    q = ns["initialize_q_table"]()
+    ns["set_q_value"](q, (0,) * 9, 4, 2.5)
+    with step("stores and reads back"):
+        expect_allclose(ns["get_q_value"](q, (0,) * 9, 4), 2.5)
+        expect_allclose(ns["get_q_value"](q, (0,) * 9, 0), 0.0)  # other actions untouched
+
+
+def test_0035_choose_learning_rate_alpha(ns):
+    with step("in (0, 1]"):
+        a = ns["choose_learning_rate_alpha"]()
+        expect_true(0 < a <= 1, f"alpha out of range: {a}")
+
+
+def test_0036_choose_discount_factor_gamma(ns):
+    with step("in (0, 1]"):
+        g = ns["choose_discount_factor_gamma"]()
+        expect_true(0 < g <= 1, f"gamma out of range: {g}")
+
+
+def test_0037_choose_initial_epsilon(ns):
+    with step("in [0, 1]"):
+        e = ns["choose_initial_epsilon"]()
+        expect_true(0 <= e <= 1, f"epsilon out of range: {e}")
+
+
+def test_0038_epsilon_decay_schedule(ns):
+    with step("decays multiplicatively, floored"):
+        expect_allclose(ns["epsilon_decay_schedule"](1.0, 0.99, 0.1), 0.99)
+        expect_allclose(ns["epsilon_decay_schedule"](0.1, 0.5, 0.1), 0.1)  # floor holds
+
+
+def test_0039_epsilon_greedy_explore_move(ns):
+    b = _board([[1, -1, 0], [0, 0, 0], [0, 0, 0]])
+    with step("returns a legal move"):
+        expect_true(ns["epsilon_greedy_explore_move"](b, np.random.default_rng(0)) in [2, 3, 4, 5, 6, 7, 8])
+
+
+def test_0040_epsilon_greedy_select_action(ns):
+    q = ns["initialize_q_table"]()
+    b = ns["create_empty_board"]()
+    ns["set_q_value"](q, ns["encode_board_state_key"](b), 4, 5.0)  # action 4 is best
+    with step("epsilon=0 acts greedily"):
+        expect_eq(ns["epsilon_greedy_select_action"](q, b, 0.0, np.random.default_rng(0)), 4)
+    with step("epsilon=1 explores a legal move"):
+        expect_true(ns["epsilon_greedy_select_action"](q, b, 1.0, np.random.default_rng(0)) in range(9))
+
+
+def test_0041_greedy_argmax_over_legal_actions(ns):
+    q = ns["initialize_q_table"]()
+    b = _board([[1, 0, 0], [0, 0, 0], [0, 0, 0]])  # action 0 illegal
+    ns["set_q_value"](q, ns["encode_board_state_key"](b), 0, 9.0)  # illegal but high
+    ns["set_q_value"](q, ns["encode_board_state_key"](b), 5, 3.0)  # best legal
+    with step("ignores illegal actions"):
+        expect_eq(ns["greedy_argmax_over_legal_actions"](q, b), 5)
+
+
+def test_0042_random_tie_break_argmax(ns):
+    with step("breaks ties among the maxima"):
+        out = {ns["random_tie_break_argmax"]([1, 3, 3, 0], np.random.default_rng(s)) for s in range(20)}
+        expect_true(out <= {1, 2} and len(out) >= 1, f"should pick among ties, got {out}")
+
+
+def test_0043_tic_tac_toe_reward(ns):
+    with step("+1 win, -1 loss, 0 draw/none from player's view"):
+        expect_allclose(ns["tic_tac_toe_reward"](1, 1), 1.0)
+        expect_allclose(ns["tic_tac_toe_reward"](-1, 1), -1.0)
+        expect_allclose(ns["tic_tac_toe_reward"](0, 1), 0.0)
+        expect_allclose(ns["tic_tac_toe_reward"](1, -1), -1.0)
+
+
+def test_0044_q_learning_nonterminal_target(ns):
+    with step("r + gamma * next_max"):
+        expect_allclose(ns["q_learning_nonterminal_target"](0.5, 0.9, 2.0), 0.5 + 0.9 * 2.0)
+
+
+def test_0045_q_learning_terminal_target(ns):
+    with step("just the reward"):
+        expect_allclose(ns["q_learning_terminal_target"](1.0), 1.0)
+
+
+def test_0046_q_learning_update(ns):
+    with step("Q + alpha*(target - Q)"):
+        expect_allclose(ns["q_learning_update"](1.0, 0.1, 2.0), 1.0 + 0.1 * (2.0 - 1.0))
+
+
+def test_0047_episode_reset_game(ns):
+    with step("fresh empty board"):
+        expect_allclose(ns["episode_reset_game"](), np.zeros((3, 3)))
+
+
+def test_0048_episode_agent_pick_action(ns):
+    q = ns["initialize_q_table"]()
+    b = ns["create_empty_board"]()
+    with step("returns an action (greedy when epsilon=0)"):
+        expect_true(ns["episode_agent_pick_action"](q, b, 0.0, np.random.default_rng(0)) in range(9))
+
+
+def test_0049_episode_apply_action(ns):
+    b = ns["create_empty_board"]()
+    nb, status = ns["episode_apply_action"](b, 0, 1)
+    with step("returns next board and status"):
+        expect_eq(int(nb[0, 0]), 1)
+        expect_eq(status, None)
+
+
+def test_0050_episode_apply_q_update(ns):
+    q = ns["initialize_q_table"]()
+    key = (0,) * 9
+    ns["episode_apply_q_update"](q, key, 4, 1.0, 0.5)  # target 1, alpha .5, from 0 -> 0.5
+    with step("moves Q toward the target"):
+        expect_allclose(ns["get_q_value"](q, key, 4), 0.5)
+
+
+def test_0051_episode_check_terminate(ns):
+    with step("terminal iff status is not None"):
+        expect_true(ns["episode_check_terminate"](1))
+        expect_true(not ns["episode_check_terminate"](None))
+
+
+def test_0052_train_q_learning_agent(ns):
+    rng = np.random.default_rng(0)
+    q, rewards = ns["train_q_learning_agent"](4000, 0.2, 0.99, 0.2, rng)
+    # Greedy evaluation vs a random opponent: the trained agent should rarely lose.
+    losses = 0
+    for _ in range(200):
+        board = ns["create_empty_board"]()
+        while ns["get_game_status"](board) is None:
+            board = ns["place_move"](board, ns["greedy_argmax_over_legal_actions"](q, board), 1)
+            if ns["get_game_status"](board) is not None:
+                break
+            board = ns["place_move"](board, ns["random_move_agent"](board, rng), -1)
+        if ns["get_game_status"](board) == -1:
+            losses += 1
+    with step("trained agent loses to random < 10% of the time"):
+        expect_true(losses / 200 < 0.1, f"too many losses: {losses}/200")
+
+
+def test_0053_compute_batched_outcome_stats(ns):
+    r = ns["compute_batched_outcome_stats"]([1, 1, -1, 0], 1)
+    with step("win/loss/draw from perspective"):
+        expect_allclose(r["win"], 0.5)
+        expect_allclose(r["loss"], 0.25)
+        expect_allclose(r["draw"], 0.25)
