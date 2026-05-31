@@ -210,3 +210,93 @@ def test_0018_TicTacToeGame(ns):
     with step("reset clears the board"):
         g.reset()
         expect_eq(len(g.legal_moves()), 9)
+
+
+# --------------------- Part 2 — Random and Minimax Baselines ---------------------
+
+def test_0019_random_move_agent(ns):
+    b = _board([[1, -1, 0], [0, 0, 0], [0, 0, 0]])
+    rng = np.random.default_rng(0)
+    with step("returns a legal action"):
+        for _ in range(20):
+            expect_true(ns["random_move_agent"](b, rng) in [2, 3, 4, 5, 6, 7, 8], "must be legal")
+
+
+def test_0020_play_random_vs_random_game(ns):
+    with step("returns a terminal status"):
+        s = ns["play_random_vs_random_game"](np.random.default_rng(1))
+        expect_true(s in (1, -1, 0), "status must be +1/-1/0")
+
+
+def test_0021_play_random_vs_random_matches(ns):
+    res = ns["play_random_vs_random_matches"](10, np.random.default_rng(2))
+    with step("returns one status per game"):
+        expect_eq(len(res), 10)
+        expect_true(all(s in (1, -1, 0) for s in res), "all valid statuses")
+
+
+def test_0022_compute_outcome_rates(ns):
+    r = ns["compute_outcome_rates"]([1, 1, -1, 0])
+    with step("fractions for x/o/draw"):
+        expect_allclose(r["x_win"], 0.5)
+        expect_allclose(r["o_win"], 0.25)
+        expect_allclose(r["draw"], 0.25)
+
+
+def test_0023_minimax_terminal_score(ns):
+    with step("X win=+1, O win=-1, draw=0"):
+        expect_eq(ns["minimax_terminal_score"](_board([[1, 1, 1], [0, 0, 0], [0, 0, 0]])), 1)
+        expect_eq(ns["minimax_terminal_score"](_board([[-1, -1, -1], [0, 0, 0], [0, 0, 0]])), -1)
+        expect_eq(ns["minimax_terminal_score"](_board([[1, -1, 1], [1, -1, -1], [-1, 1, 1]])), 0)
+
+
+def test_0024_minimax_recursive(ns):
+    # X to move, can win at action 2 (top row). Optimal value = +1.
+    b = _board([[1, 1, 0], [-1, -1, 0], [0, 0, 0]])
+    with step("optimal value with X to move"):
+        expect_eq(ns["minimax_recursive"](b, 1), 1)
+    # O to move and must block; with best play it's a draw on this shallow board.
+    b2 = _board([[1, 1, -1], [-1, -1, 1], [1, 0, 0]])  # nearly full
+    with step("value is in {-1,0,1}"):
+        expect_true(ns["minimax_recursive"](b2, -1) in (-1, 0, 1), "value range")
+
+
+def test_0025_minimax_max_min_step(ns):
+    with step("X maximizes, O minimizes"):
+        expect_eq(ns["minimax_max_min_step"](1, [-1, 0, 1]), 1)
+        expect_eq(ns["minimax_max_min_step"](-1, [-1, 0, 1]), -1)
+
+
+def test_0026_minimax_best_move(ns):
+    # X to move; the winning move is action 2.
+    b = _board([[1, 1, 0], [-1, -1, 0], [0, 0, 0]])
+    with step("picks the winning action"):
+        expect_eq(ns["minimax_best_move"](b, 1), 2)
+    # O to move; must block X's top row at action 2.
+    b2 = _board([[1, 1, 0], [-1, 0, 0], [0, 0, 0]])
+    with step("blocks the opponent's win"):
+        expect_eq(ns["minimax_best_move"](b2, -1), 2)
+
+
+def test_0027_minimax_alpha_beta(ns):
+    boards = [
+        _board([[1, 1, 0], [-1, -1, 0], [0, 0, 0]]),
+        _board([[1, 1, -1], [-1, -1, 1], [1, 0, 0]]),
+        _board([[1, 0, 0], [0, -1, 0], [0, 0, 0]]),
+    ]
+    with step("matches minimax_recursive on several boards"):
+        for b, p in [(boards[0], 1), (boards[1], -1), (boards[2], 1)]:
+            expect_eq(ns["minimax_alpha_beta"](b, p, -np.inf, np.inf), ns["minimax_recursive"](b, p))
+
+
+def test_0028_play_minimax_vs_random_matches(ns):
+    res = ns["play_minimax_vs_random_matches"](6, np.random.default_rng(3))
+    with step("optimal X never loses to random O"):
+        expect_eq(len(res), 6)
+        expect_true(all(s in (1, 0) for s in res), f"X should never lose, got {res}")
+
+
+def test_0029_play_minimax_vs_minimax_matches(ns):
+    res = ns["play_minimax_vs_minimax_matches"](3)
+    with step("optimal vs optimal is always a draw"):
+        expect_true(all(s == 0 for s in res), f"all draws expected, got {res}")

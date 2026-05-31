@@ -177,88 +177,88 @@
       "name": "random_move_agent",
       "part": 1,
       "points": 5,
-      "signature": "random_move_agent(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "random_move_agent(board, rng)",
+      "doc": "Pick a uniformly random legal action using ``rng`` (a numpy Generator)."
     },
     {
       "id": "0020",
       "name": "play_random_vs_random_game",
       "part": 1,
       "points": 5,
-      "signature": "play_random_vs_random_game(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_random_vs_random_game(rng)",
+      "doc": "Play one game with both sides random; return the final status (+1/-1/0)."
     },
     {
       "id": "0021",
       "name": "play_random_vs_random_matches",
       "part": 1,
       "points": 5,
-      "signature": "play_random_vs_random_matches(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_random_vs_random_matches(n_games, rng)",
+      "doc": "Play ``n_games`` random-vs-random games; return the list of statuses."
     },
     {
       "id": "0022",
       "name": "compute_outcome_rates",
       "part": 1,
       "points": 5,
-      "signature": "compute_outcome_rates(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "compute_outcome_rates(statuses)",
+      "doc": "Fraction of X wins / O wins / draws from a list of statuses."
     },
     {
       "id": "0023",
       "name": "minimax_terminal_score",
       "part": 1,
       "points": 5,
-      "signature": "minimax_terminal_score(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "minimax_terminal_score(board)",
+      "doc": "Score of a terminal board from X's perspective: +1 X win, -1 O win, 0 draw."
     },
     {
       "id": "0024",
       "name": "minimax_recursive",
       "part": 1,
       "points": 5,
-      "signature": "minimax_recursive(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "minimax_recursive(board, player)",
+      "doc": "Exact minimax value of ``board`` with ``player`` to move (X maximizes). Uses\na transposition table (positions reachable many ways are scored once)."
     },
     {
       "id": "0025",
       "name": "minimax_max_min_step",
       "part": 1,
       "points": 5,
-      "signature": "minimax_max_min_step(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "minimax_max_min_step(player, values)",
+      "doc": "Combine child values: the maximizer (X, +1) takes max, the minimizer (O) min."
     },
     {
       "id": "0026",
       "name": "minimax_best_move",
       "part": 1,
       "points": 5,
-      "signature": "minimax_best_move(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "minimax_best_move(board, player)",
+      "doc": "The action with the optimal minimax value for ``player`` (first if tied).\nScores all candidate moves with one shared transposition table."
     },
     {
       "id": "0027",
       "name": "minimax_alpha_beta",
       "part": 1,
       "points": 5,
-      "signature": "minimax_alpha_beta(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "minimax_alpha_beta(board, player, alpha, beta)",
+      "doc": "Minimax value with alpha-beta pruning (same result as minimax_recursive)."
     },
     {
       "id": "0028",
       "name": "play_minimax_vs_random_matches",
       "part": 1,
       "points": 5,
-      "signature": "play_minimax_vs_random_matches(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_minimax_vs_random_matches(n_games, rng)",
+      "doc": "Minimax (X) vs random (O). Minimax should never lose; returns statuses.\nMove selection uses alpha-beta (same as minimax, just faster)."
     },
     {
       "id": "0029",
       "name": "play_minimax_vs_minimax_matches",
       "part": 1,
       "points": 5,
-      "signature": "play_minimax_vs_minimax_matches(*args)",
-      "doc": "TODO: not yet built."
+      "signature": "play_minimax_vs_minimax_matches(n_games)",
+      "doc": "Minimax vs minimax \u2014 always a draw with optimal play; returns statuses."
     },
     {
       "id": "0030",

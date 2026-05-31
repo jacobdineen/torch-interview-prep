@@ -147,3 +147,142 @@ class TicTacToeGame:
 
     def status(self):
         return get_game_status(self.board)
+
+
+# ============== Part 2 — Random and Minimax Baselines ==============
+
+def random_move_agent(board, rng):
+    """Pick a uniformly random legal action using ``rng`` (a numpy Generator)."""
+    return int(rng.choice(get_legal_moves(board)))
+
+
+def play_random_vs_random_game(rng):
+    """Play one game with both sides random; return the final status (+1/-1/0)."""
+    board = create_empty_board()
+    player = 1
+    while get_game_status(board) is None:
+        board = place_move(board, random_move_agent(board, rng), player)
+        player = switch_player(player)
+    return get_game_status(board)
+
+
+def play_random_vs_random_matches(n_games, rng):
+    """Play ``n_games`` random-vs-random games; return the list of statuses."""
+    return [play_random_vs_random_game(rng) for _ in range(n_games)]
+
+
+def compute_outcome_rates(statuses):
+    """Fraction of X wins / O wins / draws from a list of statuses."""
+    n = len(statuses)
+    return {
+        "x_win": sum(s == 1 for s in statuses) / n,
+        "o_win": sum(s == -1 for s in statuses) / n,
+        "draw": sum(s == 0 for s in statuses) / n,
+    }
+
+
+def minimax_terminal_score(board):
+    """Score of a terminal board from X's perspective: +1 X win, -1 O win, 0 draw."""
+    return get_game_status(board)
+
+
+def minimax_max_min_step(player, values):
+    """Combine child values: the maximizer (X, +1) takes max, the minimizer (O) min."""
+    return max(values) if player == 1 else min(values)
+
+
+def minimax_recursive(board, player):
+    """Exact minimax value of ``board`` with ``player`` to move (X maximizes). Uses
+    a transposition table (positions reachable many ways are scored once)."""
+    cache = {}
+
+    def go(b, p):
+        key = (b.tobytes(), p)
+        if key in cache:
+            return cache[key]
+        status = get_game_status(b)
+        if status is not None:
+            v = minimax_terminal_score(b)
+        else:
+            v = minimax_max_min_step(p, [go(place_move(b, a, p), switch_player(p))
+                                         for a in get_legal_moves(b)])
+        cache[key] = v
+        return v
+
+    return go(board, player)
+
+
+def minimax_best_move(board, player):
+    """The action with the optimal minimax value for ``player`` (first if tied).
+    Scores all candidate moves with one shared transposition table."""
+    cache = {}
+
+    def go(b, p):
+        key = (b.tobytes(), p)
+        if key in cache:
+            return cache[key]
+        status = get_game_status(b)
+        if status is not None:
+            v = minimax_terminal_score(b)
+        else:
+            v = minimax_max_min_step(p, [go(place_move(b, a, p), switch_player(p))
+                                         for a in get_legal_moves(b)])
+        cache[key] = v
+        return v
+
+    legal = get_legal_moves(board)
+    values = [go(place_move(board, a, player), switch_player(player)) for a in legal]
+    best = minimax_max_min_step(player, values)
+    return legal[values.index(best)]
+
+
+def minimax_alpha_beta(board, player, alpha, beta):
+    """Minimax value with alpha-beta pruning (same result as minimax_recursive)."""
+    status = get_game_status(board)
+    if status is not None:
+        return minimax_terminal_score(board)
+    if player == 1:
+        value = -np.inf
+        for a in get_legal_moves(board):
+            value = max(value, minimax_alpha_beta(place_move(board, a, player),
+                                                  switch_player(player), alpha, beta))
+            alpha = max(alpha, value)
+            if alpha >= beta:
+                break
+        return value
+    value = np.inf
+    for a in get_legal_moves(board):
+        value = min(value, minimax_alpha_beta(place_move(board, a, player),
+                                              switch_player(player), alpha, beta))
+        beta = min(beta, value)
+        if alpha >= beta:
+            break
+    return value
+
+
+def play_minimax_vs_random_matches(n_games, rng):
+    """Minimax (X) vs random (O). Minimax should never lose; returns statuses.
+    Move selection uses alpha-beta (same as minimax, just faster)."""
+    results = []
+    for _ in range(n_games):
+        board = create_empty_board()
+        player = 1
+        while get_game_status(board) is None:
+            a = minimax_best_move(board, 1) if player == 1 else random_move_agent(board, rng)
+            board = place_move(board, a, player)
+            player = switch_player(player)
+        results.append(get_game_status(board))
+    return results
+
+
+def play_minimax_vs_minimax_matches(n_games):
+    """Minimax vs minimax — always a draw with optimal play; returns statuses."""
+    results = []
+    for _ in range(n_games):
+        board = create_empty_board()
+        player = 1
+        while get_game_status(board) is None:
+            board = place_move(board, minimax_best_move(board, player), player)
+            player = switch_player(player)
+        results.append(get_game_status(board))
+    return results
