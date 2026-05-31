@@ -207,3 +207,114 @@ def sample_action_from_policy(logits, mask, generator=None):
 def greedy_action_from_policy(logits, mask):
     """The legal column with the highest logit."""
     return int(torch.argmax(masked_policy_logits(logits, mask)).item())
+
+
+# ============== Part 4 — PUCT Monte Carlo Tree Search ==============
+
+def make_mcts_node(board, player, prior):
+    """An MCTS node for a state: the board, the player to move, the prior prob of
+    reaching it, visit count N, value sum W, children, and an expanded flag."""
+    return {"board": board, "player": player, "prior": prior,
+            "N": 0, "W": 0.0, "children": {}, "expanded": False}
+
+
+def node_q_value(node):
+    """Mean value of a node from its own player's perspective (0 if unvisited)."""
+    return node["W"] / node["N"] if node["N"] > 0 else 0.0
+
+
+def ucb_score(parent_visits, child, c_puct):
+    """PUCT score of a child from the PARENT's perspective: -Q(child) (the child's
+    value is from the opponent's view) + c_puct * P * sqrt(N_parent) / (1 + N_child)."""
+    exploration = c_puct * child["prior"] * (parent_visits ** 0.5) / (1 + child["N"])
+    return -node_q_value(child) + exploration
+
+
+def select_best_child(node, c_puct):
+    """The (action, child) with the highest PUCT score."""
+    best_action, best_child, best_score = None, None, -float("inf")
+    for action, child in node["children"].items():
+        score = ucb_score(node["N"], child, c_puct)
+        if score > best_score:
+            best_action, best_child, best_score = action, child, score
+    return best_action, best_child
+
+
+def select_leaf(root, c_puct):
+    """Walk down via PUCT until an unexpanded or terminal node. Returns (leaf, path)."""
+    node = root
+    path = [root]
+    while node["expanded"] and not is_terminal(node["board"]):
+        _, node = select_best_child(node, c_puct)
+        path.append(node)
+    return node, path
+
+
+def evaluate_with_network(net, board, player):
+    """Network evaluation of a position: (priors over 7 columns, value in [-1,1]),
+    from ``player``'s perspective. Illegal columns get prior 0."""
+    x = board_to_torch_tensor(encode_board(board, player))
+    with torch.no_grad():
+        logits, value = policy_value_forward(net, x)
+        probs = torch.softmax(masked_policy_logits(logits[0], action_mask(board)), dim=-1)
+    return probs.cpu().numpy(), float(value.item())
+
+
+def expand_node(node, priors):
+    """Create a child for every legal move, carrying its prior. Marks node expanded."""
+    for a in valid_moves(node["board"]):
+        child_board = drop_piece(node["board"], a, node["player"])
+        node["children"][a] = make_mcts_node(child_board, other_player(node["player"]), float(priors[a]))
+    node["expanded"] = True
+    return node
+
+
+def backup_value(path, value):
+    """Propagate ``value`` (from the leaf player's perspective) up the path, flipping
+    sign at each level since players alternate."""
+    for node in reversed(path):
+        node["N"] += 1
+        node["W"] += value
+        value = -value
+
+
+def run_one_simulation(root, net, c_puct):
+    """One MCTS simulation: select a leaf, evaluate/expand (or use the game result if
+    terminal), and back the value up."""
+    leaf, path = select_leaf(root, c_puct)
+    if is_terminal(leaf["board"]):
+        value = float(check_winner(leaf["board"]) * leaf["player"])
+    else:
+        priors, value = evaluate_with_network(net, leaf["board"], leaf["player"])
+        expand_node(leaf, priors)
+    backup_value(path, value)
+
+
+def run_mcts(root, net, n_simulations, c_puct):
+    """Run ``n_simulations`` simulations from ``root`` and return it."""
+    for _ in range(n_simulations):
+        run_one_simulation(root, net, c_puct)
+    return root
+
+
+def visit_count_policy(root, temperature):
+    """Policy over 7 columns from child visit counts, sharpened by ``temperature``
+    (temperature 0 -> one-hot on the most-visited action)."""
+    counts = np.zeros(7)
+    for a, child in root["children"].items():
+        counts[a] = child["N"]
+    if temperature == 0 or counts.sum() == 0:
+        pi = np.zeros(7)
+        pi[int(np.argmax(counts))] = 1.0
+        return pi
+    sharpened = counts ** (1.0 / temperature)
+    return sharpened / sharpened.sum()
+
+
+def mcts_choose_action(root, temperature, rng=None):
+    """Pick a column: argmax visits at temperature 0, else sample the visit policy."""
+    pi = visit_count_policy(root, temperature)
+    if temperature == 0:
+        return int(np.argmax(pi))
+    rng = rng or np.random.default_rng()
+    return int(rng.choice(len(pi), p=pi))

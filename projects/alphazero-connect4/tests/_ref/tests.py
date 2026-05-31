@@ -280,3 +280,132 @@ def test_0026_greedy_action_from_policy(ns):
     mask = torch.tensor([1.0, 1, 0, 1, 1, 1, 1])
     with step("picks the best legal column"):
         expect_eq(ns["greedy_action_from_policy"](logits, mask), 1)
+
+
+# --------------------- Part 4 — PUCT Monte Carlo Tree Search ---------------------
+
+def test_0027_make_mcts_node(ns):
+    node = ns["make_mcts_node"](ns["make_empty_board"](), 1, 0.3)
+    with step("fresh node fields"):
+        expect_eq(node["N"], 0)
+        expect_allclose(node["W"], 0.0)
+        expect_allclose(node["prior"], 0.3)
+        expect_eq(node["expanded"], False)
+
+
+def test_0028_node_q_value(ns):
+    node = ns["make_mcts_node"](None, 1, 0.0)
+    with step("0 when unvisited; W/N otherwise"):
+        expect_allclose(ns["node_q_value"](node), 0.0)
+        node["N"], node["W"] = 4, 2.0
+        expect_allclose(ns["node_q_value"](node), 0.5)
+
+
+def test_0029_ucb_score(ns):
+    child = ns["make_mcts_node"](None, 1, 0.5)
+    with step("pure exploration when unvisited"):
+        expect_allclose(ns["ucb_score"](4, child, 1.0), 1.0 * 0.5 * (4 ** 0.5) / 1)
+    child["N"], child["W"] = 2, 2.0  # Q = 1
+    with step("subtracts the child's Q (opponent perspective)"):
+        expect_allclose(ns["ucb_score"](4, child, 1.0), -1.0 + 1.0 * 0.5 * (4 ** 0.5) / 3)
+
+
+def test_0030_select_best_child(ns):
+    node = ns["make_mcts_node"](None, 1, 0.0)
+    node["N"] = 4
+    node["children"] = {0: ns["make_mcts_node"](None, -1, 0.1),
+                        3: ns["make_mcts_node"](None, -1, 0.9)}
+    a, child = ns["select_best_child"](node, 1.0)
+    with step("higher-prior unvisited child wins"):
+        expect_eq(a, 3)
+
+
+def test_0031_select_leaf(ns):
+    root = ns["make_mcts_node"](ns["make_empty_board"](), 1, 0.0)
+    with step("unexpanded root is its own leaf"):
+        leaf, path = ns["select_leaf"](root, 1.0)
+        expect_true(leaf is root and path == [root], "leaf should be root")
+    # expand root one level, then it should descend
+    root["children"] = {2: ns["make_mcts_node"](ns["drop_piece"](root["board"], 2, 1), -1, 1.0)}
+    root["expanded"] = True
+    root["N"] = 1
+    leaf, path = ns["select_leaf"](root, 1.0)
+    with step("descends into the (unexpanded) child"):
+        expect_eq(len(path), 2)
+        expect_true(leaf is root["children"][2], "leaf is the child")
+
+
+def test_0032_evaluate_with_network(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    priors, value = ns["evaluate_with_network"](net, ns["make_empty_board"](), 1)
+    with step("priors over legal moves sum to 1; value in [-1,1]"):
+        expect_allclose(float(np.sum(priors)), 1.0, atol=1e-4)
+        expect_true(-1.0 <= value <= 1.0, "value range")
+
+
+def test_0033_expand_node(ns):
+    node = ns["make_mcts_node"](ns["make_empty_board"](), 1, 0.0)
+    ns["expand_node"](node, np.full(7, 1 / 7))
+    with step("a child per legal move; expanded flag set"):
+        expect_eq(len(node["children"]), 7)
+        expect_true(node["expanded"], "should be expanded")
+        # each child has one of our pieces placed and the opponent to move
+        expect_eq(node["children"][0]["player"], -1)
+
+
+def test_0034_backup_value(ns):
+    a = ns["make_mcts_node"](None, 1, 0.0)
+    b = ns["make_mcts_node"](None, -1, 0.0)
+    ns["backup_value"]([a, b], 1.0)
+    with step("leaf gets +value, parent gets -value, both visited once"):
+        expect_eq((a["N"], b["N"]), (1, 1))
+        expect_allclose(b["W"], 1.0)
+        expect_allclose(a["W"], -1.0)
+
+
+def test_0035_run_one_simulation(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    root = ns["make_mcts_node"](ns["make_empty_board"](), 1, 0.0)
+    ns["run_one_simulation"](root, net, 1.5)
+    with step("root gets visited and expanded"):
+        expect_eq(root["N"], 1)
+        expect_true(root["expanded"], "root expanded after a sim")
+
+
+def test_0036_run_mcts(ns):
+    torch.manual_seed(0)
+    net = ns["build_policy_value_net"](2, 16, 7)
+    root = ns["make_mcts_node"](ns["make_empty_board"](), 1, 0.0)
+    ns["run_mcts"](root, net, 30, 1.5)
+    with step("root visit count equals the number of simulations"):
+        expect_eq(root["N"], 30)
+    # tactical: player 1 has three in a row on the bottom; col 3 wins.
+    b = ns["make_empty_board"]()
+    b[5, 0:3] = 1
+    win_root = ns["make_mcts_node"](b, 1, 0.0)
+    ns["run_mcts"](win_root, net, 120, 1.5)
+    with step("MCTS finds the immediate winning move (col 3)"):
+        expect_eq(ns["mcts_choose_action"](win_root, 0), 3)
+
+
+def test_0037_visit_count_policy(ns):
+    root = ns["make_mcts_node"](None, 1, 0.0)
+    root["children"] = {0: ns["make_mcts_node"](None, -1, 0.0),
+                        3: ns["make_mcts_node"](None, -1, 0.0)}
+    root["children"][0]["N"] = 3
+    root["children"][3]["N"] = 1
+    with step("temperature 1 normalizes counts; temperature 0 is one-hot"):
+        expect_allclose(ns["visit_count_policy"](root, 1.0)[[0, 3]], [0.75, 0.25])
+        expect_allclose(ns["visit_count_policy"](root, 0)[0], 1.0)
+
+
+def test_0038_mcts_choose_action(ns):
+    root = ns["make_mcts_node"](None, 1, 0.0)
+    root["children"] = {2: ns["make_mcts_node"](None, -1, 0.0),
+                        5: ns["make_mcts_node"](None, -1, 0.0)}
+    root["children"][5]["N"] = 10
+    root["children"][2]["N"] = 1
+    with step("temperature 0 picks the most-visited action"):
+        expect_eq(ns["mcts_choose_action"](root, 0), 5)
