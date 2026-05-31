@@ -174,6 +174,22 @@ nvim `<leader>p` keymaps work on step files too. Build/regenerate a project from
 with `python projects/<name>/_build/gen.py`; `_build/verify.py` checks every reference
 passes its own test.
 
+## Continuous integration
+
+`python verify_all.py` is the correctness gate: it runs `verify_problems.py` (every
+problem's reference solution against its compiled test, using a temp dir so your
+working files are never touched) and each project's `_build/verify.py`. It exits
+non-zero if anything fails.
+
+GitHub Actions runs it on every push and pull request (`.github/workflows/ci.yml`,
+CPU-only torch, HuggingFace model cached), so a change to shared tooling, a
+reference, or a test can't silently break another problem or project. Run it
+locally before pushing:
+
+```bash
+uv run python verify_all.py
+```
+
 ## File layout
 
 ```
