@@ -15,14 +15,19 @@ That installs torch + numpy into `./.venv/`. No other dependencies.
 ## The basic loop
 
 ```bash
+# 0. See where you are and what's next (problems + projects):
+uv run python prep.py
+
 # 1. Open a problem stub:
 $EDITOR problems/p03a_flatten_batch.py
 
-# 2. Run it:
+# 2. Run it (or just `check.py` with no args to jump to the next unsolved):
 uv run python check.py 03a
 ```
 
 The runner prints `PASS Problem 03a (flatten_batch)` plus a concept blurb and a per-tier progress bar; or `FAIL ...` with the failing assertion's source line and a tensor-aware diff of what was expected vs. what your code produced.
+
+`prep.py` is the single "where am I / what's next" dashboard across both the problems and the projects.
 
 ## CLI reference
 
@@ -47,7 +52,10 @@ uv run python check.py <id> [flags]
 | `--solution` | Show the reference implementation. Locked until either: (a) you've passed the problem once, OR (b) you pass `--i-give-up`. |
 | `--i-give-up` | Unlock `--solution` for that one problem without earning it. State persists in `.solution_unlock.json`. |
 | `--time` | Benchmark your implementation vs the reference. Available for 16 compute-sensitive problems. |
+| `--redo` | Re-lock a solved problem (clears its pass record, hint counter, and solution unlock) so you can drill it again. The stub is untouched; use `reset.py` to restore the pristine stub. |
 | `--help` / `-h` | Print this help summary. |
+
+Running `check.py` with no id and no flags jumps straight to the next unsolved problem (same as `--next`).
 
 Setting `PREP_JSON=1` makes a run print a single machine-readable JSON line instead of the human report (`status`, `problem`, `fail_file`, `fail_line`, `error_type`, `message`, `hint`, `diff`). This is what the Neovim integration parses; normal runs are unchanged.
 
@@ -188,7 +196,8 @@ Each project has its own README with the full part breakdown and expected result
 [tic-tac-toe-rl](projects/tic-tac-toe-rl/README.md) ·
 [rlhf-distilgpt2](projects/rlhf-distilgpt2/README.md) ·
 [alphazero-connect4](projects/alphazero-connect4/README.md). To add your own,
-see [docs/adding-a-project.md](docs/adding-a-project.md).
+scaffold it with `python new_project.py <name> --title "..."` and see
+[docs/adding-a-project.md](docs/adding-a-project.md).
 
 ## Continuous integration
 
@@ -212,6 +221,7 @@ uv run python verify_all.py
 ```
 mle_prep/
 ├── pyproject.toml             # uv project, torch + numpy + transformers deps
+├── prep.py                    # unified dashboard: problems + projects + what's next
 ├── check.py                   # main problem CLI
 ├── run_all.py                 # batch runner + --status dashboard
 ├── reset.py                   # restore from .stubs/ snapshot
@@ -224,6 +234,8 @@ mle_prep/
 ├── hints.py                   # graduated hints
 ├── solutions.py               # parent reference impls + per-child extractor + BENCHMARKS
 ├── new_problem.py             # scaffold a new problem (stub + .stubs + test skeleton)
+├── new_project.py             # scaffold a new project (_build/steps/tests tree)
+├── regen_all.py               # re-run every project's _build/gen.py
 ├── projects.py                # multi-step project CLI (mirrors check.py)
 ├── project_runner.py          # grades one project step + assembles solution.py
 ├── verify_all.py              # CI gate: framework + problems + every project
