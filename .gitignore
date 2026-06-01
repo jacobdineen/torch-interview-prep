@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 !tests/_compiled/*.pyc
+.claude/worktrees/
 .progress.json
 .ruff_cache/
 .hint_state.json
