@@ -130,6 +130,15 @@ Reads `tests/_src/*.py`, AST-rewrites assertions for nicer failure output, then 
 
 Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per parent, 280 total) live in `hints.py`. Reference solutions (one full impl per parent, child-specific subsets extracted at lookup time) live in `solutions.py`. Benchmarks for compute-sensitive problems live in the `BENCHMARKS` dict at the bottom of `solutions.py`.
 
+**Adding a problem.** Scaffold the stub, pristine snapshot, and test skeleton in
+one command, then fill in the test and reference:
+
+```bash
+python new_problem.py 78a clip_to_unit --sig "(x, lo, hi)" --desc "clamp x into [lo, hi]"
+```
+
+See [docs/adding-a-problem.md](docs/adding-a-problem.md) for the full walkthrough.
+
 ## Projects (multi-step builds)
 
 Alongside the standalone problems, **projects** are long ordered sequences of small
@@ -214,6 +223,7 @@ mle_prep/
 ├── concepts.py                # concept blurbs (printed on PASS)
 ├── hints.py                   # graduated hints
 ├── solutions.py               # parent reference impls + per-child extractor + BENCHMARKS
+├── new_problem.py             # scaffold a new problem (stub + .stubs + test skeleton)
 ├── projects.py                # multi-step project CLI (mirrors check.py)
 ├── project_runner.py          # grades one project step + assembles solution.py
 ├── verify_all.py              # CI gate: framework + problems + every project
@@ -226,7 +236,7 @@ mle_prep/
 ├── tests/
 │   ├── _compiled/             # opaque .pyc the runner loads
 │   └── _src/                  # readable source (don't peek before solving)
-├── docs/                      # adding-a-project.md and other guides
+├── docs/                      # adding-a-problem.md, adding-a-project.md
 ├── .github/workflows/ci.yml   # runs verify_all.py on every push / PR
 └── .stubs/                    # pristine snapshot used by reset.py
 ```
