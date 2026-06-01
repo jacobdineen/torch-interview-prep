@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# actions/cache@v4 still ships on Node 20 (deprecated mid-2026) and has no newer
+# major yet; opt it into the Node 24 runtime so we don't ride the deprecation.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   verify:
     runs-on: ubuntu-latest
