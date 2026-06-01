@@ -21,7 +21,7 @@ PROGRESS_FILE = os.path.join(PREP, ".progress.json")
 # Shared tier definitions live in curriculum.py.
 if PREP not in sys.path:
     sys.path.insert(0, PREP)
-from curriculum import TIERS, tier_members  # noqa: E402
+from curriculum import TIERS, tier_members, has_test  # noqa: E402
 
 
 def _parse_filter(args):
@@ -90,12 +90,17 @@ def main():
         return
 
     keep = _parse_filter(args)
-    passed, failed = [], []
+    passed, failed, skipped = [], [], []
     for p in PROBLEMS:
         m = re.match(r"^p(\d+[a-z]?)_", os.path.basename(p))
         if not m: continue
         num = m.group(1)
         if not keep(num):
+            continue
+        if not has_test(num):
+            # A test-less stub (e.g. a bare-parent left after a split) can't be
+            # graded; skip it rather than counting a spurious fail.
+            skipped.append(num)
             continue
         r = subprocess.run([sys.executable, p], capture_output=True, text=True)
         # The runner always prints PASS/FAIL as its FIRST line; everything after is
@@ -107,6 +112,8 @@ def main():
     print(f"==== {len(passed)}/{len(passed) + len(failed)} passed ====")
     if failed:
         print("Failed:", " ".join(failed))
+    if skipped:
+        print("Skipped (no test):", " ".join(skipped))
 
 
 if __name__ == "__main__":

@@ -202,23 +202,32 @@ uv run python verify_all.py
 
 ```
 mle_prep/
-├── pyproject.toml             # uv project, torch + numpy deps
-├── check.py                   # main CLI
+├── pyproject.toml             # uv project, torch + numpy + transformers deps
+├── check.py                   # main problem CLI
 ├── run_all.py                 # batch runner + --status dashboard
 ├── reset.py                   # restore from .stubs/ snapshot
 ├── rebuild.py                 # recompile tests/_src/ -> tests/_compiled/
 ├── runner.py                  # dispatcher each problem stub's __main__ calls
 ├── debug_tools.py             # backs check.py's --hint/--explain/--solution/--time
 ├── assert_rewriter.py         # AST-rewrites assertions for rich failure output
-├── curriculum.py              # tier definitions, parent→tier lookup
+├── curriculum.py              # tier definitions, parent→tier lookup, has_test
 ├── concepts.py                # concept blurbs (printed on PASS)
 ├── hints.py                   # graduated hints
 ├── solutions.py               # parent reference impls + per-child extractor + BENCHMARKS
+├── projects.py                # multi-step project CLI (mirrors check.py)
+├── project_runner.py          # grades one project step + assembles solution.py
+├── verify_all.py              # CI gate: framework + problems + every project
+├── verify_problems.py         # checks all problem reference solutions pass
+├── test_framework.py          # tests the grader + assembler themselves
 ├── problems/                  # 313 stub files you edit
 │   └── pNN<letter>_<slug>.py
+├── projects/                  # multi-step builds (see docs/adding-a-project.md)
+│   └── <name>/{_build,steps,tests,scaffold.py,project.json,README.md}
 ├── tests/
 │   ├── _compiled/             # opaque .pyc the runner loads
 │   └── _src/                  # readable source (don't peek before solving)
+├── docs/                      # adding-a-project.md and other guides
+├── .github/workflows/ci.yml   # runs verify_all.py on every push / PR
 └── .stubs/                    # pristine snapshot used by reset.py
 ```
 

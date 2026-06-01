@@ -10,6 +10,8 @@ import re
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _PROBLEMS_DIR = os.path.join(_HERE, "problems")
+_COMPILED_DIR = os.path.join(_HERE, "tests", "_compiled")
+_SRC_DIR = os.path.join(_HERE, "tests", "_src")
 _ID_RE = re.compile(r"^p(\d+[a-z]?)_")
 
 # (tier_name, first_parent_inclusive, last_parent_inclusive)
@@ -38,13 +40,23 @@ def _parent_of(problem_id):
     return int(m.group(1)) if m else None
 
 
+def has_test(problem_id):
+    """True if this problem id has a graded test (compiled .pyc or readable
+    source). A stub with no test can never be graded as passing, so it isn't a
+    real curriculum problem — e.g. a bare-parent stub left behind after a problem
+    was split into lettered children. The single definition of "is a problem"."""
+    return bool(glob.glob(os.path.join(_COMPILED_DIR, f"test_p{problem_id}_*.pyc"))
+                or glob.glob(os.path.join(_SRC_DIR, f"test_p{problem_id}_*.py")))
+
+
 def all_problem_ids():
-    """Scan problems/ and return all problem IDs (e.g., ['01a', '01b', ...]),
-    sorted by (parent_int, letter)."""
+    """Scan problems/ and return all problem IDs (e.g., ['01a', '01b', ...]) that
+    have a graded test, sorted by (parent_int, letter). Test-less stubs are
+    excluded so counts and 'next' logic stay consistent (see has_test)."""
     ids = []
     for fname in os.listdir(_PROBLEMS_DIR):
         m = _ID_RE.match(fname)
-        if m:
+        if m and has_test(m.group(1)):
             ids.append(m.group(1))
     ids.sort(key=lambda pid: (_parent_of(pid), pid))
     return ids
