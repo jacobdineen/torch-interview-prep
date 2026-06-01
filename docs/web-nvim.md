@@ -32,6 +32,9 @@ browser ──HTTP──► web/app.py (:8000)  ── nvim --remote / --remote-
    └──iframe──► ttyd (:7681) ──PTY──► nvim --listen /tmp/mle_nvim.sock ──────┘
 ```
 
+**Stopping it.** Click **⏻ Tear down** in the top bar (saves + quits nvim, stops
+ttyd, stops the server), or `Ctrl-C` the launcher, or run `./web/teardown.sh`.
+
 Both ports bind **loopback only**. Env knobs: `APIPORT` (default 8000),
 `TTYD_PORT` (7681), `NVIM_SOCK` (`/tmp/mle_nvim.sock`). To reach a remote box,
 tunnel **both** ports:

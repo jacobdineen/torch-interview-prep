@@ -33,6 +33,7 @@ async function init() {
   $("submit-btn").addEventListener("click", () => run(true));
   $("hint-btn").addEventListener("click", showHint);
   $("solution-btn").addEventListener("click", showSolution);
+  $("teardown-btn").addEventListener("click", teardown);
 
   // Start at the first unsolved, else the first problem.
   const firstUnsolved = PROBLEMS.find((p) => !p.solved) || PROBLEMS[0];
@@ -132,6 +133,17 @@ function renderResult(r, submit) {
     b.className = "results-body fail";
     b.textContent = "error: " + (r.message || "unknown");
   }
+}
+
+async function teardown() {
+  if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. Unsaved edits in the editor are written first.")) return;
+  try { await api.post("/api/shutdown", {}); } catch (e) { /* server exits mid-response */ }
+  document.body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
+    'flex-direction:column;gap:8px;color:#8b98a9;font:14px system-ui">' +
+    "<div style=\"font-size:18px;color:#e6edf3\">⏻ torn down</div>" +
+    "<div>nvim, ttyd, and the server have stopped. You can close this tab.</div>" +
+    "<div>Restart with <code>./web/serve-app.sh</code>.</div></div>";
 }
 
 async function showHint() {

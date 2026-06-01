@@ -26,8 +26,9 @@ TTYD_PID=$!
 # Wait for nvim's socket so the first remote-open works.
 for _ in $(seq 1 50); do [ -S "$SOCK" ] && break; sleep 0.1; done
 
-# 2) API + static UI.
-NVIM_SOCK="$SOCK" TTYD_PORT="$TTYD_PORT" APIPORT="$APIPORT" "$PYTHON" "$REPO/web/app.py" &
+# 2) API + static UI. Pass TTYD_PID so the in-app "Tear down" button can stop ttyd.
+NVIM_SOCK="$SOCK" TTYD_PORT="$TTYD_PORT" APIPORT="$APIPORT" TTYD_PID="$TTYD_PID" \
+  "$PYTHON" "$REPO/web/app.py" &
 API_PID=$!
 
 cleanup() { kill "$TTYD_PID" "$API_PID" 2>/dev/null || true; rm -f "$SOCK"; }

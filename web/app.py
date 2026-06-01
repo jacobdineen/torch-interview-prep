@@ -14,8 +14,10 @@ import glob
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -158,6 +160,30 @@ def nvim_save_all():
     _nvim("--remote-send", "<C-\\><C-N>:wa<CR>")
 
 
+def teardown():
+    """Stop everything: save + quit the editor, stop ttyd, drop the socket, then
+    exit this API process. Idempotent and best-effort."""
+    try:
+        _nvim("--remote-send", "<C-\\><C-N>:wqa!<CR>", timeout=3)  # save then quit nvim
+    except Exception:
+        pass
+    pid = os.environ.get("TTYD_PID")
+    try:
+        if pid:
+            os.kill(int(pid), signal.SIGTERM)
+        else:
+            subprocess.run(["pkill", "-f", f"ttyd.*-p {TTYD_PORT}"], timeout=5)
+    except Exception:
+        pass
+    try:
+        if os.path.exists(NVIM_SOCK):
+            os.remove(NVIM_SOCK)
+    except Exception:
+        pass
+    # Exit the API shortly after the HTTP response has flushed.
+    threading.Timer(0.4, lambda: os._exit(0)).start()
+
+
 # ---------- run / debug via check.py ----------
 
 def _run_check(pid, extra=()):
@@ -248,6 +274,10 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/solution":
             extra = ["--solution"] + (["--i-give-up"] if data.get("give_up") else [])
             return self._send(200, {"text": _text_check(pid, extra)})
+        if u.path == "/api/shutdown":
+            self._send(200, {"ok": True})
+            teardown()
+            return
         return self._send(404, {"error": "not found"})
 
 

@@ -42,6 +42,8 @@ summary { cursor: pointer; color: var(--accent); }
 .spacer { flex: 1; }
 button.run { border-color: #244; color: var(--accent); }
 button.submit { border-color: #1c3; color: var(--green); }
+button.danger { border-color: #511; color: var(--red); }
+button.danger:hover { border-color: var(--red); background: #2a1416; }
 #nvim { flex: 1; width: 100%; border: 0; background: #000; min-height: 0; }
 
 .results { border-top: 1px solid var(--border); background: var(--panel); max-height: 38%; display: flex; flex-direction: column; }
