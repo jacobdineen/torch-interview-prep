@@ -280,17 +280,28 @@ The repo root and venv python are auto-detected by walking up to `check.py`.
 |---|---|---|
 | `<leader>pp` | `:PracticeRun` | Run the current problem. PASS → notify; FAIL → diagnostic on the failing line + a float with the diff and likely cause. |
 | `<leader>pn` | `:PracticeNext` | Open the next unsolved problem. |
-| `<leader>pf` | `:PracticePick` | Telescope picker over all problems, marked `[x]` solved / `[ ]` unsolved. |
+| `<leader>pf` | `:PracticePick` | Telescope picker over all problems **and project steps**, marked `[x]` solved / `[ ]` unsolved. |
 | `<leader>ph` | `:PracticeHint` | Next graduated hint (float). |
 | `<leader>pe` | `:PracticeExplain` | What the test checks + your notes (float). |
 | `<leader>ps` | `:PracticeSolution` | Reference solution if unlocked (float). |
 | `<leader>pg` | `:PracticeGiveUp` | Unlock + show the solution. |
 | `<leader>pt` | `:PracticeTime` | Benchmark vs the reference (float). |
 | `<leader>po` | `:PracticeNote` | Jot a note for this problem (resurfaces under explain). |
-| `<leader>pd` | `:PracticeStatus` | Progress dashboard (float). |
-| `<leader>pw` | `:PracticeAutorun` | Toggle run-on-save for `p*_*.py` (off by default). |
+| `<leader>pd` | `:PracticeStatus` | Unified dashboard (problems + projects + next) via `prep.py`; in a project step, that project's status. |
+| `<leader>pw` | `:PracticeAutorun` | Toggle run-on-save for problems **and project steps** (off by default). |
 
-After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
+The same maps work on project steps (`projects/*/steps/NNNN_*.py`), routing to `projects.py`. On PASS the float shows the concept blurb + tier progress; on FAIL it shows the diff detail. After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
+
+### Browser (web nvim)
+
+Run this exact nvim setup in a browser tab (self-host, single user):
+
+```bash
+sudo apt-get install -y ttyd && sudo systemctl disable --now ttyd   # one-time
+./web/serve-nvim.sh                                                  # serves your real nvim on 127.0.0.1:7681
+```
+
+It streams your real `nvim` over a terminal (ttyd + xterm.js), so every keymap above works identically. Binds to loopback by default; reach it via an SSH tunnel or Tailscale. See [docs/web-nvim.md](docs/web-nvim.md).
 
 ## Workflow tips
 
