@@ -5,6 +5,25 @@ each) that accumulate into a working program. The four existing ones
 (`tiny-gpt-from-scratch`, `tic-tac-toe-rl`, `rlhf-distilgpt2`,
 `alphazero-connect4`) all follow the same recipe. This is that recipe.
 
+## The fluid way: `new_project.py`
+
+```bash
+python new_project.py my-cool-project --title "My Cool Project"   # add --torch for torch stubs
+```
+
+This lays down the whole tree — `_build/{spec,gen,verify}.py`,
+`tests/_ref/{reference,tests}.py`, `scaffold.py`, and `README.md` — with a
+working, class-aware `gen.py`/`verify.py` (it derives the project name/title from
+the directory + `spec.TITLE`, so there's no hardcoded name to forget). It refuses
+to overwrite an existing project. Then you only write the content:
+
+1. the reference implementations in `tests/_ref/reference.py`,
+2. a test per step in `tests/_ref/tests.py`,
+3. the parts + ordered steps in `_build/spec.py`,
+4. `python projects/<name>/_build/gen.py` then `_build/verify.py`.
+
+The manual recipe below explains what those files are and how they connect.
+
 ## Layout
 
 Everything for a project lives under `projects/<name>/`:
