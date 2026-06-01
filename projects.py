@@ -155,7 +155,8 @@ def _reference_source(root, name):
     tree = ast.parse(src)
     lines = src.splitlines()
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == name:
+        if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and node.name == name):
             return "\n".join(lines[node.lineno - 1: node.end_lineno])
     return None
 
