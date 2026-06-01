@@ -22,6 +22,8 @@ def _run(label, cmd):
 def main():
     py = sys.executable
     results = {}
+    results["framework"] = _run("framework (grader + assembler)",
+                                 [py, os.path.join(HERE, "test_framework.py")])
     results["problems"] = _run("problems (reference solutions)",
                                [py, os.path.join(HERE, "verify_problems.py")])
     for verify in sorted(glob.glob(os.path.join(HERE, "projects", "*", "_build", "verify.py"))):

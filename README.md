@@ -174,12 +174,20 @@ nvim `<leader>p` keymaps work on step files too. Build/regenerate a project from
 with `python projects/<name>/_build/gen.py`; `_build/verify.py` checks every reference
 passes its own test.
 
+Each project has its own README with the full part breakdown and expected results:
+[tiny-gpt-from-scratch](projects/tiny-gpt-from-scratch/README.md) ·
+[tic-tac-toe-rl](projects/tic-tac-toe-rl/README.md) ·
+[rlhf-distilgpt2](projects/rlhf-distilgpt2/README.md) ·
+[alphazero-connect4](projects/alphazero-connect4/README.md). To add your own,
+see [docs/adding-a-project.md](docs/adding-a-project.md).
+
 ## Continuous integration
 
-`python verify_all.py` is the correctness gate: it runs `verify_problems.py` (every
-problem's reference solution against its compiled test, using a temp dir so your
-working files are never touched) and each project's `_build/verify.py`. It exits
-non-zero if anything fails.
+`python verify_all.py` is the correctness gate. It runs, in order:
+`test_framework.py` (the grader + assembler themselves, against a throwaway
+project), `verify_problems.py` (every problem's reference solution against its
+compiled test, using a temp dir so your working files are never touched), and
+each project's `_build/verify.py`. It exits non-zero if anything fails.
 
 GitHub Actions runs it on every push and pull request (`.github/workflows/ci.yml`,
 CPU-only torch, HuggingFace model cached), so a change to shared tooling, a
