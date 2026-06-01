@@ -119,16 +119,22 @@ def cmd_next(root, after=None):
     steps = [s for s in man["steps"] if os.path.exists(_step_path(root, s))]
     ids = [s["id"] for s in steps]
     by_id = {s["id"]: s for s in steps}
-    chosen = None
+    chosen, wrapped = None, False
     if after and _norm_id(after) in ids:
         i = ids.index(_norm_id(after))
         chosen = next((x for x in ids[i + 1:] if x not in ever), None)
     if chosen is None:
+        # Nothing ahead of `after`; fall back to the earliest gap and say so, so
+        # the learner knows they're backfilling rather than advancing.
         chosen = next((x for x in ids if x not in ever), None)
+        wrapped = bool(after) and chosen is not None
     if chosen is None:
         print("All built steps solved — run --scaffold.")
         return
-    print(f"Next unsolved: {chosen}  {by_id[chosen]['name']}")
+    if wrapped:
+        print(f"Nothing left ahead — earlier gap: {chosen}  {by_id[chosen]['name']}")
+    else:
+        print(f"Next unsolved: {chosen}  {by_id[chosen]['name']}")
     print(_step_path(root, by_id[chosen]))
 
 

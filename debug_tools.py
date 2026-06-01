@@ -130,7 +130,16 @@ def show_explain(pid, problem_path):
         rest = doc.strip().split("\n", 2)
         if len(rest) > 2:
             extra = rest[2].strip()
-            if extra:
+            # The stub template leaves a bookkeeping line like
+            #   (Split from parent problem 04: Problem 04: Broadcasting and Arithmetic)
+            # Reformat it into a clean "Part of:" line rather than printing the
+            # internal artifact as teaching prose.
+            split_m = re.search(
+                r"Split from parent problem\s+\d+:\s*(?:Problem\s+\d+:\s*)?(.+?)\)?\s*$",
+                extra)
+            if split_m:
+                print(f"    Part of: {split_m.group(1).strip()}")
+            elif extra:
                 print(f"    Parent problem context:")
                 for line in textwrap.wrap(extra, width=78,
                                            initial_indent="      ",

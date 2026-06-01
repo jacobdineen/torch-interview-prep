@@ -12,6 +12,10 @@ Debug modes (don't run the test, show info instead):
                                        #   (gated; requires --i-give-up to first see)
   python check.py 02a --time           # benchmark your impl vs the reference
   python check.py 02a --note "TEXT"    # jot a note; shown later under --explain
+  python check.py 02a --redo           # re-lock a solved problem to drill it again
+
+Run with no arguments to jump to the next unsolved problem. To restore a stub
+from its pristine snapshot, use reset.py (e.g. `python reset.py 02a`).
 """
 import argparse
 import glob
@@ -111,7 +115,15 @@ def main():
                         help="unlock --solution for this problem")
     parser.add_argument("--time", action="store_true",
                         help="time your implementation against the reference")
+    parser.add_argument("--redo", action="store_true",
+                        help="re-lock a solved problem (clear its pass + hint state) to drill it again")
     args = parser.parse_args()
+
+    # No id and no flags: behave like --next so the most natural first command
+    # guides the learner instead of erroring.
+    if args.id is None and not any((args.next, args.note, args.hint, args.reset_hints,
+                                    args.explain, args.solution, args.time, args.redo)):
+        args.next = True
 
     if args.next:
         pid, path, wrapped = _next_unsolved(after=args.id)
@@ -136,6 +148,11 @@ def main():
     if not matches:
         print(f"no problem found for {args.id!r}")
         sys.exit(2)
+
+    if args.redo:
+        for m in matches:
+            _redo(_id_from_path(m))
+        return
 
     if args.note is not None:
         from debug_tools import add_note
@@ -170,6 +187,30 @@ def main():
 def _id_from_path(path):
     m = re.match(r"^p(\d+[a-z]?)_", os.path.basename(path))
     return m.group(1) if m else None
+
+
+def _redo(pid):
+    """Re-lock a solved problem: clear its pass record, hint counter, and solution
+    unlock so it can be drilled fresh (the stub itself is untouched; use reset.py
+    to restore the pristine stub)."""
+    import json
+    from debug_tools import HINT_STATE_FILE, SOLUTION_UNLOCK_FILE
+    cleared = False
+    for path in (os.path.join(HERE, ".progress.json"), HINT_STATE_FILE, SOLUTION_UNLOCK_FILE):
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if isinstance(data, dict) and pid in data:
+            del data[pid]
+            cleared = True
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2, sort_keys=True)
+    print(f"  {pid}: re-locked — solve it again to mark it passed."
+          if cleared else f"  {pid}: nothing to reset (not yet solved).")
 
 
 if __name__ == "__main__":

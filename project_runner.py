@@ -34,9 +34,21 @@ def _find_project_root(step_path):
     return None
 
 
-def _ensure_compiled(project_root):
-    """Compile the hidden _ref sources to _compiled/*.pyc if missing or stale, so
-    the project works on a fresh checkout without running the build script."""
+def _stale_magic(pyc_path):
+    """True if the .pyc was built by a different Python (its 4-byte magic header
+    differs from this interpreter's). A committed .pyc after a Python upgrade
+    otherwise loads as 'bad magic number', which reads like a wrong solution."""
+    try:
+        with open(pyc_path, "rb") as f:
+            return f.read(4) != importlib.util.MAGIC_NUMBER
+    except OSError:
+        return True
+
+
+def _ensure_compiled(project_root, force=False):
+    """Compile the hidden _ref sources to _compiled/*.pyc if missing, stale, or
+    built by a different Python, so the project works on a fresh checkout (and
+    after a Python upgrade) without running the build script."""
     import py_compile
     ref_dir = os.path.join(project_root, "tests", "_ref")
     out_dir = os.path.join(project_root, "tests", "_compiled")
@@ -44,8 +56,10 @@ def _ensure_compiled(project_root):
     for name in ("reference", "tests"):
         src = os.path.join(ref_dir, f"{name}.py")
         dst = os.path.join(out_dir, f"{name}.pyc")
-        if os.path.exists(src) and (not os.path.exists(dst)
-                                    or os.path.getmtime(dst) < os.path.getmtime(src)):
+        needs = (force or not os.path.exists(dst)
+                 or os.path.getmtime(dst) < os.path.getmtime(src)
+                 or _stale_magic(dst))
+        if os.path.exists(src) and needs:
             try:
                 py_compile.compile(src, cfile=dst, doraise=True)
             except Exception:
@@ -231,10 +245,22 @@ def run_step(step_path):
     label = f"Step {step_id} ({name})"
     _ensure_compiled(root)
 
-    try:
-        ref_funcs = _reference_funcs(root)
-        tests_mod = _load_compiled(
+    def _load_refs_and_tests():
+        funcs = _reference_funcs(root)
+        mod = _load_compiled(
             os.path.join(root, "tests", "_compiled", "tests.pyc"), "_tgp_tests")
+        return funcs, mod
+
+    try:
+        try:
+            ref_funcs, tests_mod = _load_refs_and_tests()
+        except ImportError:
+            # Most likely a committed .pyc built by a different Python ("bad magic
+            # number"); recompile against this interpreter and retry once.
+            if not json_mode:
+                print("[project_runner] recompiling project tests for your Python...")
+            _ensure_compiled(root, force=True)
+            ref_funcs, tests_mod = _load_refs_and_tests()
         test_fn = getattr(tests_mod, f"test_{step_id}_{name}", None)
         if test_fn is None:
             print(f"[project_runner] No test for {step_id}_{name}")
