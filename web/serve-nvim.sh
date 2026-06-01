@@ -39,7 +39,12 @@ fi
 # drive it remotely (open buffers, save) — see web/serve-app.sh.
 inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\""
 nvim_cmd="exec nvim"
-[ -n "${NVIM_LISTEN:-}" ] && nvim_cmd="$nvim_cmd --listen '$NVIM_LISTEN'"
+if [ -n "${NVIM_LISTEN:-}" ]; then
+  # ttyd spawns a fresh nvim per browser connection; clear any stale socket from
+  # a previous (now-dead) connection first so --listen always binds cleanly.
+  inner="$inner && rm -f '$NVIM_LISTEN'"
+  nvim_cmd="$nvim_cmd --listen '$NVIM_LISTEN'"
+fi
 if [ -n "$START_FILE" ]; then
   nvim_cmd="$nvim_cmd '$START_FILE'"
 fi
