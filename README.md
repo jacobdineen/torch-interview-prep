@@ -248,7 +248,8 @@ mle_prep/
 ├── tests/
 │   ├── _compiled/             # opaque .pyc the runner loads
 │   └── _src/                  # readable source (don't peek before solving)
-├── docs/                      # adding-a-problem.md, adding-a-project.md
+├── web/                       # browser app: serve-app.sh, serve-nvim.sh, app.py, static/
+├── docs/                      # adding-a-problem.md, adding-a-project.md, web-nvim.md
 ├── .github/workflows/ci.yml   # runs verify_all.py on every push / PR
 └── .stubs/                    # pristine snapshot used by reset.py
 ```
@@ -292,16 +293,16 @@ The repo root and venv python are auto-detected by walking up to `check.py`.
 
 The same maps work on project steps (`projects/*/steps/NNNN_*.py`), routing to `projects.py`. On PASS the float shows the concept blurb + tier progress; on FAIL it shows the diff detail. After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
 
-### Browser (web nvim)
+### Browser web app
 
-Run this exact nvim setup in a browser tab (self-host, single user):
+Practice in the browser with a problem-description UI on the left and **your real nvim** embedded on the right (Run/Submit + a results panel) — self-host, single user:
 
 ```bash
 sudo apt-get install -y ttyd && sudo systemctl disable --now ttyd   # one-time
-./web/serve-nvim.sh                                                  # serves your real nvim on 127.0.0.1:7681
+./web/serve-app.sh                                                   # http://127.0.0.1:8000
 ```
 
-It streams your real `nvim` over a terminal (ttyd + xterm.js), so every keymap above works identically. Binds to loopback by default; reach it via an SSH tunnel or Tailscale. See [docs/web-nvim.md](docs/web-nvim.md).
+The editor is your actual `nvim` (streamed via ttyd + xterm.js), so every `<leader>p` keymap works identically; picking a problem does an `nvim --remote` buffer switch, and Run does a remote `:wa` + `check.py`. For just the editor with no surrounding UI, use `./web/serve-nvim.sh`. Both bind loopback; reach a remote box by tunnelling the ports. See [docs/web-nvim.md](docs/web-nvim.md).
 
 ## Workflow tips
 

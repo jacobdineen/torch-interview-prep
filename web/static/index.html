@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mle_prep — practice</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">▚ mle_prep</div>
+    <div class="picker">
+      <select id="problem-select" title="Pick a problem"></select>
+      <button id="prev-btn" title="Previous">‹</button>
+      <button id="next-btn" title="Next unsolved">next ›</button>
+    </div>
+    <div id="overall" class="overall"></div>
+  </header>
+
+  <main id="split">
+    <!-- Left: problem description -->
+    <section id="left">
+      <div class="prob-head">
+        <h1 id="prob-title">—</h1>
+        <div class="tags">
+          <span id="prob-status" class="tag"></span>
+          <span id="prob-tier" class="tag tier"></span>
+        </div>
+      </div>
+      <pre id="prob-sig" class="sig"></pre>
+      <div id="prob-doc" class="doc"></div>
+      <details id="concept-wrap">
+        <summary>Learn about this topic</summary>
+        <div id="prob-concept" class="concept"></div>
+      </details>
+      <div class="left-actions">
+        <button id="hint-btn">Hint</button>
+        <button id="solution-btn">Solution</button>
+      </div>
+      <pre id="aux-out" class="aux"></pre>
+    </section>
+
+    <!-- Right: real nvim + run/results -->
+    <section id="right">
+      <div class="editor-bar">
+        <span class="editor-label">editor — your real nvim (<code>:w</code> then Run)</span>
+        <span class="spacer"></span>
+        <button id="run-btn" class="run">▶ Run</button>
+        <button id="submit-btn" class="submit">⚡ Submit</button>
+      </div>
+      <iframe id="nvim" title="nvim"></iframe>
+      <div id="results" class="results">
+        <div class="results-head">Results</div>
+        <div id="results-body" class="results-body muted">Edit in the editor, then Run.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

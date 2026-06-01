@@ -35,12 +35,15 @@ fi
 
 # Build the command the PTY runs: enter the repo, put the venv first on PATH (so
 # `python`/`uv` resolve to the project's), then exec your real nvim.
+# NVIM_LISTEN (optional): start nvim with a --listen socket so the web app can
+# drive it remotely (open buffers, save) — see web/serve-app.sh.
 inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\""
+nvim_cmd="exec nvim"
+[ -n "${NVIM_LISTEN:-}" ] && nvim_cmd="$nvim_cmd --listen '$NVIM_LISTEN'"
 if [ -n "$START_FILE" ]; then
-  inner="$inner && exec nvim '$START_FILE'"
-else
-  inner="$inner && exec nvim"
+  nvim_cmd="$nvim_cmd '$START_FILE'"
 fi
+inner="$inner && $nvim_cmd"
 
 creds=()
 [ -n "$AUTH" ] && creds=(-c "$AUTH")

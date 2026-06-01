@@ -1,13 +1,53 @@
-# Browser Neovim (web app, phase 1)
+# Web app — practice in the browser, edited in your real Neovim
 
-Run **your real Neovim** — this repo, your `~/.config/nvim/init.lua`, and the
-project `.venv` — in a browser tab. It is the same editor as local: every
-`<leader>p` map, the winbar cheatsheet, Telescope, and the `PREP_JSON` PASS/FAIL
-floats all work, because the browser is just a terminal (xterm.js) attached to a
-real `nvim` process on the host via [ttyd](https://github.com/tsl0922/ttyd).
+Two ways to run this in a browser, both self-host / single-user, both using your
+**real Neovim** (this repo, your `~/.config/nvim/init.lua`, the project `.venv`).
+It's the same editor as local — every `<leader>p` map, the winbar, Telescope, and
+the `PREP_JSON` floats work, because the browser just renders a real `nvim`
+process via [ttyd](https://github.com/tsl0922/ttyd). No vim *emulation* to drift.
 
-This is the terminal-first, self-host, single-user MVP. There is no second
-editor and no vim *emulation* to drift from your config — it's your nvim.
+1. **Full app** (`web/serve-app.sh`) — a problem-description UI on the left, your
+   nvim embedded on the right, with Run/Submit and a results panel. Recommended.
+2. **Just the editor** (`web/serve-nvim.sh`) — only the nvim terminal in a tab.
+
+## Full app
+
+```bash
+sudo apt-get install -y ttyd && sudo systemctl disable --now ttyd   # one-time (see note below)
+./web/serve-app.sh
+```
+
+Open **http://127.0.0.1:8000**. Pick a problem on the left (or use *next ›*); it
+opens in the embedded nvim via `nvim --remote` (one persistent nvim — switching
+problems just changes the buffer). Edit as you always do, then hit **Run**: the
+app remote-saves all buffers (`:wa`) and runs `check.py`, rendering PASS/FAIL +
+the likely cause + the tensor diff in the results panel. **Submit** also shows
+the concept blurb on success. **Hint**/**Solution** call the same CLI helpers.
+
+How it fits together:
+
+```
+browser ──HTTP──► web/app.py (:8000)  ── nvim --remote / --remote-send ──► nvim
+   │                  └─ runs check.py (PREP_JSON) for Run/Submit            ▲
+   └──iframe──► ttyd (:7681) ──PTY──► nvim --listen /tmp/mle_nvim.sock ──────┘
+```
+
+Both ports bind **loopback only**. Env knobs: `APIPORT` (default 8000),
+`TTYD_PORT` (7681), `NVIM_SOCK` (`/tmp/mle_nvim.sock`). To reach a remote box,
+tunnel **both** ports:
+
+```bash
+ssh -L 8000:localhost:8000 -L 7681:localhost:7681 <you>@<this-host>
+```
+
+## Just the editor
+
+```bash
+./web/serve-nvim.sh
+```
+
+Run **your real Neovim** in a browser tab (no surrounding UI). Same editor,
+binds loopback, opens to your next unsolved problem.
 
 ## One-time setup
 
