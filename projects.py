@@ -84,6 +84,20 @@ def cmd_list(root):
         print()
 
 
+def cmd_overview(projs):
+    """List every project with a one-line progress summary (no project named)."""
+    print(f"\n  Projects ({len(projs)}):\n")
+    for root in projs:
+        man, prog = _manifest(root), _progress(root)
+        ever = {k for k, v in prog.items() if v.get("ever_passed")}
+        total = len(man["steps"])
+        done = sum(1 for s in man["steps"] if s["id"] in ever)
+        name = os.path.basename(root)
+        print(f"  {_bar(done, total)} {done:>3}/{total:<3}  {name:<22}  {man['title']}")
+    print("\n  python projects.py <name>          # parts + steps, [x]/[ ] solved")
+    print("  python projects.py <name> --next   # jump to the next unsolved step\n")
+
+
 def cmd_status(root):
     man, prog = _manifest(root), _progress(root)
     ever = {k for k, v in prog.items() if v.get("ever_passed")}
@@ -186,8 +200,12 @@ def main():
         return
     root = _resolve_project(args.project)
     if root is None:
-        print("Specify a project: " + ", ".join(os.path.basename(x) for x in projs))
-        return
+        if args.project:
+            print(f"No project named '{args.project}'. Available: "
+                  + ", ".join(os.path.basename(x) for x in projs))
+            sys.exit(2)
+        # No project named and more than one exists: show the overview.
+        return cmd_overview(projs)
 
     if args.scaffold:
         sys.exit(subprocess.run([sys.executable, os.path.join(root, "scaffold.py")]).returncode)
