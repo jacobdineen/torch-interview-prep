@@ -464,6 +464,55 @@ def _print_progress_after_pass(num):
 
 # ---------- machine-readable output (for editor integration) ----------
 
+def _diff_detail(diff):
+    """A short human-readable line from a structured diff, so the editor can show
+    the same actionable nudge the terminal does (shape/dtype/value + scale)."""
+    if not diff:
+        return None
+    k = diff.get("kind")
+    if k == "shape":
+        return f"shape: {diff['a']} {diff['shape_a']} vs {diff['b']} {diff['shape_b']}"
+    if k == "dtype":
+        return f"dtype: {diff['a']} {diff['dtype_a']} vs {diff['b']} {diff['dtype_b']}"
+    if k == "value":
+        parts = [f"max |{diff['a']} - {diff['b']}| = {diff['max_diff']:.6g}"]
+        if diff.get("first_index") is not None:
+            parts.append(f"first mismatch at index {tuple(diff['first_index'])}")
+        if diff.get("scale"):
+            parts.append(f"~{diff['scale']}x scale (check a missing/extra factor)")
+        return "; ".join(parts)
+    return None
+
+
+def _progress_payload(num):
+    """Compact PASS momentum for editors: (summary string, next-problem id)."""
+    try:
+        if PREP not in sys.path:
+            sys.path.insert(0, PREP)
+        from curriculum import find_tier, tier_members, TOTAL_PROBLEMS  # type: ignore
+        ever = {k for k, v in _load_progress().items() if v.get("ever_passed")}
+        lines, nxt = [], None
+        tier = find_tier(num)
+        if tier is not None:
+            _, tier_name, lo, hi = tier
+            members = tier_members(lo, hi)
+            solved = sum(1 for m in members if m in ever)
+            width = 18
+            filled = int(round(width * solved / len(members))) if members else 0
+            bar = "[" + "#" * filled + "-" * (width - filled) + "]"
+            lines.append(f"{bar} {solved}/{len(members)}  {tier_name}")
+            try:
+                ci = members.index(num)
+            except ValueError:
+                ci = -1
+            nxt = next((m for m in members[ci + 1:] if m not in ever), None)
+        total = sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
+        lines.append(f"overall: {total}/{TOTAL_PROBLEMS} solved")
+        return "\n".join(lines), nxt
+    except Exception:
+        return None, None
+
+
 def _emit_json(num, name, stub_path, status, error_type, message, exc):
     """Print a single JSON object describing the run. Enabled when PREP_JSON=1, so
     editors (nvim) can parse a run without scraping human-formatted text."""
@@ -478,13 +527,27 @@ def _emit_json(num, name, stub_path, status, error_type, message, exc):
         "fail_line": None,
         "fail_func": None,
         "diff": None,                # structured tensor diff, if any
+        "detail": None,              # human-readable diff line (FAIL)
         "hint": None,                # one-line likely cause
+        "concept": None,             # concept blurb (PASS)
+        "progress": None,            # tier bar + overall (PASS)
+        "next": None,                # next-problem id (PASS)
     }
     if exc is not None:
         ff, fl, fn_, _line = _user_fail_site(exc)
         out["fail_file"], out["fail_line"], out["fail_func"] = ff, fl, fn_
         out["diff"] = _diff_struct(exc)
+        out["detail"] = _diff_detail(out["diff"])
     out["hint"] = _likely_cause(error_type, message, out["diff"])
+    if status == "pass":
+        try:
+            if PREP not in sys.path:
+                sys.path.insert(0, PREP)
+            from concepts import get_concept  # type: ignore
+            out["concept"] = get_concept(num)
+        except Exception:
+            pass
+        out["progress"], out["next"] = _progress_payload(num)
     print(json.dumps(out))
 
 
