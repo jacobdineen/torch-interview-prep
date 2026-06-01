@@ -31,8 +31,9 @@ _RE = re.compile(r"^p(\d+[a-z]?)_(.+)\.py$")
 def main():
     tmp = tempfile.mkdtemp(prefix="ref_problems_")
     sys.path.insert(0, tmp)  # resolve `from pNN_name import *` to the reference copy
-    npass = nfail = nskip = 0
+    npass = nfail = 0
     failures = []
+    skips = []
     try:
         pending = []
         for f in sorted(glob.glob(os.path.join(PROBLEMS, "p*_*.py"))):
@@ -43,7 +44,7 @@ def main():
             parent = f"{int(re.match(r'[0-9]+', pid).group()):02d}"
             ref = PARENT_SOLUTIONS.get(parent)  # full parent (includes shared helpers)
             if not ref:
-                nskip += 1
+                skips.append(f"{pid} {name} (no reference in solutions.py)")
                 continue
             with open(os.path.join(tmp, os.path.basename(f)), "w") as out:
                 out.write(PRELUDE + ref + "\n")
@@ -53,7 +54,7 @@ def main():
             mod_name = f"test_p{pid}_{name}"
             pyc = os.path.join(COMPILED, f"{mod_name}.pyc")
             if not os.path.exists(pyc):
-                nskip += 1
+                skips.append(f"{pid} {name} (no compiled test)")
                 continue
             try:
                 loader = SourcelessFileLoader(mod_name, pyc)
@@ -68,9 +69,11 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    print(f"problems: {npass} pass, {nfail} fail, {nskip} skip")
+    print(f"problems: {npass} pass, {nfail} fail, {len(skips)} skip")
     for fl in failures[:25]:
         print("  FAIL", fl)
+    for sk in skips:
+        print("  SKIP", sk)
     return 1 if nfail else 0
 
 

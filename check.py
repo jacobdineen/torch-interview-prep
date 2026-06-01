@@ -69,8 +69,14 @@ def _next_unsolved(after=None):
 
     ids = all_problem_ids()
 
+    def has_test(pid):
+        # A problem with no compiled/source test can never be graded as passing,
+        # so it must not be proposed as "next" (else --next dead-ends on it).
+        return bool(glob.glob(os.path.join(HERE, "tests", "_compiled", f"test_p{pid}_*.pyc"))
+                    or glob.glob(os.path.join(HERE, "tests", "_src", f"test_p{pid}_*.py")))
+
     def unsolved(pid):
-        return not progress.get(pid, {}).get("ever_passed")
+        return has_test(pid) and not progress.get(pid, {}).get("ever_passed")
 
     def path_for(pid):
         matches = sorted(glob.glob(os.path.join(HERE, "problems", f"p{pid}_*.py")))
