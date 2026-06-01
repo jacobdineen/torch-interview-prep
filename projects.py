@@ -5,8 +5,9 @@
   python projects.py <project> --status    # per-part progress bars
   python projects.py <project> --next      # next unsolved step (id + path)
   python projects.py <project> <id>        # run that step
-  python projects.py <project> <id> --explain   # signature + what it does
-  python projects.py <project> <id> --solution [--i-give-up]   # reference (gated)
+  python projects.py <project> <id> --explain   # signature + what it does + notes
+  python projects.py <project> <id> --solution [--i-give-up]   # reference (unlock persists)
+  python projects.py <project> <id> --note "TEXT"   # jot a note; shown under --explain
   python projects.py <project> --scaffold  # run the end-to-end demo
 
 <project> may be omitted when there is exactly one project. <id> is a 4-digit
@@ -142,16 +143,57 @@ def _find_step(man, sid):
     return next((s for s in man["steps"] if s["id"] == sid), None)
 
 
+# ---- per-project notes + persistent solution unlock (parity with the problems side) ----
+
+def _json_store(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _notes_file(root):
+    return os.path.join(root, ".notes.json")
+
+
+def _unlock_file(root):
+    return os.path.join(root, ".solution_unlock.json")
+
+
+def cmd_note(root, sid, text):
+    man = _manifest(root)
+    if not _find_step(man, sid):
+        print(f"no step {sid}")
+        return
+    path = _notes_file(root)
+    notes = _json_store(path)
+    notes.setdefault(sid, []).append(text)
+    with open(path, "w") as f:
+        json.dump(notes, f, indent=2, sort_keys=True)
+    print(f"  noted for {sid} (shown under --explain).")
+
+
 def cmd_explain(root, sid):
     man = _manifest(root)
     s = _find_step(man, sid)
     if not s:
         print(f"no step {sid}")
         return
+    part = man["parts"][s["part"]]
     print()
-    print(f"  Step {s['id']} — {s['name']}   (Part {s['part'] + 1}: {man['parts'][s['part']]['title']})")
+    print(f"  Step {s['id']} — {s['name']}   (Part {s['part'] + 1}: {part['title']})")
     print(f"    signature: {s['signature']}")
     print(f"    {s['doc']}")
+    if part.get("description"):
+        print(f"    Part: {part['description']}")
+    notes = _json_store(_notes_file(root)).get(sid)
+    if notes:
+        print("    Your notes:")
+        for n in notes:
+            print(f"      - {n}")
 
 
 def _reference_source(root, name):
@@ -173,7 +215,12 @@ def cmd_solution(root, sid, i_give_up):
     if not s:
         print(f"no step {sid}")
         return
-    ok = prog.get(sid, {}).get("ever_passed") or i_give_up
+    unlocks = _json_store(_unlock_file(root))
+    if i_give_up and not unlocks.get(sid):
+        unlocks[sid] = True
+        with open(_unlock_file(root), "w") as f:
+            json.dump(unlocks, f, indent=2, sort_keys=True)
+    ok = prog.get(sid, {}).get("ever_passed") or i_give_up or unlocks.get(sid)
     if not ok:
         print(f"\n  Solution for {sid} is locked. Pass it once, or re-run with --i-give-up.")
         return
@@ -193,6 +240,8 @@ def main():
     p.add_argument("--explain", action="store_true")
     p.add_argument("--solution", action="store_true")
     p.add_argument("--i-give-up", action="store_true")
+    p.add_argument("--note", metavar="TEXT",
+                   help="save a free-text note for this step (shown later under --explain)")
     p.add_argument("--scaffold", action="store_true")
     args = p.parse_args()
 
@@ -224,6 +273,8 @@ def main():
         return cmd_list(root)
 
     sid = _norm_id(args.id)
+    if args.note is not None:
+        return cmd_note(root, sid, args.note)
     if args.explain:
         return cmd_explain(root, sid)
     if args.solution:
