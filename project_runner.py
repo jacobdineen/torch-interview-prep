@@ -279,8 +279,12 @@ def run_step(step_path):
     _record(root, step_id, True)
     try:
         assemble_solution(root)
-    except Exception:
-        pass
+    except Exception as e:
+        # Best-effort: the PASS still stands, but warn (to stderr, so it doesn't
+        # corrupt the single JSON line the editor reads in PREP_JSON mode) so a
+        # broken assembly doesn't silently leave the scaffold's solution.py stale.
+        print(f"[project_runner] warning: could not re-assemble solution.py: "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
     if json_mode:
         _emit_json(root, step_id, name, step_path, "pass", None, None, None)
     else:
