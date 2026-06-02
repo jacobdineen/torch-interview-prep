@@ -9,23 +9,25 @@
 <body>
   <header id="topbar">
     <div class="brand">▚ mle_prep</div>
-    <div class="picker">
-      <select id="problem-select" title="Pick a problem"></select>
-      <button id="prev-btn" title="Previous">‹</button>
-      <button id="next-btn" title="Next unsolved">next ›</button>
+    <select id="source" title="Problems or a project"></select>
+    <div class="search-wrap">
+      <input id="filter" type="text" placeholder="filter by id or title…  (↑↓ Enter, Esc)" autocomplete="off" spellcheck="false" />
+      <div id="palette" class="palette hidden"></div>
     </div>
+    <button id="prev-btn" title="Previous in list">‹</button>
+    <button id="next-btn" title="Next unsolved">next ›</button>
     <div id="overall" class="overall"></div>
     <button id="teardown-btn" class="danger" title="Stop nvim, ttyd, and the server">⏻ Tear down</button>
   </header>
 
   <main id="split">
-    <!-- Left: problem description -->
     <section id="left">
       <div class="prob-head">
         <h1 id="prob-title">—</h1>
         <div class="tags">
           <span id="prob-status" class="tag"></span>
-          <span id="prob-tier" class="tag tier"></span>
+          <span id="prob-source" class="tag"></span>
+          <span id="prob-group" class="tag tier"></span>
         </div>
       </div>
       <pre id="prob-sig" class="sig"></pre>
@@ -41,7 +43,6 @@
       <pre id="aux-out" class="aux"></pre>
     </section>
 
-    <!-- Right: real nvim + run/results -->
     <section id="right">
       <div class="editor-bar">
         <span class="editor-label">editor — your real nvim (<code>:w</code> then Run)</span>

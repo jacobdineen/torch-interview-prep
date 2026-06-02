@@ -9,12 +9,32 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-s
 
 #topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
 .brand { font-family: var(--mono); font-weight: 700; letter-spacing: .5px; }
-.picker { display: flex; align-items: center; gap: 6px; }
 .overall { margin-left: auto; color: var(--muted); font-family: var(--mono); font-size: 12px; }
-select, button { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
-select { max-width: 460px; }
-button:hover { border-color: var(--accent); }
-#problem-select { font-family: var(--mono); font-size: 12px; }
+select, button, input { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font: inherit; }
+button, select { cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+#source { font-family: var(--mono); font-size: 12px; max-width: 220px; }
+
+/* searchable, grouped picker */
+.search-wrap { position: relative; flex: 1; max-width: 560px; }
+#filter { width: 100%; font-family: var(--mono); font-size: 13px; }
+#filter:focus { outline: none; border-color: var(--accent); }
+.palette {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+  max-height: 64vh; overflow: auto; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+.palette.hidden { display: none; }
+.pal-group { position: sticky; top: 0; background: var(--panel2); color: var(--muted);
+  font-size: 11px; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+.pal-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; }
+.pal-row.hi { background: var(--panel2); }
+.pal-row .mark { width: 12px; color: var(--muted); text-align: center; }
+.pal-row .mark.ok { color: var(--green); }
+.pal-row .pid { color: var(--accent); width: 58px; flex: none; }
+.pal-row .ptitle { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-empty { padding: 12px; color: var(--muted); }
 
 #split { flex: 1; display: grid; grid-template-columns: minmax(320px, 38%) 1fr; min-height: 0; }
 #left { padding: 18px 22px; overflow: auto; border-right: 1px solid var(--border); }

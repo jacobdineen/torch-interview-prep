@@ -6,83 +6,148 @@ const api = {
   async post(p, body) { const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); },
 };
 
-let PROBLEMS = [];
-let CURRENT = null;
+let ITEMS = [];        // full catalog
+let SOURCES = [];      // ["Problems", "tiny-gpt-from-scratch", ...]
+let CURRENT = null;    // current item key
+let HILITE = 0;        // highlighted index in the palette
 
 async function init() {
   const cfg = await api.get("/api/config");
-  // Embed the real nvim (ttyd) from the same host, on its own port.
   $("nvim").src = `${location.protocol}//${location.hostname}:${cfg.ttyd_port}/`;
 
-  PROBLEMS = await api.get("/api/problems");
-  const sel = $("problem-select");
-  sel.innerHTML = "";
-  for (const p of PROBLEMS) {
-    const o = document.createElement("option");
-    o.value = p.id;
-    o.textContent = `${p.solved ? "✓" : "·"} ${p.id}  ${p.title}`;
-    sel.appendChild(o);
-  }
-  const solved = PROBLEMS.filter((p) => p.solved).length;
-  $("overall").textContent = `${solved}/${PROBLEMS.length} solved`;
+  const cat = await api.get("/api/catalog");
+  ITEMS = cat.items || [];
+  SOURCES = cat.sources || [];
 
-  sel.addEventListener("change", () => selectProblem(sel.value));
-  $("next-btn").addEventListener("click", gotoNext);
+  const sourceSel = $("source");
+  sourceSel.innerHTML = "";
+  for (const s of ["All", ...SOURCES]) {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s === "All" ? "All sources" : s;
+    sourceSel.appendChild(o);
+  }
+  sourceSel.value = "Problems";
+
+  updateOverall();
+
+  sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); });
+  const f = $("filter");
+  f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); });
+  f.addEventListener("focus", () => { renderPalette(); openPalette(); });
+  f.addEventListener("keydown", onFilterKey);
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-wrap")) closePalette();
+  });
+
   $("prev-btn").addEventListener("click", () => step(-1));
+  $("next-btn").addEventListener("click", gotoNextUnsolved);
   $("run-btn").addEventListener("click", () => run(false));
   $("submit-btn").addEventListener("click", () => run(true));
   $("hint-btn").addEventListener("click", showHint);
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
 
-  // Start at the first unsolved, else the first problem.
-  const firstUnsolved = PROBLEMS.find((p) => !p.solved) || PROBLEMS[0];
-  if (firstUnsolved) selectProblem(firstUnsolved.id);
+  const first = ITEMS.find((x) => x.source === "Problems" && !x.solved) || ITEMS[0];
+  if (first) selectItem(first.key);
 }
 
+function updateOverall() {
+  const solved = ITEMS.filter((x) => x.solved).length;
+  $("overall").textContent = `${solved}/${ITEMS.length} solved`;
+}
+
+// ----- the filtered view (source + text) -----
+function view() {
+  const src = $("source").value;
+  const q = $("filter").value.trim().toLowerCase();
+  return ITEMS.filter((x) => {
+    if (src !== "All" && x.source !== src) return false;
+    if (!q) return true;
+    return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
+  });
+}
+
+// ----- palette (grouped, filterable dropdown) -----
+function renderPalette() {
+  const v = view();
+  const pal = $("palette");
+  if (HILITE >= v.length) HILITE = Math.max(0, v.length - 1);
+  let html = "", group = null;
+  v.forEach((it, i) => {
+    if (it.group !== group) {
+      group = it.group;
+      html += `<div class="pal-group">${esc(group)}</div>`;
+    }
+    html += `<div class="pal-row${i === HILITE ? " hi" : ""}" data-key="${esc(it.key)}" data-i="${i}">` +
+      `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
+      `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
+  });
+  if (!v.length) html = `<div class="pal-empty">no matches</div>`;
+  pal.innerHTML = html;
+  pal.querySelectorAll(".pal-row").forEach((row) => {
+    row.addEventListener("click", () => { selectItem(row.dataset.key); closePalette(); });
+    row.addEventListener("mousemove", () => setHilite(parseInt(row.dataset.i, 10)));
+  });
+  scrollHiliteIntoView();
+}
+
+function setHilite(i) {
+  HILITE = i;
+  const pal = $("palette");
+  pal.querySelectorAll(".pal-row").forEach((r) => r.classList.toggle("hi", parseInt(r.dataset.i, 10) === i));
+}
+function scrollHiliteIntoView() {
+  const el = $("palette").querySelector(".pal-row.hi");
+  if (el) el.scrollIntoView({ block: "nearest" });
+}
+function openPalette() { $("palette").classList.remove("hidden"); }
+function closePalette() { $("palette").classList.add("hidden"); }
+
+function onFilterKey(e) {
+  const v = view();
+  if (e.key === "ArrowDown") { e.preventDefault(); HILITE = Math.min(v.length - 1, HILITE + 1); setHilite(HILITE); scrollHiliteIntoView(); openPalette(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); HILITE = Math.max(0, HILITE - 1); setHilite(HILITE); scrollHiliteIntoView(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (v[HILITE]) { selectItem(v[HILITE].key); closePalette(); $("filter").blur(); } }
+  else if (e.key === "Escape") { closePalette(); $("filter").blur(); }
+}
+
+// ----- navigation -----
 function step(delta) {
-  const i = PROBLEMS.findIndex((p) => p.id === CURRENT);
-  const j = Math.min(PROBLEMS.length - 1, Math.max(0, i + delta));
-  if (PROBLEMS[j]) selectProblem(PROBLEMS[j].id);
+  const v = view();
+  const i = v.findIndex((x) => x.key === CURRENT);
+  const j = Math.min(v.length - 1, Math.max(0, (i < 0 ? 0 : i + delta)));
+  if (v[j]) selectItem(v[j].key);
+}
+function gotoNextUnsolved() {
+  const v = view();
+  const i = v.findIndex((x) => x.key === CURRENT);
+  const nxt = v.slice(i + 1).find((x) => !x.solved) || v.find((x) => !x.solved);
+  if (nxt) selectItem(nxt.key);
 }
 
-function gotoNext() {
-  const i = PROBLEMS.findIndex((p) => p.id === CURRENT);
-  const after = PROBLEMS.slice(i + 1).find((p) => !p.solved);
-  const any = after || PROBLEMS.find((p) => !p.solved);
-  if (any) selectProblem(any.id);
-}
-
-async function selectProblem(id) {
-  CURRENT = id;
-  $("problem-select").value = id;
-  const m = await api.get("/api/problem?id=" + encodeURIComponent(id));
+// ----- selection -----
+async function selectItem(key) {
+  CURRENT = key;
+  const m = await api.get("/api/item?key=" + encodeURIComponent(key));
   if (m.error) return;
-  $("prob-title").textContent = m.title || id;
-  $("prob-tier").textContent = m.tier || "";
+  $("prob-title").textContent = m.title || m.id;
+  $("prob-source").textContent = m.source || "";
+  $("prob-group").textContent = m.group || "";
   const st = $("prob-status");
   st.className = "tag " + (m.solved ? "solved" : m.last_status === "fail" ? "failed" : "");
   st.textContent = m.solved ? "solved" : m.last_status === "fail" ? "attempted" : "unsolved";
   $("prob-sig").textContent = m.signature || "";
-  // Show only the human spec line(s); drop the bookkeeping first line / split note.
-  $("prob-doc").textContent = docBody(m.doc, id);
+  $("prob-doc").textContent = m.doc || "";
   const cw = $("concept-wrap");
   if (m.concept) { $("prob-concept").textContent = m.concept; cw.style.display = ""; }
   else cw.style.display = "none";
   $("aux-out").textContent = "";
   resetResults();
-  // Switch the live nvim buffer to this problem (same embedded editor).
-  api.post("/api/open", { id });
-}
-
-function docBody(doc, id) {
-  if (!doc) return "";
-  const lines = doc.split("\n");
-  // line 0 is "Problem <id>: <title>" (shown as the H1); keep the rest, minus the
-  // "(Split from parent ...)" authoring artifact.
-  return lines.slice(1)
-    .filter((l) => !/^\(Split from parent problem/.test(l.trim()))
-    .join("\n").trim();
+  // keep the source selector in sync with the chosen item
+  if (m.source && [...$("source").options].some((o) => o.value === m.source)) {
+    $("source").value = m.source;
+  }
+  api.post("/api/open", { key }); // switch the live nvim buffer
 }
 
 function resetResults() {
@@ -92,25 +157,20 @@ function resetResults() {
 }
 
 async function run(submit) {
-  const id = CURRENT;
+  const key = CURRENT;
   const b = $("results-body");
   b.className = "results-body muted";
-  b.textContent = (submit ? "Submitting" : "Running") + " " + id + " …";
-  const r = await api.post("/api/run", { id });
+  b.textContent = (submit ? "Submitting" : "Running") + " " + label(key) + " …";
+  const r = await api.post("/api/run", { key });
   renderResult(r, submit);
-  // Refresh solved state in the dropdown on pass.
-  if (r.status === "pass") {
-    const p = PROBLEMS.find((x) => x.id === id);
-    if (p && !p.solved) {
-      p.solved = true;
-      const opt = [...$("problem-select").options].find((o) => o.value === id);
-      if (opt) opt.textContent = `✓ ${id}  ${p.title}`;
-      const solved = PROBLEMS.filter((x) => x.solved).length;
-      $("overall").textContent = `${solved}/${PROBLEMS.length} solved`;
-      $("prob-status").className = "tag solved";
-      $("prob-status").textContent = "solved";
-    }
-  }
+  if (r.status === "pass") markSolved(key);
+}
+
+function markSolved(key) {
+  const it = ITEMS.find((x) => x.key === key);
+  if (it && !it.solved) { it.solved = true; updateOverall(); }
+  $("prob-status").className = "tag solved";
+  $("prob-status").textContent = "solved";
 }
 
 function renderResult(r, submit) {
@@ -135,6 +195,11 @@ function renderResult(r, submit) {
   }
 }
 
+function label(key) {
+  const it = ITEMS.find((x) => x.key === key);
+  return it ? it.id : key;
+}
+
 async function teardown() {
   if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. Unsaved edits in the editor are written first.")) return;
   try { await api.post("/api/shutdown", {}); } catch (e) { /* server exits mid-response */ }
@@ -148,15 +213,19 @@ async function teardown() {
 
 async function showHint() {
   $("aux-out").textContent = "…";
-  const r = await api.get("/api/hint?id=" + encodeURIComponent(CURRENT));
+  const r = await api.get("/api/hint?key=" + encodeURIComponent(CURRENT));
   $("aux-out").textContent = (r.text || "").trim() || "(no hint)";
 }
 
 async function showSolution() {
-  if (!confirm("Show the reference solution for " + CURRENT + "? (unlocks it)")) return;
+  if (!confirm("Show the reference solution for " + label(CURRENT) + "? (unlocks it)")) return;
   $("aux-out").textContent = "…";
-  const r = await api.post("/api/solution", { id: CURRENT, give_up: true });
+  const r = await api.post("/api/solution", { key: CURRENT, give_up: true });
   $("aux-out").textContent = (r.text || "").trim() || "(no solution)";
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 init();
