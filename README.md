@@ -166,6 +166,9 @@ steps that accumulate into one working artifact. Four are included:
 - **alphazero-connect4** (PyTorch) — 57 steps / 8 parts: an AlphaZero agent for Connect-4
   (board engine, conv policy-value net, action masking, PUCT MCTS, self-play data generation,
   the AlphaZero loss + training loop, the iterated self-play/train loop, and evaluation).
+- **classical-ml-from-scratch** (NumPy) — 18 steps / 4 parts: the pre-deep-learning toolkit
+  (linear regression closed-form + gradient, logistic regression, k-means clustering, and PCA),
+  built from the math up with gradients finite-difference checked.
 
 Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
 like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
@@ -195,7 +198,8 @@ Each project has its own README with the full part breakdown and expected result
 [tiny-gpt-from-scratch](projects/tiny-gpt-from-scratch/README.md) ·
 [tic-tac-toe-rl](projects/tic-tac-toe-rl/README.md) ·
 [rlhf-distilgpt2](projects/rlhf-distilgpt2/README.md) ·
-[alphazero-connect4](projects/alphazero-connect4/README.md). To add your own,
+[alphazero-connect4](projects/alphazero-connect4/README.md) ·
+[classical-ml-from-scratch](projects/classical-ml-from-scratch/README.md). To add your own,
 scaffold it with `python new_project.py <name> --title "..."` and see
 [docs/adding-a-project.md](docs/adding-a-project.md).
 

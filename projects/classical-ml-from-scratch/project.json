@@ -1,0 +1,168 @@
+{
+  "name": "classical-ml-from-scratch",
+  "title": "Classical ML From Scratch",
+  "parts": [
+    {
+      "title": "Linear Regression",
+      "description": "Predict, score, and fit a linear model in closed form and by gradient descent."
+    },
+    {
+      "title": "Logistic Regression",
+      "description": "A numerically stable sigmoid, BCE loss, predicted probabilities, and the gradient."
+    },
+    {
+      "title": "K-Means Clustering",
+      "description": "Pairwise distances, cluster assignment, centroid updates, and inertia."
+    },
+    {
+      "title": "PCA",
+      "description": "Center data, build the covariance, find the top components, and project."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "predict_linear",
+      "part": 0,
+      "points": 5,
+      "signature": "predict_linear(X, w, b)",
+      "doc": "Linear model prediction: X @ w + b."
+    },
+    {
+      "id": "0002",
+      "name": "mse_loss",
+      "part": 0,
+      "points": 5,
+      "signature": "mse_loss(y_pred, y_true)",
+      "doc": "Mean squared error between predictions and targets (a float)."
+    },
+    {
+      "id": "0003",
+      "name": "linreg_normal_equation",
+      "part": 0,
+      "points": 5,
+      "signature": "linreg_normal_equation(X, y)",
+      "doc": "Least-squares weights solving X w ~= y (X already includes any bias column)."
+    },
+    {
+      "id": "0004",
+      "name": "linreg_gradient",
+      "part": 0,
+      "points": 5,
+      "signature": "linreg_gradient(X, y, w)",
+      "doc": "Gradient of the MSE (predictions X @ w) w.r.t. w: (2/n) X^T (X w - y)."
+    },
+    {
+      "id": "0005",
+      "name": "r2_score",
+      "part": 0,
+      "points": 5,
+      "signature": "r2_score(y_pred, y_true)",
+      "doc": "Coefficient of determination R^2 = 1 - SS_res / SS_tot (a float)."
+    },
+    {
+      "id": "0006",
+      "name": "sigmoid",
+      "part": 1,
+      "points": 5,
+      "signature": "sigmoid(z)",
+      "doc": "Numerically stable logistic sigmoid, elementwise."
+    },
+    {
+      "id": "0007",
+      "name": "bce_loss",
+      "part": 1,
+      "points": 5,
+      "signature": "bce_loss(p, y)",
+      "doc": "Mean binary cross-entropy; p are predicted probabilities in (0, 1)."
+    },
+    {
+      "id": "0008",
+      "name": "logreg_predict_proba",
+      "part": 1,
+      "points": 5,
+      "signature": "logreg_predict_proba(X, w, b)",
+      "doc": "Predicted P(y=1) = sigmoid(X w + b)."
+    },
+    {
+      "id": "0009",
+      "name": "logreg_gradient",
+      "part": 1,
+      "points": 5,
+      "signature": "logreg_gradient(X, y, p)",
+      "doc": "Gradient of mean BCE w.r.t. w given predicted probs p: (1/n) X^T (p - y)."
+    },
+    {
+      "id": "0010",
+      "name": "accuracy",
+      "part": 1,
+      "points": 5,
+      "signature": "accuracy(y_pred, y_true)",
+      "doc": "Fraction of exactly-correct predictions (a float)."
+    },
+    {
+      "id": "0011",
+      "name": "pairwise_sq_dists",
+      "part": 2,
+      "points": 5,
+      "signature": "pairwise_sq_dists(X, C)",
+      "doc": "(n, k) squared Euclidean distances between rows of X (n,d) and C (k,d)."
+    },
+    {
+      "id": "0012",
+      "name": "assign_clusters",
+      "part": 2,
+      "points": 5,
+      "signature": "assign_clusters(X, C)",
+      "doc": "Index of the nearest centroid for each row of X."
+    },
+    {
+      "id": "0013",
+      "name": "update_centroids",
+      "part": 2,
+      "points": 5,
+      "signature": "update_centroids(X, labels, k)",
+      "doc": "New centroids = mean of the points assigned to each of k clusters\n(an empty cluster keeps a zero row)."
+    },
+    {
+      "id": "0014",
+      "name": "inertia",
+      "part": 2,
+      "points": 5,
+      "signature": "inertia(X, labels, C)",
+      "doc": "Sum of squared distances from each point to its assigned centroid (a float)."
+    },
+    {
+      "id": "0015",
+      "name": "center_data",
+      "part": 3,
+      "points": 5,
+      "signature": "center_data(X)",
+      "doc": "Subtract the per-column mean from X."
+    },
+    {
+      "id": "0016",
+      "name": "covariance_matrix",
+      "part": 3,
+      "points": 5,
+      "signature": "covariance_matrix(Xc)",
+      "doc": "Sample covariance of already-centered data: Xc^T Xc / (n - 1)."
+    },
+    {
+      "id": "0017",
+      "name": "pca_fit",
+      "part": 3,
+      "points": 5,
+      "signature": "pca_fit(Xc, k)",
+      "doc": "Top-k principal components of centered data Xc.\nReturns (components, explained_variance): components is (k, d) with one unit\neigenvector per row, explained_variance is (k,), both sorted by descending\neigenvalue."
+    },
+    {
+      "id": "0018",
+      "name": "pca_transform",
+      "part": 3,
+      "points": 5,
+      "signature": "pca_transform(Xc, components)",
+      "doc": "Project centered data onto the components: Xc @ components.T -> (n, k)."
+    }
+  ]
+}
