@@ -126,6 +126,16 @@ def show_explain(pid, problem_path):
         print(f"    You implement:")
         for kind, sig in symbols:
             print(f"      {kind} {sig}")
+    # Which frameworks this problem can be solved in.
+    try:
+        from frameworks import problem_has_numpy
+        if problem_has_numpy(pid):
+            print(f"    Frameworks: PyTorch (problems/) + NumPy "
+                  f"(problems_numpy/ — run `check.py {pid} --numpy`)")
+        else:
+            print(f"    Frameworks: PyTorch only")
+    except Exception:
+        pass
     # A worked example (input -> output), if one can be extracted without giving
     # away the solution.
     try:
