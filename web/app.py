@@ -207,12 +207,19 @@ def _item_meta(key):
         except Exception:
             pass
         import frameworks
+        slug = os.path.basename(r["path"])[len(f"p{pid}_"):-3]
+        example = None
+        try:
+            from examples import example_for
+            example = example_for(pid, slug)
+        except Exception:
+            pass
         return {"key": key, "kind": "problem", "id": pid, "title": _problem_title(pid),
                 "source": "Problems", "group": _tier(pid),
                 "framework": frameworks.framework_of_source(src),
                 "numpy": frameworks.problem_has_numpy(pid),
                 "signature": _signature(tree) if tree else "",
-                "doc": "\n".join(body).strip(), "concept": concept,
+                "doc": "\n".join(body).strip(), "concept": concept, "example": example,
                 "solved": bool(prog.get("ever_passed")), "last_status": prog.get("last_status")}
     import frameworks
     man, s = r["manifest"], r["step"]

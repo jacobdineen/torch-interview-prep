@@ -126,6 +126,23 @@ def show_explain(pid, problem_path):
         print(f"    You implement:")
         for kind, sig in symbols:
             print(f"      {kind} {sig}")
+    # A worked example (input -> output), if one can be extracted without giving
+    # away the solution.
+    try:
+        from examples import example_for
+        slug = os.path.basename(problem_path)[len(f"p{pid}_"):-3]
+        ex = example_for(pid, slug)
+    except Exception:
+        ex = None
+    if ex:
+        print(f"    Example:")
+        for s in ex.get("setup", []):
+            print(f"      Input:   {s}")
+        print(f"      Call:    {ex['call']}")
+        if ex.get("output"):
+            print(f"      Output:  {ex['output']}")
+        elif ex.get("matches"):
+            print(f"      Output:  should match {ex['matches']}")
     if doc:
         rest = doc.strip().split("\n", 2)
         if len(rest) > 2:

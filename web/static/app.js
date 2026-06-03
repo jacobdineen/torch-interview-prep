@@ -164,6 +164,9 @@ async function selectItem(key) {
   st.textContent = m.solved ? "solved" : m.last_status === "fail" ? "attempted" : "unsolved";
   $("prob-sig").textContent = m.signature || "";
   $("prob-doc").textContent = m.doc || "";
+  const ew = $("example-wrap");
+  if (m.example) { $("prob-example").textContent = formatExample(m.example); ew.style.display = ""; }
+  else ew.style.display = "none";
   const cw = $("concept-wrap");
   if (m.concept) { $("prob-concept").textContent = m.concept; cw.style.display = ""; }
   else cw.style.display = "none";
@@ -248,6 +251,15 @@ async function showSolution() {
   $("aux-out").textContent = "…";
   const r = await api.post("/api/solution", { key: CURRENT, give_up: true });
   $("aux-out").textContent = (r.text || "").trim() || "(no solution)";
+}
+
+function formatExample(e) {
+  const lines = [];
+  for (const s of (e.setup || [])) lines.push("Input:   " + s);
+  lines.push("Call:    " + e.call);
+  if (e.output) lines.push("Output:  " + e.output);
+  else if (e.matches) lines.push("Output:  should match " + e.matches);
+  return lines.join("\n");
 }
 
 function esc(s) {
