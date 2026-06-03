@@ -291,9 +291,165 @@ def hardest_triplet_loss(embeddings, labels, margin=1.0):
     return np.maximum(hp - hn + margin, 0.0).mean()
 ''',
 
+"33": '''import math
+import numpy as np
+
+def linear_warmup_cosine_lr(step, base_lr, warmup_steps, total_steps, min_lr=0.0):
+    if isinstance(step, np.ndarray):
+        step = step.astype(float)
+        warm = base_lr * step / warmup_steps
+        progress = np.clip((step - warmup_steps) / max(1.0, float(total_steps - warmup_steps)), 0.0, 1.0)
+        cos = min_lr + 0.5 * (base_lr - min_lr) * (1 + np.cos(math.pi * progress))
+        out = np.where(step < warmup_steps, warm, cos)
+        return np.where(step > total_steps, float(min_lr), out)
+    if step < warmup_steps:
+        return base_lr * step / warmup_steps
+    if step > total_steps:
+        return min_lr
+    progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+    return min_lr + 0.5 * (base_lr - min_lr) * (1 + math.cos(math.pi * progress))
+''',
+
+"44": '''import numpy as np
+
+def my_conv2d(x, weight, bias=None, stride=1, padding=0):
+    B, Cin, H, W = x.shape
+    Cout, _, kH, kW = weight.shape
+    if padding > 0:
+        x = np.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)))
+    Hout = (H + 2 * padding - kH) // stride + 1
+    Wout = (W + 2 * padding - kW) // stride + 1
+    cols = np.zeros((B, Cin * kH * kW, Hout * Wout), dtype=x.dtype)
+    idx = 0
+    for i in range(Hout):
+        for j in range(Wout):
+            patch = x[:, :, i * stride:i * stride + kH, j * stride:j * stride + kW]
+            cols[:, :, idx] = patch.reshape(B, -1)
+            idx += 1
+    out = weight.reshape(Cout, -1) @ cols
+    if bias is not None:
+        out = out + bias.reshape(1, -1, 1)
+    return out.reshape(B, Cout, Hout, Wout)
+''',
+
+"45": '''import numpy as np
+
+def my_max_pool2d(x, kernel_size, stride=None, padding=0):
+    if stride is None:
+        stride = kernel_size
+    B, C, H, W = x.shape
+    if padding > 0:
+        x = np.pad(x, ((0, 0), (0, 0), (padding, padding), (padding, padding)),
+                   constant_values=-np.inf)
+    Hp, Wp = x.shape[2], x.shape[3]
+    Hout = (Hp - kernel_size) // stride + 1
+    Wout = (Wp - kernel_size) // stride + 1
+    out = np.empty((B, C, Hout, Wout), dtype=x.dtype)
+    for i in range(Hout):
+        for j in range(Wout):
+            out[:, :, i, j] = x[:, :, i * stride:i * stride + kernel_size,
+                                j * stride:j * stride + kernel_size].max(axis=(2, 3))
+    return out
+''',
+
+"46": '''import numpy as np  # noqa: F401
+
+def conv_out_shape(h_in, kernel, stride=1, padding=0, dilation=1):
+    return (h_in + 2 * padding - dilation * (kernel - 1) - 1) // stride + 1
+
+def conv_chain_shape(h_in, layers):
+    h = h_in
+    for l in layers:
+        h = conv_out_shape(h, l["kernel"], l.get("stride", 1),
+                           l.get("padding", 0), l.get("dilation", 1))
+    return h
+
+def transposed_conv_out_shape(h_in, kernel, stride=1, padding=0, output_padding=0, dilation=1):
+    return (h_in - 1) * stride - 2 * padding + dilation * (kernel - 1) + output_padding + 1
+''',
+
+"52": '''import numpy as np
+
+def sinusoidal_positional_encoding(seq_len, d_model):
+    pos = np.arange(seq_len).astype(np.float32)
+    i = np.arange(d_model // 2).astype(np.float32)
+    div = np.power(10000.0, 2 * i / d_model).astype(np.float32)
+    angles = pos[:, None] / div[None, :]
+    out = np.zeros((seq_len, d_model), dtype=np.float32)
+    out[:, 0::2] = np.sin(angles)
+    out[:, 1::2] = np.cos(angles)
+    return out
+
+def add_positional_encoding(x):
+    pe = sinusoidal_positional_encoding(x.shape[1], x.shape[2]).astype(x.dtype)
+    return x + pe[None, :, :]
+''',
+
+"53": '''import numpy as np
+
+def scaled_dot_product_attention(q, k, v, mask=None):
+    import math
+    d = q.shape[-1]
+    scores = np.matmul(q, np.swapaxes(k, -1, -2)) / math.sqrt(d)
+    if mask is not None:
+        scores = np.where(mask, -np.inf, scores)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    attn = e / np.sum(e, axis=-1, keepdims=True)
+    return np.matmul(attn, v), attn
+''',
+
+"54": '''import numpy as np
+
+def causal_mask(T, device=None):
+    return np.triu(np.ones((T, T), dtype=bool), k=1)
+
+def apply_causal_mask(scores):
+    T = scores.shape[-1]
+    return np.where(causal_mask(T), -np.inf, scores)
+
+def causal_attention(q, k, v):
+    import math
+    d = q.shape[-1]
+    scores = (q @ np.swapaxes(k, -1, -2)) / math.sqrt(d)
+    scores = apply_causal_mask(scores)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    attn = e / np.sum(e, axis=-1, keepdims=True)
+    return attn @ v
+''',
+
 }
 
 NUMPY_SUPPORTED = {
+    "44a",
+    "44b",
+    "45a",
+    "45b",
+    "46a",
+    "46b",
+    "46c",
+    "46d",
+    "46e",
+    "46f",
+    "46g",
+    "52a",
+    "52b",
+    "52c",
+    "52d",
+    "53a",
+    "53b",
+    "53c",
+    "53d",
+    "53e",
+    "54a",
+    "54b",
+    "54c",
+    "54d",
+    "33a",
+    "33b",
+    "33c",
+    "33d",
+    "33e",
+    "33f",
     "15a",
     "15b",
     "15c",
