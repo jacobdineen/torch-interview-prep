@@ -39,6 +39,20 @@ def _fn_name(pid, slug):
     return None, False
 
 
+def _param_names(pid, slug):
+    hits = sorted(glob.glob(os.path.join(_PROBLEMS, f"p{pid}_{slug}.py")))
+    if not hits:
+        return []
+    try:
+        tree = ast.parse(open(hits[0]).read())
+    except (OSError, SyntaxError):
+        return []
+    for n in tree.body:
+        if isinstance(n, ast.FunctionDef):
+            return [a.arg for a in n.args.args]
+    return []
+
+
 def _shape_fmt(v):
     """Shape-only rendering for random inputs (values would just be noise)."""
     try:
@@ -46,7 +60,7 @@ def _shape_fmt(v):
     except Exception:
         torch = None
     if torch is not None and isinstance(v, torch.Tensor):
-        return f"tensor(shape={tuple(v.shape)}, dtype={str(v.dtype).replace('torch.', '')})"
+        return f"shape {tuple(v.shape)}"
     if isinstance(v, tuple):
         return "(" + ", ".join(_shape_fmt(x) for x in v) + ")"
     if isinstance(v, float):
@@ -55,7 +69,10 @@ def _shape_fmt(v):
 
 
 def _clean(src):
-    return re.sub(r"\btorch\.", "", src)
+    src = re.sub(r"\btorch\.", "", src)
+    # tensor([...]) -> [...] (bare list, like a problem statement); single-level only.
+    src = re.sub(r"\btensor\((\[[^\[\]]*\])\)", r"\1", src)
+    return src
 
 
 def _call_to(name, node):
@@ -92,12 +109,10 @@ def _fmt(v):
         torch = None
     if torch is not None and isinstance(v, torch.Tensor):
         if v.numel() == 0:
-            return "tensor([])"
+            return "[]"
         if v.numel() <= 16 and v.dim() <= 2:
-            r = v.tolist()
-            r = _round(r)
-            return f"tensor({r})"
-        return f"tensor(shape={tuple(v.shape)}, dtype={str(v.dtype).replace('torch.', '')})"
+            return f"{_round(v.tolist())}"   # bare list, like a problem statement
+        return f"shape {tuple(v.shape)}"
     if isinstance(v, tuple):
         return "(" + ", ".join(_fmt(x) for x in v) + ")"
     if isinstance(v, float):
@@ -192,20 +207,31 @@ def example_for(pid, slug):
     both = {**assigns, **block}
 
     referenced = _names(call) & set(both)
-    setup_lines = [f"{v} = {_clean(ast.unparse(both[v]))}" for v in referenced]
-    call_str = _clean(ast.unparse(call))
     matches = _builtin_match(expected) if expected is not None else None
     is_random = any(re.search(r"\brand|manual_seed", _clean(ast.unparse(both[v]))) for v in referenced)
 
-    # Run the hidden reference on the test's (seeded) inputs. For literal inputs we
-    # show real VALUES (a clean Input->Output); for random inputs only the SHAPE
-    # (the values would be noise, and shape is a spec example that reveals nothing).
+    # Build the "Input" as named arguments (param = value), like a problem statement:
+    #   x = arange(20).reshape(4, 5),  i = 2
+    params = _param_names(pid, slug)
+    parts = []
+    for idx, a in enumerate(call.args):
+        pname = params[idx] if idx < len(params) else f"arg{idx}"
+        if isinstance(a, ast.Name) and a.id in both:
+            parts.append(f"{pname} = {_clean(ast.unparse(both[a.id]))}")
+        else:
+            parts.append(f"{pname} = {_clean(ast.unparse(a))}")
+    for kw in call.keywords:
+        parts.append(f"{kw.arg} = {_clean(ast.unparse(kw.value))}")
+    inputs = ",  ".join(parts)
+
+    # Run the hidden reference on the test's (seeded) inputs. Literal inputs -> real
+    # VALUES (a clean Input->Output); random inputs -> only the SHAPE (values would
+    # be noise, and a shape reveals nothing about the algorithm).
     out = _run_reference(pid, name, fn, call)
     output = (_shape_fmt(out) if is_random else _fmt(out)) if out is not None else None
-    if output is None and matches is None and not setup_lines:
+    if output is None and matches is None and not inputs:
         return None
-    return {"setup": setup_lines, "call": call_str, "output": output,
-            "matches": matches, "random": is_random}
+    return {"inputs": inputs, "output": output, "matches": matches, "random": is_random}
 
 
 def _run_reference(pid, name, fn, call):

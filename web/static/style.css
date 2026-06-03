@@ -55,9 +55,12 @@ button:hover, select:hover { border-color: var(--accent); }
 .tag.fw:empty { display: none; }
 .sig { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 13px; color: var(--accent); overflow-x: auto; }
 .doc { white-space: pre-wrap; margin: 12px 0; color: var(--fg); }
-.example { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
-.example-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
-.example pre { margin: 0; font-family: var(--mono); font-size: 12.5px; color: var(--fg); white-space: pre-wrap; }
+.example { margin: 16px 0; }
+.example-head { font-size: 16px; font-weight: 700; color: var(--fg); margin-bottom: 10px; }
+.ex-label { font-size: 13px; color: var(--fg); margin: 8px 0 4px; }
+.ex-box { margin: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; font-family: var(--mono); font-size: 13px; color: var(--muted);
+  white-space: pre-wrap; overflow-x: auto; }
 .example-note { margin-top: 8px; font-size: 11px; color: var(--muted); }
 details { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
 summary { cursor: pointer; color: var(--accent); }

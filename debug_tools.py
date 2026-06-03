@@ -136,9 +136,8 @@ def show_explain(pid, problem_path):
         ex = None
     if ex:
         print(f"    Example:")
-        for s in ex.get("setup", []):
-            print(f"      Input:   {s}")
-        print(f"      Call:    {ex['call']}")
+        if ex.get("inputs"):
+            print(f"      Input:   {ex['inputs']}")
         if ex.get("output"):
             print(f"      Output:  {ex['output']}")
         elif ex.get("matches"):

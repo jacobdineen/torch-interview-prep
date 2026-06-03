@@ -58,7 +58,10 @@ async function init() {
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
 
-  const first = ITEMS.find((x) => x.source === "Problems" && !x.solved) || ITEMS[0];
+  // Deep-link support: ?key=prob:02a opens that item directly.
+  const deep = new URLSearchParams(location.search).get("key");
+  const first = (deep && ITEMS.find((x) => x.key === deep))
+    || ITEMS.find((x) => x.source === "Problems" && !x.solved) || ITEMS[0];
   if (first) selectItem(first.key);
 }
 
@@ -165,8 +168,12 @@ async function selectItem(key) {
   $("prob-sig").textContent = m.signature || "";
   $("prob-doc").textContent = m.doc || "";
   const ew = $("example-wrap");
-  if (m.example) { $("prob-example").textContent = formatExample(m.example); ew.style.display = ""; }
-  else ew.style.display = "none";
+  if (m.example) {
+    $("ex-input").textContent = m.example.inputs || "—";
+    $("ex-output").textContent = m.example.output
+      || (m.example.matches ? "should match " + m.example.matches : "—");
+    ew.style.display = "";
+  } else ew.style.display = "none";
   const cw = $("concept-wrap");
   if (m.concept) { $("prob-concept").textContent = m.concept; cw.style.display = ""; }
   else cw.style.display = "none";
@@ -251,15 +258,6 @@ async function showSolution() {
   $("aux-out").textContent = "…";
   const r = await api.post("/api/solution", { key: CURRENT, give_up: true });
   $("aux-out").textContent = (r.text || "").trim() || "(no solution)";
-}
-
-function formatExample(e) {
-  const lines = [];
-  for (const s of (e.setup || [])) lines.push("Input:   " + s);
-  lines.push("Call:    " + e.call);
-  if (e.output) lines.push("Output:  " + e.output);
-  else if (e.matches) lines.push("Output:  should match " + e.matches);
-  return lines.join("\n");
 }
 
 function esc(s) {
