@@ -417,9 +417,217 @@ def causal_attention(q, k, v):
     return attn @ v
 ''',
 
+"56": '''import numpy as np
+
+def rope_freqs(seq_len, d, base=10000.0, device=None):
+    i = np.arange(d // 2).astype(np.float32)
+    theta = 1.0 / (base ** (2 * i / d))
+    pos = np.arange(seq_len).astype(np.float32)
+    angles = pos[:, None] * theta[None, :]
+    return np.cos(angles), np.sin(angles)
+
+def apply_rope(x, cos, sin):
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    new1 = x1 * cos - x2 * sin
+    new2 = x1 * sin + x2 * cos
+    out = np.empty_like(x)
+    out[..., 0::2] = new1
+    out[..., 1::2] = new2
+    return out
+''',
+
+"57": '''import numpy as np
+
+def alibi_slopes(num_heads):
+    return np.array([2.0 ** (-8.0 * (i + 1) / num_heads) for i in range(num_heads)], dtype=np.float32)
+
+def alibi_bias(num_heads, seq_len, causal=True):
+    s = alibi_slopes(num_heads)
+    i = np.arange(seq_len).reshape(-1, 1)
+    j = np.arange(seq_len).reshape(1, -1)
+    dist = np.abs(i - j).astype(np.float32)
+    return -s.reshape(num_heads, 1, 1) * dist[None, :, :]
+''',
+
+"63": '''import math
+import numpy as np
+
+def sliding_window_causal_mask(T, window_size):
+    i = np.arange(T).reshape(-1, 1)
+    j = np.arange(T).reshape(1, -1)
+    return ~((j <= i) & (i - j < window_size))
+
+def sliding_window_attention(q, k, v, window_size):
+    T = q.shape[-2]; D = q.shape[-1]
+    mask = sliding_window_causal_mask(T, window_size)
+    scores = (q @ np.swapaxes(k, -1, -2)) / math.sqrt(D)
+    scores = np.where(mask, -np.inf, scores)
+    e = np.exp(scores - np.max(scores, axis=-1, keepdims=True))
+    attn = e / np.sum(e, axis=-1, keepdims=True)
+    return attn @ v
+''',
+
+"65": '''import math
+import numpy as np
+
+def flash_attention_tiled(q, k, v, block_size_q=32, block_size_k=32):
+    B, H, T, D = q.shape
+    Tk = k.shape[-2]
+    scale = 1.0 / math.sqrt(D)
+    out = np.zeros_like(q)
+    for qs in range(0, T, block_size_q):
+        qe = min(qs + block_size_q, T); qb = q[..., qs:qe, :]; Bq = qe - qs
+        m_run = np.full((B, H, Bq, 1), -np.inf, dtype=q.dtype)
+        l_run = np.zeros((B, H, Bq, 1), dtype=q.dtype)
+        o = np.zeros((B, H, Bq, D), dtype=q.dtype)
+        for ks in range(0, Tk, block_size_k):
+            ke = min(ks + block_size_k, Tk); kb = k[..., ks:ke, :]; vb = v[..., ks:ke, :]
+            s = (qb @ np.swapaxes(kb, -1, -2)) * scale
+            m_new = np.maximum(m_run, np.max(s, axis=-1, keepdims=True))
+            p = np.exp(s - m_new); alpha = np.exp(m_run - m_new)
+            o = o * alpha + p @ vb
+            l_run = l_run * alpha + np.sum(p, axis=-1, keepdims=True)
+            m_run = m_new
+        out[..., qs:qe, :] = o / l_run
+    return out
+''',
+
+"66": '''import numpy as np
+
+def top_k_filter(logits, k):
+    part = np.sort(logits, axis=-1)[..., ::-1]
+    thr = part[..., k - 1:k]
+    return np.where(logits >= thr, logits, -np.inf)
+
+def top_p_filter(logits, p):
+    si = np.argsort(-logits, axis=-1)
+    sl = np.take_along_axis(logits, si, axis=-1)
+    e = np.exp(sl - sl.max(axis=-1, keepdims=True))
+    probs = e / e.sum(axis=-1, keepdims=True)
+    cum = np.cumsum(probs, axis=-1)
+    keep = cum <= p
+    keep[..., 0] = True
+    filt = np.where(keep, sl, -np.inf)
+    out = np.empty_like(logits)
+    np.put_along_axis(out, si, filt, axis=-1)
+    return out
+''',
+
+"67": '''import numpy as np
+
+def apply_repetition_penalty(logits, generated_ids, penalty=1.0):
+    out = logits.copy()
+    if penalty == 1.0:
+        return out
+    for b in range(out.shape[0]):
+        for tok in generated_ids[b].tolist():
+            v = out[b, tok]
+            out[b, tok] = v / penalty if v > 0 else v * penalty
+    return out
+
+def penalize_unique(logits, generated_ids, penalty=1.0):
+    out = logits.copy()
+    if penalty == 1.0:
+        return out
+    for b in range(out.shape[0]):
+        for tok in set(generated_ids[b].tolist()):
+            v = out[b, tok]
+            out[b, tok] = v / penalty if v > 0 else v * penalty
+    return out
+''',
+
+"71": '''import numpy as np
+
+def _ce(l, y):
+    m = l.max(axis=-1, keepdims=True)
+    logp = (l - m) - np.log(np.sum(np.exp(l - m), axis=-1, keepdims=True))
+    return -logp[np.arange(len(y)), y].mean()
+
+def info_nce_loss(a, b, tau=0.1):
+    an = a / np.linalg.norm(a, axis=-1, keepdims=True)
+    bn = b / np.linalg.norm(b, axis=-1, keepdims=True)
+    logits = an @ bn.T / tau
+    labels = np.arange(a.shape[0])
+    return 0.5 * (_ce(logits, labels) + _ce(logits.T, labels))
+''',
+
+"72": '''import numpy as np
+
+def kd_loss(student_logits, teacher_logits, targets, T=4.0, alpha=0.5):
+    def logsm(x):
+        m = x.max(axis=-1, keepdims=True)
+        return (x - m) - np.log(np.sum(np.exp(x - m), axis=-1, keepdims=True))
+    s_lp = logsm(student_logits)
+    ce = -s_lp[np.arange(len(targets)), targets].mean()
+    t_lp = logsm(teacher_logits / T)
+    s_lpT = logsm(student_logits / T)
+    kld = (np.exp(t_lp) * (t_lp - s_lpT)).sum(axis=-1).mean()
+    return alpha * ce + (1 - alpha) * (T * T) * kld
+''',
+
+"73": '''import numpy as np
+
+def kl_divergence_standard_normal(mu, logvar, reduction="batchmean"):
+    per = 0.5 * (mu ** 2 + np.exp(logvar) - 1 - logvar)
+    if reduction == "none": return per
+    if reduction == "sum": return per.sum()
+    if reduction == "mean": return per.mean()
+    if reduction == "batchmean": return per.sum() / mu.shape[0]
+    raise ValueError(reduction)
+''',
+
+"77": '''import numpy as np
+
+def causal_lm_loss(logits, targets, ignore_index=-100):
+    V = logits.shape[-1]
+    l = logits[:, :-1].reshape(-1, V)
+    t = targets[:, 1:].reshape(-1)
+    m = l.max(axis=-1, keepdims=True)
+    logp = (l - m) - np.log(np.sum(np.exp(l - m), axis=-1, keepdims=True))
+    mask = t != ignore_index
+    safe = np.where(mask, t, 0)
+    nll = -logp[np.arange(len(t)), safe] * mask
+    return nll.sum() / max(int(mask.sum()), 1)
+''',
+
 }
 
 NUMPY_SUPPORTED = {
+    "66a",
+    "66b",
+    "66c",
+    "67a",
+    "67b",
+    "67c",
+    "67d",
+    "67e",
+    "67f",
+    "71a",
+    "71b",
+    "71d",
+    "72a",
+    "72b",
+    "72c",
+    "56a",
+    "56b",
+    "56c",
+    "56d",
+    "56e",
+    "57a",
+    "57b",
+    "57c",
+    "57d",
+    "57e",
+    "57f",
+    "57g",
+    "63a",
+    "63b",
+    "63c",
+    "63d",
+    "65a",
+    "65b",
+    "65c",
     "44a",
     "44b",
     "45a",
