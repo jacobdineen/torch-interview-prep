@@ -117,6 +117,8 @@ def main():
                         help="time your implementation against the reference")
     parser.add_argument("--redo", action="store_true",
                         help="re-lock a solved problem (clear its pass + hint state) to drill it again")
+    parser.add_argument("--numpy", action="store_true",
+                        help="solve/grade the NumPy variant (in problems_numpy/) where one exists")
     args = parser.parse_args()
 
     # No id and no flags: behave like --next so the most natural first command
@@ -148,6 +150,9 @@ def main():
     if not matches:
         print(f"no problem found for {args.id!r}")
         sys.exit(2)
+
+    if args.numpy:
+        sys.exit(_run_numpy([_id_from_path(m) for m in matches]))
 
     if args.redo:
         for m in matches:
@@ -187,6 +192,26 @@ def main():
 def _id_from_path(path):
     m = re.match(r"^p(\d+[a-z]?)_", os.path.basename(path))
     return m.group(1) if m else None
+
+
+def _run_numpy(pids):
+    """Grade the NumPy variant(s) for the given problem ids via the bridge."""
+    from np_bridge import run_numpy
+    rc = 0
+    for pid in pids:
+        stub = sorted(glob.glob(os.path.join(HERE, "problems_numpy", f"p{pid}_*.py")))
+        if not stub:
+            print(f"  {pid}: no NumPy variant (torch-only) — solve it in torch, "
+                  f"or run `python gen_numpy_stubs.py` if it should support numpy.")
+            continue
+        name = re.match(r"^p\d+[a-z]?_(.+)\.py$", os.path.basename(stub[0])).group(1)
+        ok, err = run_numpy(pid, name, open(stub[0]).read())
+        if ok:
+            print(f"PASS Problem {pid} ({name}) [numpy]")
+        else:
+            print(f"FAIL Problem {pid} ({name}) [numpy]: {err}")
+            rc = 1
+    return rc
 
 
 def _redo(pid):

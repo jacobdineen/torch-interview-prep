@@ -1,0 +1,38 @@
+# NumPy variants of problems
+
+Problems are a PyTorch track, but most tensor problems can also be solved in
+NumPy. Rather than maintain a second reference + test per problem, a NumPy
+solution is graded against the **existing torch test** through a bridge.
+
+## How it works
+
+`np_bridge.py` wraps your NumPy function so the torch test can drive it: torch
+tensors in are converted to NumPy arrays, your NumPy result is converted back to
+a torch tensor (float64 → torch's float32), and `torch.dtype` args are mapped to
+NumPy dtypes. So the same hidden test grades both variants.
+
+A problem **supports NumPy** exactly when a correct NumPy solution passes that
+bridge — i.e. it's a pure tensor→tensor map. Torch-specific problems (anything
+touching `.backward()`, `requires_grad`, `nn.Module`, or `.device`) can't be
+bridged and stay **torch-only**; that's expected, not a gap.
+
+## Solving in NumPy
+
+```bash
+uv run python check.py 02a --numpy        # grade the NumPy variant of 02a
+uv run python check.py 02 --numpy         # all of parent 02 in NumPy
+```
+
+You edit `problems_numpy/pNN<letter>_<slug>.py` (or run the file directly). If a
+problem has no NumPy variant, `--numpy` says so (it's torch-only).
+
+## Adding NumPy support to more problems
+
+1. Add the parent's NumPy reference to `NUMPY_PARENTS` in `solutions_numpy.py`
+   and list its child ids in `NUMPY_SUPPORTED`.
+2. `python gen_numpy_stubs.py` — writes the `problems_numpy/` stubs.
+3. `python verify_numpy.py` — every claimed NumPy variant must pass its torch
+   test through the bridge (also runs in `verify_all.py` / CI).
+
+So far the tensor-fundamentals indexing parent (02) is ported as the pilot; the
+mechanism scales tier by tier. Tiers built on autograd/`nn` remain torch-only.
