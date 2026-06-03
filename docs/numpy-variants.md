@@ -36,9 +36,9 @@ problem has no NumPy variant, `--numpy` says so (it's torch-only).
 
 ## Coverage
 
-Every problem has at least torch support, and **141 of 313 problems** have a
+Every problem has at least torch support, and **149 of 313 problems** have a
 verified NumPy variant — every problem whose function is a pure tensor→tensor
-map. The remaining **172 are torch-only by nature**: nn.Module problems (linear,
+map. The remaining **164 are torch-only by nature**: nn.Module problems (linear,
 norm layers, dropout, embedding, MHA/GQA, transformer blocks, LoRA, MiniGPT),
 optimizers and gradient clipping, autograd (`.backward()`/`autograd.grad`),
 weight init, random sampling (`multinomial`/`randn`/gumbel), callback-driven

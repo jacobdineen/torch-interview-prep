@@ -568,6 +568,10 @@ def kd_loss(student_logits, teacher_logits, targets, T=4.0, alpha=0.5):
 
 "73": '''import numpy as np
 
+def reparameterize(mu, logvar, generator=None):
+    eps = np.random.randn(*mu.shape).astype(mu.dtype)
+    return mu + np.exp(0.5 * logvar) * eps
+
 def kl_divergence_standard_normal(mu, logvar, reduction="batchmean"):
     per = 0.5 * (mu ** 2 + np.exp(logvar) - 1 - logvar)
     if reduction == "none": return per
@@ -630,6 +634,9 @@ def last_real_state(padded, lengths):
 }
 
 NUMPY_SUPPORTED = {
+    "73b",
+    "73d",
+    "73e",
     "50a",
     "50b",
     "50c",
