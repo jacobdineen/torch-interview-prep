@@ -32,7 +32,7 @@ button:hover, select:hover { border-color: var(--accent); }
 .pal-row.hi { background: var(--panel2); }
 .pal-row .mark { width: 12px; color: var(--muted); text-align: center; }
 .pal-row .mark.ok { color: var(--green); }
-.pal-row .fwdot { width: 22px; flex: none; text-align: center; font-size: 10px; }
+.pal-row .fwdot { width: 44px; flex: none; text-align: center; font-size: 10px; }
 .pal-row .fwdot.torch { color: #ff8a65; }
 .pal-row .fwdot.numpy { color: #6cb6ff; }
 .pal-row .pid { color: var(--accent); width: 58px; flex: none; }

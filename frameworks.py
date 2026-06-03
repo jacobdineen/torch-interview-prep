@@ -42,6 +42,24 @@ def problem_framework(pid):
     return framework_of_file(hits[0]) if hits else TORCH
 
 
+def problem_has_numpy(pid):
+    """True if this problem has a verified NumPy variant (solvable via the bridge)."""
+    try:
+        from solutions_numpy import NUMPY_SUPPORTED
+        return pid in NUMPY_SUPPORTED
+    except Exception:
+        return False
+
+
+def problem_frameworks(pid):
+    """All frameworks a problem can be solved in: always torch, plus numpy when a
+    verified variant exists. So every problem has at least one supported framework."""
+    fw = [TORCH]
+    if problem_has_numpy(pid):
+        fw.append(NUMPY)
+    return fw
+
+
 def project_framework(project_dir):
     """Framework of a project: an explicit project.json 'framework' wins, else
     inferred from the hidden reference implementation (authoritative)."""

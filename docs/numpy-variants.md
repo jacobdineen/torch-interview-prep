@@ -34,5 +34,17 @@ problem has no NumPy variant, `--numpy` says so (it's torch-only).
 3. `python verify_numpy.py` — every claimed NumPy variant must pass its torch
    test through the bridge (also runs in `verify_all.py` / CI).
 
-So far the tensor-fundamentals indexing parent (02) is ported as the pilot; the
-mechanism scales tier by tier. Tiers built on autograd/`nn` remain torch-only.
+## Coverage
+
+Every problem has at least torch support, and **141 of 313 problems** have a
+verified NumPy variant — every problem whose function is a pure tensor→tensor
+map. The remaining **172 are torch-only by nature**: nn.Module problems (linear,
+norm layers, dropout, embedding, MHA/GQA, transformer blocks, LoRA, MiniGPT),
+optimizers and gradient clipping, autograd (`.backward()`/`autograd.grad`),
+weight init, random sampling (`multinomial`/`randn`/gumbel), callback-driven
+generation loops (beam/greedy/speculative), and gradient-flow tests. For those,
+`check.py <id> --numpy` reports that the problem is torch-only.
+
+`frameworks.problem_frameworks(pid)` returns the supported set for any problem;
+`solutions_numpy.NUMPY_SUPPORTED` is the source of truth. The web app filters and
+badges by framework (a dual-support problem shows `pt+np`).

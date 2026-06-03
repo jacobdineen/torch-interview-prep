@@ -74,13 +74,17 @@ function view() {
   const q = $("filter").value.trim().toLowerCase();
   return ITEMS.filter((x) => {
     if (src !== "All" && x.source !== src) return false;
-    if (fw !== "All" && x.framework !== fw) return false;
+    // A problem with a verified numpy variant counts as numpy too (dual support).
+    if (fw !== "All" && x.framework !== fw && !(fw === "numpy" && x.numpy)) return false;
     if (!q) return true;
     return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
   });
 }
 
-function fwShort(fw) { return fw === "torch" ? "pt" : fw === "numpy" ? "np" : ""; }
+function fwShort(it) {
+  if (it.framework === "numpy") return "np";
+  return it.numpy ? "pt+np" : "pt";   // torch problems that also have a numpy variant
+}
 
 // ----- palette (grouped, filterable dropdown) -----
 function renderPalette() {
@@ -95,7 +99,7 @@ function renderPalette() {
     }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" data-key="${esc(it.key)}" data-i="${i}">` +
       `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
-      `<span class="fwdot ${esc(it.framework || "")}" title="${esc(it.framework || "")}">${fwShort(it.framework)}</span>` +
+      `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
       `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
   });
   if (!v.length) html = `<div class="pal-empty">no matches</div>`;
@@ -150,7 +154,10 @@ async function selectItem(key) {
   $("prob-source").textContent = m.source || "";
   $("prob-group").textContent = m.group || "";
   const fwt = $("prob-framework");
-  fwt.textContent = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
+  let fwText = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
+  if (m.numpy) fwText = "PyTorch + NumPy";   // also solvable via check.py <id> --numpy
+  fwt.textContent = fwText;
+  fwt.title = m.numpy ? "Also solvable in NumPy — `check.py " + (m.id || "") + " --numpy`" : "";
   fwt.className = "tag fw " + (m.framework || "");
   const st = $("prob-status");
   st.className = "tag " + (m.solved ? "solved" : m.last_status === "fail" ? "failed" : "");

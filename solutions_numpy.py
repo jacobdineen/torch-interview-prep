@@ -591,9 +591,29 @@ def causal_lm_loss(logits, targets, ignore_index=-100):
     return nll.sum() / max(int(mask.sum()), 1)
 ''',
 
+"36": '''import numpy as np
+
+def pad_collate(batch, pad_value=0):
+    seqs = [b[0] for b in batch]
+    labels = np.stack([b[1] for b in batch])
+    T = max(s.shape[0] for s in seqs)
+    B = len(seqs)
+    padded = np.full((B, T), pad_value, dtype=seqs[0].dtype)
+    mask = np.zeros((B, T), dtype=bool)
+    for i, s in enumerate(seqs):
+        padded[i, :s.shape[0]] = s
+        mask[i, :s.shape[0]] = True
+    return padded, mask, labels
+''',
+
 }
 
 NUMPY_SUPPORTED = {
+    "36a",
+    "36b",
+    "36c",
+    "36d",
+    "36e",
     "66a",
     "66b",
     "66c",

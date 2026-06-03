@@ -138,6 +138,7 @@ def _catalog():
         items.append({"key": f"prob:{pid}", "kind": "problem", "source": "Problems",
                       "group": _tier(pid) or "Problems", "id": pid,
                       "title": _problem_title(pid), "framework": frameworks.problem_framework(pid),
+                      "numpy": frameworks.problem_has_numpy(pid),
                       "solved": bool(prog.get(pid, {}).get("ever_passed"))})
     for d in _project_dirs():
         man = _manifest(d)
@@ -209,6 +210,7 @@ def _item_meta(key):
         return {"key": key, "kind": "problem", "id": pid, "title": _problem_title(pid),
                 "source": "Problems", "group": _tier(pid),
                 "framework": frameworks.framework_of_source(src),
+                "numpy": frameworks.problem_has_numpy(pid),
                 "signature": _signature(tree) if tree else "",
                 "doc": "\n".join(body).strip(), "concept": concept,
                 "solved": bool(prog.get("ever_passed")), "last_status": prog.get("last_status")}
