@@ -606,9 +606,35 @@ def pad_collate(batch, pad_value=0):
     return padded, mask, labels
 ''',
 
+"50": '''import numpy as np
+
+def pad_and_mask(seqs):
+    lengths = np.array([s.shape[0] for s in seqs])
+    T = int(lengths.max())
+    D = seqs[0].shape[1]
+    padded = np.zeros((len(seqs), T, D), dtype=np.float32)
+    mask = np.zeros((len(seqs), T), dtype=bool)
+    for i, s in enumerate(seqs):
+        padded[i, :s.shape[0]] = s
+        mask[i, :s.shape[0]] = True
+    return padded, mask, lengths
+
+def masked_mean_pool(padded, mask):
+    m_ = mask[..., None].astype(padded.dtype)
+    return (padded * m_).sum(axis=1) / np.maximum(m_.sum(axis=1), 1)
+
+def last_real_state(padded, lengths):
+    return padded[np.arange(padded.shape[0]), lengths - 1]
+''',
+
 }
 
 NUMPY_SUPPORTED = {
+    "50a",
+    "50b",
+    "50c",
+    "50d",
+    "50e",
     "36a",
     "36b",
     "36c",
