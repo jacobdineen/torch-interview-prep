@@ -28,6 +28,17 @@ async function init() {
   }
   sourceSel.value = "Problems";
 
+  const fwSel = $("framework");
+  fwSel.innerHTML = "";
+  const fwLabel = { numpy: "NumPy", torch: "PyTorch" };
+  for (const fw of ["All", ...(cat.frameworks || ["numpy", "torch"])]) {
+    const o = document.createElement("option");
+    o.value = fw; o.textContent = fw === "All" ? "Any framework" : (fwLabel[fw] || fw);
+    fwSel.appendChild(o);
+  }
+  fwSel.value = "All";
+  fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); });
+
   updateOverall();
 
   sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); });
@@ -59,13 +70,17 @@ function updateOverall() {
 // ----- the filtered view (source + text) -----
 function view() {
   const src = $("source").value;
+  const fw = $("framework").value;
   const q = $("filter").value.trim().toLowerCase();
   return ITEMS.filter((x) => {
     if (src !== "All" && x.source !== src) return false;
+    if (fw !== "All" && x.framework !== fw) return false;
     if (!q) return true;
     return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
   });
 }
+
+function fwShort(fw) { return fw === "torch" ? "pt" : fw === "numpy" ? "np" : ""; }
 
 // ----- palette (grouped, filterable dropdown) -----
 function renderPalette() {
@@ -80,6 +95,7 @@ function renderPalette() {
     }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" data-key="${esc(it.key)}" data-i="${i}">` +
       `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
+      `<span class="fwdot ${esc(it.framework || "")}" title="${esc(it.framework || "")}">${fwShort(it.framework)}</span>` +
       `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
   });
   if (!v.length) html = `<div class="pal-empty">no matches</div>`;
@@ -133,6 +149,9 @@ async function selectItem(key) {
   $("prob-title").textContent = m.title || m.id;
   $("prob-source").textContent = m.source || "";
   $("prob-group").textContent = m.group || "";
+  const fwt = $("prob-framework");
+  fwt.textContent = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
+  fwt.className = "tag fw " + (m.framework || "");
   const st = $("prob-status");
   st.className = "tag " + (m.solved ? "solved" : m.last_status === "fail" ? "failed" : "");
   st.textContent = m.solved ? "solved" : m.last_status === "fail" ? "attempted" : "unsolved";

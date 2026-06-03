@@ -85,16 +85,34 @@ def cmd_list(root):
         print()
 
 
+def _framework_tag(root):
+    try:
+        from frameworks import project_framework
+        return f"[{project_framework(root)}]"
+    except Exception:
+        return ""
+
+
 def cmd_overview(projs):
-    """List every project with a one-line progress summary (no project named)."""
-    print(f"\n  Projects ({len(projs)}):\n")
+    """List every project with a one-line progress summary (no project named),
+    grouped by framework so the numpy and torch tracks are separated."""
+    from collections import OrderedDict
+    by_fw = OrderedDict()
     for root in projs:
-        man, prog = _manifest(root), _progress(root)
-        ever = {k for k, v in prog.items() if v.get("ever_passed")}
-        total = len(man["steps"])
-        done = sum(1 for s in man["steps"] if s["id"] in ever)
-        name = os.path.basename(root)
-        print(f"  {_bar(done, total)} {done:>3}/{total:<3}  {name:<22}  {man['title']}")
+        by_fw.setdefault(_framework_tag(root).strip("[]") or "other", []).append(root)
+    print(f"\n  Projects ({len(projs)}):")
+    for fw in ("numpy", "torch", "other"):
+        group = by_fw.get(fw)
+        if not group:
+            continue
+        print(f"\n  — {fw} —")
+        for root in group:
+            man, prog = _manifest(root), _progress(root)
+            ever = {k for k, v in prog.items() if v.get("ever_passed")}
+            total = len(man["steps"])
+            done = sum(1 for s in man["steps"] if s["id"] in ever)
+            name = os.path.basename(root)
+            print(f"  {_bar(done, total)} {done:>3}/{total:<3}  {name:<32}  {man['title']}")
     print("\n  python projects.py <name>          # parts + steps, [x]/[ ] solved")
     print("  python projects.py <name> --next   # jump to the next unsolved step\n")
 

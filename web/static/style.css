@@ -32,6 +32,9 @@ button:hover, select:hover { border-color: var(--accent); }
 .pal-row.hi { background: var(--panel2); }
 .pal-row .mark { width: 12px; color: var(--muted); text-align: center; }
 .pal-row .mark.ok { color: var(--green); }
+.pal-row .fwdot { width: 22px; flex: none; text-align: center; font-size: 10px; }
+.pal-row .fwdot.torch { color: #ff8a65; }
+.pal-row .fwdot.numpy { color: #6cb6ff; }
 .pal-row .pid { color: var(--accent); width: 58px; flex: none; }
 .pal-row .ptitle { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pal-empty { padding: 12px; color: var(--muted); }
@@ -47,6 +50,9 @@ button:hover, select:hover { border-color: var(--accent); }
 .tag.tier { color: var(--accent); border-color: #244; }
 .tag.solved { color: var(--green); border-color: #1c3; }
 .tag.failed { color: var(--red); border-color: #511; }
+.tag.fw.torch { color: #ff8a65; border-color: #5a2e22; }
+.tag.fw.numpy { color: #6cb6ff; border-color: #1d3a52; }
+.tag.fw:empty { display: none; }
 .sig { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 13px; color: var(--accent); overflow-x: auto; }
 .doc { white-space: pre-wrap; margin: 12px 0; color: var(--fg); }
 details { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 12px 0; }

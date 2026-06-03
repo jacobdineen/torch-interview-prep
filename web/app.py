@@ -133,25 +133,27 @@ def _catalog():
         ids = all_problem_ids()
     except Exception:
         ids = []
+    import frameworks
     for pid in ids:
         items.append({"key": f"prob:{pid}", "kind": "problem", "source": "Problems",
                       "group": _tier(pid) or "Problems", "id": pid,
-                      "title": _problem_title(pid),
+                      "title": _problem_title(pid), "framework": frameworks.problem_framework(pid),
                       "solved": bool(prog.get(pid, {}).get("ever_passed"))})
     for d in _project_dirs():
         man = _manifest(d)
         name = man.get("name", os.path.basename(d))
         sources.append(name)
+        fw = frameworks.project_framework(d)
         pp = _project_progress(d)
         for s in man.get("steps", []):
             if not os.path.exists(_step_path(d, s["id"], s["name"])):
                 continue  # staged build: not yet generated
             items.append({"key": f"proj:{name}:{s['id']}", "kind": "project",
-                          "source": name,
+                          "source": name, "framework": fw,
                           "group": f"Part {s.get('part', 0) + 1}: {_part(man, s.get('part', 0))['title']}",
                           "id": s["id"], "title": s["name"],
                           "solved": bool(pp.get(s["id"], {}).get("ever_passed"))})
-    return {"sources": sources, "items": items}
+    return {"sources": sources, "items": items, "frameworks": [frameworks.NUMPY, frameworks.TORCH]}
 
 
 def _resolve(key):
@@ -203,11 +205,14 @@ def _item_meta(key):
             concept = get_concept(pid) or ""
         except Exception:
             pass
+        import frameworks
         return {"key": key, "kind": "problem", "id": pid, "title": _problem_title(pid),
                 "source": "Problems", "group": _tier(pid),
+                "framework": frameworks.framework_of_source(src),
                 "signature": _signature(tree) if tree else "",
                 "doc": "\n".join(body).strip(), "concept": concept,
                 "solved": bool(prog.get("ever_passed")), "last_status": prog.get("last_status")}
+    import frameworks
     man, s = r["manifest"], r["step"]
     part = _part(man, s.get("part", 0))
     pp = _project_progress(r["dir"]).get(s["id"], {})
@@ -217,6 +222,7 @@ def _item_meta(key):
     return {"key": key, "kind": "project", "id": s["id"], "title": s["name"],
             "source": man.get("title", r["name"]),
             "group": f"Part {s.get('part', 0) + 1}: {part['title']}",
+            "framework": frameworks.project_framework(r["dir"]),
             "signature": s.get("signature", ""), "doc": doc, "concept": "",
             "solved": bool(pp.get("ever_passed")), "last_status": pp.get("last_status")}
 

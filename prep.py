@@ -14,16 +14,16 @@ if HERE not in sys.path:
 
 
 def main():
-    # Problems: per-tier bars (reuse the existing dashboard).
+    # Problems: per-tier bars (the standalone problems are the PyTorch track).
     from run_all import show_status
-    print("\n=== Problems ===")
+    print("\n=== Problems  (PyTorch track) ===")
     show_status()
 
-    # Projects: one line each (reuse the existing overview).
+    # Projects: grouped by framework (numpy vs torch) so the two tracks separate.
     from projects import _all_projects, cmd_overview
     projs = _all_projects()
     if projs:
-        print("=== Projects ===")
+        print("=== Projects  (by framework) ===")
         cmd_overview(projs)
 
     # The single next action for the problems track.

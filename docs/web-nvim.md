@@ -32,6 +32,10 @@ browser ──HTTP──► web/app.py (:8000)  ── nvim --remote / --remote-
    └──iframe──► ttyd (:7681) ──PTY──► nvim --listen /tmp/mle_nvim.sock ──────┘
 ```
 
+**Picking content.** The source selector chooses Problems or a project; the
+**framework** selector filters to NumPy or PyTorch (badges/dots mark each item);
+the filter box searches by id/title. Problems and project steps both appear.
+
 **Stopping it.** Click **⏻ Tear down** in the top bar (saves + quits nvim, stops
 ttyd, stops the server), or `Ctrl-C` the launcher, or run `./web/teardown.sh`.
 
