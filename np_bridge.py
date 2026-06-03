@@ -48,13 +48,10 @@ def to_np(x):
 
 
 def to_torch(x):
-    """numpy array/scalar -> torch tensor (float64 cast to torch's float32 default);
-    tuples mapped; everything else passed through so plain ints/floats stay scalar."""
+    """numpy array/scalar -> torch tensor (dtype preserved — float32 inputs stay
+    float32 through numpy ops); tuples mapped; plain ints/floats pass through."""
     if isinstance(x, np.ndarray):
-        a = np.ascontiguousarray(x)
-        if a.dtype == np.float64:
-            a = a.astype(np.float32)
-        return torch.from_numpy(a)
+        return torch.from_numpy(np.ascontiguousarray(x))
     if isinstance(x, np.generic):
         return torch.tensor(x.item())
     if isinstance(x, tuple):
