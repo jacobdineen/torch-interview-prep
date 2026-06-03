@@ -1,0 +1,100 @@
+{
+  "name": "metrics-and-evaluation-from-scratch",
+  "title": "Metrics & Evaluation From Scratch",
+  "parts": [
+    {
+      "title": "Splitting & Folds",
+      "description": "Seeded train/test splitting and contiguous k-fold cross-validation indices."
+    },
+    {
+      "title": "Classification Metrics",
+      "description": "Confusion matrix, accuracy, binary precision/recall/F1, and macro-F1."
+    },
+    {
+      "title": "Ranking & Regression Metrics",
+      "description": "Tie-safe ROC AUC, plus MAE, RMSE, and R^2."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "train_test_split",
+      "part": 0,
+      "points": 5,
+      "signature": "train_test_split(X, y, test_frac=0.25, seed=0)",
+      "doc": "Shuffle (seeded) and split into (X_train, X_test, y_train, y_test); the\ntest set is round(n * test_frac) rows."
+    },
+    {
+      "id": "0002",
+      "name": "k_fold_indices",
+      "part": 0,
+      "points": 5,
+      "signature": "k_fold_indices(n, k)",
+      "doc": "Return k (train_idx, test_idx) pairs of contiguous folds over range(n).\nThe test folds partition all n indices; train is the complement."
+    },
+    {
+      "id": "0003",
+      "name": "confusion_matrix",
+      "part": 1,
+      "points": 5,
+      "signature": "confusion_matrix(y_true, y_pred, num_classes)",
+      "doc": "(num_classes, num_classes) integer matrix; rows are true, cols predicted."
+    },
+    {
+      "id": "0004",
+      "name": "accuracy_score",
+      "part": 1,
+      "points": 5,
+      "signature": "accuracy_score(y_true, y_pred)",
+      "doc": "Fraction of exactly-correct predictions (a float)."
+    },
+    {
+      "id": "0005",
+      "name": "precision_recall_f1",
+      "part": 1,
+      "points": 5,
+      "signature": "precision_recall_f1(y_true, y_pred)",
+      "doc": "Binary precision, recall, F1 for the positive class (label 1), as a tuple.\nEach is 0.0 when its denominator is zero."
+    },
+    {
+      "id": "0006",
+      "name": "macro_f1",
+      "part": 1,
+      "points": 5,
+      "signature": "macro_f1(cm)",
+      "doc": "Unweighted mean of per-class F1 from a confusion matrix (rows=true)."
+    },
+    {
+      "id": "0007",
+      "name": "roc_auc",
+      "part": 2,
+      "points": 5,
+      "signature": "roc_auc(scores, y_true)",
+      "doc": "Binary ROC AUC via the rank (Mann-Whitney) formula, tie-safe. y in {0,1};\nreturns 0.5 if a class is absent."
+    },
+    {
+      "id": "0008",
+      "name": "mean_absolute_error",
+      "part": 2,
+      "points": 5,
+      "signature": "mean_absolute_error(y_true, y_pred)",
+      "doc": "Mean absolute error (a float)."
+    },
+    {
+      "id": "0009",
+      "name": "rmse",
+      "part": 2,
+      "points": 5,
+      "signature": "rmse(y_true, y_pred)",
+      "doc": "Root mean squared error (a float)."
+    },
+    {
+      "id": "0010",
+      "name": "r2_score",
+      "part": 2,
+      "points": 5,
+      "signature": "r2_score(y_true, y_pred)",
+      "doc": "Coefficient of determination R^2 = 1 - SS_res / SS_tot (a float)."
+    }
+  ]
+}

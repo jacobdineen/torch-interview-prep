@@ -169,6 +169,9 @@ steps that accumulate into one working artifact. Four are included:
 - **classical-ml-from-scratch** (NumPy) — 18 steps / 4 parts: the pre-deep-learning toolkit
   (linear regression closed-form + gradient, logistic regression, k-means clustering, and PCA),
   built from the math up with gradients finite-difference checked.
+- **metrics-and-evaluation-from-scratch** (NumPy) — 10 steps / 3 parts: the model-evaluation
+  toolkit (train/test split, k-fold, confusion matrix, precision/recall/F1 + macro-F1, tie-safe
+  ROC AUC, and MAE/RMSE/R²).
 
 Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
 like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
@@ -199,7 +202,8 @@ Each project has its own README with the full part breakdown and expected result
 [tic-tac-toe-rl](projects/tic-tac-toe-rl/README.md) ·
 [rlhf-distilgpt2](projects/rlhf-distilgpt2/README.md) ·
 [alphazero-connect4](projects/alphazero-connect4/README.md) ·
-[classical-ml-from-scratch](projects/classical-ml-from-scratch/README.md). To add your own,
+[classical-ml-from-scratch](projects/classical-ml-from-scratch/README.md) ·
+[metrics-and-evaluation-from-scratch](projects/metrics-and-evaluation-from-scratch/README.md). To add your own,
 scaffold it with `python new_project.py <name> --title "..."` and see
 [docs/adding-a-project.md](docs/adding-a-project.md).
 
