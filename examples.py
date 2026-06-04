@@ -59,7 +59,13 @@ def _shape_fmt(v):
         import torch
     except Exception:
         torch = None
+    try:
+        import numpy as np
+    except Exception:
+        np = None
     if torch is not None and isinstance(v, torch.Tensor):
+        return f"shape {tuple(v.shape)}"
+    if np is not None and isinstance(v, np.ndarray):
         return f"shape {tuple(v.shape)}"
     if isinstance(v, tuple):
         return "(" + ", ".join(_shape_fmt(x) for x in v) + ")"
@@ -107,12 +113,24 @@ def _fmt(v):
         import torch
     except Exception:
         torch = None
+    try:
+        import numpy as np
+    except Exception:
+        np = None
     if torch is not None and isinstance(v, torch.Tensor):
         if v.numel() == 0:
             return "[]"
         if v.numel() <= 16 and v.dim() <= 2:
             return f"{_round(v.tolist())}"   # bare list, like a problem statement
         return f"shape {tuple(v.shape)}"
+    if np is not None and isinstance(v, np.ndarray):
+        if v.size == 0:
+            return "[]"
+        if v.size <= 16 and v.ndim <= 2:
+            return f"{_round(v.tolist())}"
+        return f"shape {tuple(v.shape)}"
+    if np is not None and isinstance(v, np.generic):
+        v = v.item()
     if isinstance(v, tuple):
         return "(" + ", ".join(_fmt(x) for x in v) + ")"
     if isinstance(v, float):
@@ -266,5 +284,115 @@ def _run_reference(pid, name, fn, call):
                             pass
                 break
         return eval(compile(ast.Expression(call), "c", "eval"), ns)
+    except Exception:
+        return None
+
+
+# ---------- project steps (tests call ns["name"](...) against a per-project reference) ----------
+
+_PROJECTS = os.path.join(_HERE, "projects")
+
+
+def _ns_call(name, node):
+    """Find an ns["name"](...) call anywhere in an expression."""
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Subscript):
+            sub = n.func
+            if (isinstance(sub.value, ast.Name) and sub.value.id == "ns"):
+                key = sub.slice.value if isinstance(sub.slice, ast.Index) else sub.slice
+                if isinstance(key, ast.Constant) and key.value == name:
+                    return n
+    return None
+
+
+def _step_param_names(project, sid, name):
+    hits = sorted(glob.glob(os.path.join(_PROJECTS, project, "steps", f"{sid}_*.py")))
+    if not hits:
+        return []
+    try:
+        tree = ast.parse(open(hits[0]).read())
+    except (OSError, SyntaxError):
+        return []
+    for n in tree.body:
+        if isinstance(n, ast.FunctionDef) and n.name == name:
+            return [a.arg for a in n.args.args]
+        if isinstance(n, ast.ClassDef):
+            return ["__class__"]
+    return []
+
+
+def example_for_step(project, sid, name):
+    """Worked Input->Output example for a project step, run against its reference.
+    None for class steps or when not cleanly extractable."""
+    params = _step_param_names(project, sid, name)
+    if params == ["__class__"]:
+        return None
+    tpath = os.path.join(_PROJECTS, project, "tests", "_ref", "tests.py")
+    rpath = os.path.join(_PROJECTS, project, "tests", "_ref", "reference.py")
+    if not (os.path.exists(tpath) and os.path.exists(rpath)):
+        return None
+    try:
+        tree = ast.parse(open(tpath).read())
+    except (OSError, SyntaxError):
+        return None
+    fn = next((n for n in tree.body
+               if isinstance(n, ast.FunctionDef) and n.name == f"test_{sid}_{name}"), None)
+    if fn is None:
+        return None
+
+    assigns, call = {}, None
+    for stmt in fn.body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            c = _ns_call(name, stmt.value)
+            if c is not None and call is None:
+                call = c
+            assigns[stmt.targets[0].id] = stmt.value
+        elif call is None:
+            c = _ns_call(name, stmt)
+            if c is not None:
+                call = c
+    if call is None:
+        return None
+
+    referenced = {n.id for n in ast.walk(call) if isinstance(n, ast.Name)} & set(assigns)
+    is_random = any(re.search(r"\brand|randn|randint|seed|shuffle|choice", _clean(ast.unparse(assigns[v])))
+                    for v in referenced)
+
+    parts = []
+    for idx, a in enumerate(call.args):
+        pname = params[idx] if idx < len(params) else f"arg{idx}"
+        if isinstance(a, ast.Name) and a.id in assigns:
+            parts.append(f"{pname} = {_clean(ast.unparse(assigns[a.id]))}")
+        else:
+            parts.append(f"{pname} = {_clean(ast.unparse(a))}")
+    for kw in call.keywords:
+        parts.append(f"{kw.arg} = {_clean(ast.unparse(kw.value))}")
+    inputs = ",  ".join(parts)
+
+    out = _run_step_reference(rpath, fn, name, call)
+    output = (_shape_fmt(out) if is_random else _fmt(out)) if out is not None else None
+    if output is None and not inputs:
+        return None
+    return {"inputs": inputs, "output": output, "matches": None, "random": is_random}
+
+
+def _run_step_reference(rpath, fn, name, call):
+    try:
+        ns = {}
+        exec(compile(open(rpath).read(), "ref", "exec"), ns)
+        # replay the test's setup assigns up to the call
+        for stmt in fn.body:
+            if isinstance(stmt, ast.Assign) and isinstance(stmt.targets[0], ast.Name):
+                if _ns_call(name, stmt.value) is not None:
+                    break
+                try:
+                    exec(compile(ast.Module([stmt], []), "s", "exec"), ns)
+                except Exception:
+                    pass
+        # rewrite ns["name"](...) -> name(...) for eval against the reference
+        new_call = ast.Call(func=ast.Name(id=name, ctx=ast.Load()),
+                            args=call.args, keywords=call.keywords)
+        ast.fix_missing_locations(new_call)
+        return eval(compile(ast.Expression(new_call), "c", "eval"), ns)
     except Exception:
         return None

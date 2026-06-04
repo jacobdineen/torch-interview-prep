@@ -205,6 +205,18 @@ def cmd_explain(root, sid):
     print(f"  Step {s['id']} — {s['name']}   (Part {s['part'] + 1}: {part['title']})")
     print(f"    signature: {s['signature']}")
     print(f"    {s['doc']}")
+    # A worked example (input -> output) run against the reference, if extractable.
+    try:
+        from examples import example_for_step
+        ex = example_for_step(os.path.basename(root), sid, s["name"])
+    except Exception:
+        ex = None
+    if ex:
+        print("    Example:")
+        if ex.get("inputs"):
+            print(f"      Input:   {ex['inputs']}")
+        if ex.get("output"):
+            print(f"      Output:  {ex['output']}")
     if part.get("description"):
         print(f"    Part: {part['description']}")
     notes = _json_store(_notes_file(root)).get(sid)
