@@ -1,0 +1,164 @@
+{
+  "name": "einops",
+  "title": "Tensor Ops with einops",
+  "parts": [
+    {
+      "title": "Rearrange \u2014 moving axes around",
+      "description": "Transpose, flatten, split and merge axes with rearrange. No numbers change, only the layout."
+    },
+    {
+      "title": "Reduce \u2014 pooling over axes",
+      "description": "Mean/max/sum-pool whole axes or fixed-size patches with reduce."
+    },
+    {
+      "title": "Repeat \u2014 broadcasting and tiling",
+      "description": "Copy data along new or existing axes with repeat."
+    },
+    {
+      "title": "Einsum \u2014 contractions",
+      "description": "Batched matmuls, attention scores, weighted sums and traces with einsum."
+    },
+    {
+      "title": "Pack & unpack \u2014 variadic axes",
+      "description": "Flatten and concatenate ragged-rank tensors with pack."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "transpose_2d",
+      "part": 0,
+      "points": 5,
+      "signature": "transpose_2d(x)",
+      "doc": "Transpose a 2-D array: swap its two axes."
+    },
+    {
+      "id": "0002",
+      "name": "flatten_image",
+      "part": 0,
+      "points": 5,
+      "signature": "flatten_image(x)",
+      "doc": "Flatten a 2-D array into a 1-D vector in row-major (C) order."
+    },
+    {
+      "id": "0003",
+      "name": "merge_batch_and_time",
+      "part": 0,
+      "points": 5,
+      "signature": "merge_batch_and_time(x)",
+      "doc": "Collapse the leading (batch, time) axes of a 3-D array into one, giving (batch*time, features)."
+    },
+    {
+      "id": "0004",
+      "name": "split_into_heads",
+      "part": 0,
+      "points": 5,
+      "signature": "split_into_heads(x, heads)",
+      "doc": "Reshape (batch, seq, dim) into (batch, heads, seq, head_dim) by splitting the last axis into `heads` equal groups."
+    },
+    {
+      "id": "0005",
+      "name": "channels_last_to_first",
+      "part": 0,
+      "points": 5,
+      "signature": "channels_last_to_first(x)",
+      "doc": "Convert an image batch from NHWC to NCHW layout (move the channel axis from last to second)."
+    },
+    {
+      "id": "0006",
+      "name": "global_average_pool",
+      "part": 1,
+      "points": 5,
+      "signature": "global_average_pool(x)",
+      "doc": "Average each channel of an NCHW image batch over its spatial dims, giving (N, C)."
+    },
+    {
+      "id": "0007",
+      "name": "max_pool_2x2",
+      "part": 1,
+      "points": 5,
+      "signature": "max_pool_2x2(x)",
+      "doc": "2x2 max-pool an NCHW image batch (H and W are even), halving each spatial dim."
+    },
+    {
+      "id": "0008",
+      "name": "sequence_mean",
+      "part": 1,
+      "points": 5,
+      "signature": "sequence_mean(x)",
+      "doc": "Mean-pool a (batch, seq, dim) array over the sequence axis, giving (batch, dim)."
+    },
+    {
+      "id": "0009",
+      "name": "gray_to_rgb",
+      "part": 2,
+      "points": 5,
+      "signature": "gray_to_rgb(x)",
+      "doc": "Turn a 2-D grayscale image (H, W) into an (H, W, 3) RGB image by copying it across 3 channels."
+    },
+    {
+      "id": "0010",
+      "name": "tile_rows",
+      "part": 2,
+      "points": 5,
+      "signature": "tile_rows(x, n)",
+      "doc": "Stack `n` identical copies of a 1-D vector into an (n, len) array."
+    },
+    {
+      "id": "0011",
+      "name": "upsample_nearest",
+      "part": 2,
+      "points": 5,
+      "signature": "upsample_nearest(x, factor)",
+      "doc": "Nearest-neighbour upsample a 2-D array by an integer `factor` along both axes."
+    },
+    {
+      "id": "0012",
+      "name": "batched_matmul",
+      "part": 3,
+      "points": 5,
+      "signature": "batched_matmul(a, b)",
+      "doc": "Batched matrix multiply: (B, I, K) times (B, K, J) gives (B, I, J)."
+    },
+    {
+      "id": "0013",
+      "name": "attention_scores",
+      "part": 3,
+      "points": 5,
+      "signature": "attention_scores(q, k)",
+      "doc": "Dot-product attention scores: queries (B, Q, D) and keys (B, K, D) give (B, Q, K)."
+    },
+    {
+      "id": "0014",
+      "name": "weighted_token_sum",
+      "part": 3,
+      "points": 5,
+      "signature": "weighted_token_sum(weights, values)",
+      "doc": "Weighted sum of value vectors: weights (B, Q, K) and values (B, K, D) give (B, Q, D)."
+    },
+    {
+      "id": "0015",
+      "name": "trace_batch",
+      "part": 3,
+      "points": 5,
+      "signature": "trace_batch(x)",
+      "doc": "Trace (sum of the diagonal) of each matrix in a batch (B, N, N), giving (B,)."
+    },
+    {
+      "id": "0016",
+      "name": "flatten_keep_batch",
+      "part": 4,
+      "points": 5,
+      "signature": "flatten_keep_batch(x)",
+      "doc": "Flatten every axis except the first into one, giving (B, M) from a batch of any rank >= 1."
+    },
+    {
+      "id": "0017",
+      "name": "concat_features",
+      "part": 4,
+      "points": 5,
+      "signature": "concat_features(a, b)",
+      "doc": "Concatenate two feature maps (H, W, C1) and (H, W, C2) along the channel axis, giving (H, W, C1+C2)."
+    }
+  ]
+}

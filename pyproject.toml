@@ -7,6 +7,7 @@ dependencies = [
     "torch>=2.4.0",
     "numpy>=1.24",
     "transformers>=5.9.0",
+    "einops>=0.8.2",
 ]
 
 [tool.uv]
