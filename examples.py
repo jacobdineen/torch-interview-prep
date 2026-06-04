@@ -247,7 +247,9 @@ def example_for(pid, slug):
     # be noise, and a shape reveals nothing about the algorithm).
     out = _run_reference(pid, name, fn, call)
     output = (_shape_fmt(out) if is_random else _fmt(out)) if out is not None else None
-    if output is None and matches is None and not inputs:
+    # A no-argument function's "output" IS the answer (e.g. choose-a-hyperparameter
+    # steps) — never show that. Need real inputs to be a non-giveaway example.
+    if not inputs.strip() or (output is None and matches is None):
         return None
     return {"inputs": inputs, "output": output, "matches": matches, "random": is_random}
 
@@ -371,7 +373,8 @@ def example_for_step(project, sid, name):
 
     out = _run_step_reference(rpath, fn, name, call)
     output = (_shape_fmt(out) if is_random else _fmt(out)) if out is not None else None
-    if output is None and not inputs:
+    # No real inputs -> the output is just the answer; don't show it.
+    if not inputs.strip() or output is None:
         return None
     return {"inputs": inputs, "output": output, "matches": None, "random": is_random}
 
