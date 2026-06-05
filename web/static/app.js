@@ -37,13 +37,15 @@ async function init() {
     fwSel.appendChild(o);
   }
   fwSel.value = "All";
-  fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); });
+  fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
 
-  updateOverall();
+  updateProgress();
+  setupSplitters();
+  setupShortcuts();
 
-  sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); });
+  sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); updateProgress(); });
   const f = $("filter");
-  f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); });
+  f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
   f.addEventListener("focus", () => { renderPalette(); openPalette(); });
   f.addEventListener("keydown", onFilterKey);
   document.addEventListener("click", (e) => {
@@ -65,9 +67,58 @@ async function init() {
   if (first) selectItem(first.key);
 }
 
-function updateOverall() {
-  const solved = ITEMS.filter((x) => x.solved).length;
-  $("overall").textContent = `${solved}/${ITEMS.length} solved`;
+// ----- progress (reflects the current filtered view) -----
+function updateProgress() {
+  const v = view();
+  const solved = v.filter((x) => x.solved).length;
+  const total = v.length || 1;
+  const pct = Math.round((solved / total) * 100);
+  $("progress-fill").style.width = pct + "%";
+  $("overall").textContent = `${solved}/${v.length} solved`;
+}
+
+// ----- resizable panes -----
+function setupSplitters() {
+  const root = document.documentElement;
+  const saved = (k, v) => { const s = localStorage.getItem(k); if (s) root.style.setProperty(v, s); };
+  saved("mle_left_w", "--left-w");
+  saved("mle_results_h", "--results-h");
+
+  const drag = (gutter, rowMode, compute, storeKey, cssVar) => {
+    gutter.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      gutter.classList.add("dragging");
+      document.body.classList.add("resizing");
+      if (rowMode) document.body.classList.add("rows");
+      const move = (ev) => root.style.setProperty(cssVar, compute(ev) + "px");
+      const up = () => {
+        gutter.classList.remove("dragging");
+        document.body.classList.remove("resizing", "rows");
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        localStorage.setItem(storeKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  };
+
+  const split = $("split"), right = $("right");
+  drag($("gutter-x"), false, (ev) => {
+    const r = split.getBoundingClientRect();
+    return Math.max(280, Math.min(r.width - 360, ev.clientX - r.left));
+  }, "mle_left_w", "--left-w");
+  drag($("gutter-y"), true, (ev) => {
+    const r = right.getBoundingClientRect();
+    return Math.max(80, Math.min(r.height - 160, r.bottom - ev.clientY));
+  }, "mle_results_h", "--results-h");
+}
+
+function setupShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if (e.key === "/" && !inField) { e.preventDefault(); $("filter").focus(); $("filter").select(); }
+  });
 }
 
 // ----- the filtered view (source + text) -----
@@ -153,8 +204,8 @@ async function selectItem(key) {
   CURRENT = key;
   const m = await api.get("/api/item?key=" + encodeURIComponent(key));
   if (m.error) return;
+  $("prob-id").textContent = (m.source && m.source !== "Problems" ? m.source + " · " : "") + (m.id || "");
   $("prob-title").textContent = m.title || m.id;
-  $("prob-source").textContent = m.source || "";
   $("prob-group").textContent = m.group || "";
   const fwt = $("prob-framework");
   let fwText = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
@@ -204,7 +255,7 @@ async function run(submit) {
 
 function markSolved(key) {
   const it = ITEMS.find((x) => x.key === key);
-  if (it && !it.solved) { it.solved = true; updateOverall(); }
+  if (it && !it.solved) { it.solved = true; updateProgress(); }
   $("prob-status").className = "tag solved";
   $("prob-status").textContent = "solved";
 }

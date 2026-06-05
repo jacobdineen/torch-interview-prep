@@ -61,6 +61,18 @@ def _load_json(path):
         return {}
 
 
+def _strip_example(text):
+    """Drop a trailing "Example:" block from a docstring body. The web renders
+    the worked example in its own box, so showing it in the prose too is just
+    noise (and risks reading like part of the spec)."""
+    out = []
+    for ln in text.splitlines():
+        if ln.strip() == "Example:":
+            break
+        out.append(ln)
+    return "\n".join(out).strip()
+
+
 # ---------- problems ----------
 
 def _problem_path(pid):
@@ -219,20 +231,27 @@ def _item_meta(key):
                 "framework": frameworks.framework_of_source(src),
                 "numpy": frameworks.problem_has_numpy(pid),
                 "signature": _signature(tree) if tree else "",
-                "doc": "\n".join(body).strip(), "concept": concept, "example": example,
+                "doc": _strip_example("\n".join(body)), "concept": concept, "example": example,
                 "solved": bool(prog.get("ever_passed")), "last_status": prog.get("last_status")}
     import frameworks
     man, s = r["manifest"], r["step"]
     part = _part(man, s.get("part", 0))
     pp = _project_progress(r["dir"]).get(s["id"], {})
-    doc = s.get("doc", "")
+    doc = _strip_example(s.get("doc", ""))
     if part.get("description"):
         doc = (doc + "\n\n" + part["description"]).strip()
+    example = None
+    try:
+        from examples import example_for_step
+        example = example_for_step(r["name"], s["id"], s["name"])
+    except Exception:
+        pass
     return {"key": key, "kind": "project", "id": s["id"], "title": s["name"],
             "source": man.get("title", r["name"]),
             "group": f"Part {s.get('part', 0) + 1}: {part['title']}",
             "framework": frameworks.project_framework(r["dir"]),
             "signature": s.get("signature", ""), "doc": doc, "concept": "",
+            "example": example,
             "solved": bool(pp.get("ever_passed")), "last_status": pp.get("last_status")}
 
 

@@ -8,59 +8,82 @@
 </head>
 <body>
   <header id="topbar">
-    <div class="brand">▚ mle_prep</div>
+    <div class="brand"><span class="brand-mark">▚</span> mle_prep</div>
     <select id="source" title="Problems or a project"></select>
     <select id="framework" title="Filter by framework"></select>
     <div class="search-wrap">
-      <input id="filter" type="text" placeholder="filter by id or title…  (↑↓ Enter, Esc)" autocomplete="off" spellcheck="false" />
+      <input id="filter" type="text" placeholder="Search by id or title…   ( / to focus · ↑↓ Enter · Esc )" autocomplete="off" spellcheck="false" />
       <div id="palette" class="palette hidden"></div>
     </div>
-    <button id="prev-btn" title="Previous in list">‹</button>
-    <button id="next-btn" title="Next unsolved">next ›</button>
-    <div id="overall" class="overall"></div>
-    <button id="teardown-btn" class="danger" title="Stop nvim, ttyd, and the server">⏻ Tear down</button>
+    <div class="nav-group">
+      <button id="prev-btn" title="Previous in list">‹</button>
+      <button id="next-btn" class="next" title="Next unsolved">next ›</button>
+    </div>
+    <div class="progress-wrap" title="Solved in this view">
+      <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      <div id="overall" class="overall">—</div>
+    </div>
+    <button id="teardown-btn" class="danger" title="Stop nvim, ttyd, and the server">⏻</button>
   </header>
 
   <main id="split">
     <section id="left">
       <div class="prob-head">
-        <h1 id="prob-title">—</h1>
+        <div class="prob-head-main">
+          <div class="prob-eyebrow"><span id="prob-id" class="prob-id"></span></div>
+          <h1 id="prob-title">—</h1>
+        </div>
         <div class="tags">
           <span id="prob-status" class="tag"></span>
           <span id="prob-framework" class="tag fw"></span>
-          <span id="prob-source" class="tag"></span>
           <span id="prob-group" class="tag tier"></span>
         </div>
       </div>
-      <pre id="prob-sig" class="sig"></pre>
-      <div id="prob-doc" class="doc"></div>
-      <div id="example-wrap" class="example">
-        <div class="example-head">Example</div>
-        <div class="ex-label">Input</div>
-        <pre id="ex-input" class="ex-box"></pre>
-        <div class="ex-label">Output</div>
-        <pre id="ex-output" class="ex-box"></pre>
-        <div class="example-note">Illustrates the expected behaviour — not the solution.</div>
+
+      <div class="card goal-card">
+        <div class="section-label">Goal</div>
+        <div id="prob-doc" class="doc"></div>
+        <pre id="prob-sig" class="sig"></pre>
       </div>
-      <details id="concept-wrap">
+
+      <div id="example-wrap" class="card example">
+        <div class="section-label">Worked example <span class="section-note">illustrates the behaviour, not the solution</span></div>
+        <div class="ex-grid">
+          <div class="ex-cell">
+            <div class="ex-label">Input</div>
+            <pre id="ex-input" class="ex-box"></pre>
+          </div>
+          <div class="ex-arrow">→</div>
+          <div class="ex-cell">
+            <div class="ex-label">Output</div>
+            <pre id="ex-output" class="ex-box"></pre>
+          </div>
+        </div>
+      </div>
+
+      <details id="concept-wrap" class="card">
         <summary>Learn about this topic</summary>
         <div id="prob-concept" class="concept"></div>
       </details>
+
       <div class="left-actions">
-        <button id="hint-btn">Hint</button>
-        <button id="solution-btn">Solution</button>
+        <button id="hint-btn">💡 Hint</button>
+        <button id="solution-btn">Show solution</button>
       </div>
       <pre id="aux-out" class="aux"></pre>
     </section>
 
+    <div id="gutter-x" class="gutter gutter-x" title="Drag to resize"></div>
+
     <section id="right">
       <div class="editor-bar">
-        <span class="editor-label">editor — your real nvim (<code>:w</code> then Run)</span>
+        <span class="editor-label">editor — your real nvim <code>:w</code> then Run</span>
         <span class="spacer"></span>
         <button id="run-btn" class="run">▶ Run</button>
         <button id="submit-btn" class="submit">⚡ Submit</button>
       </div>
       <iframe id="nvim" title="nvim"></iframe>
+      <div id="gutter-y" class="gutter gutter-y" title="Drag to resize the terminal"></div>
       <div id="results" class="results">
         <div class="results-head">Results</div>
         <div id="results-body" class="results-body muted">Edit in the editor, then Run.</div>
