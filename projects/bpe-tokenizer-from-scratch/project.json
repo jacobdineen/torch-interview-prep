@@ -1,0 +1,148 @@
+{
+  "name": "bpe-tokenizer-from-scratch",
+  "title": "Build a BPE Tokenizer from Scratch",
+  "parts": [
+    {
+      "title": "Corpus & Symbols",
+      "description": "Pre-tokenize text into words and represent each as a sequence of symbols with an end-of-word marker."
+    },
+    {
+      "title": "Pair Statistics & Merging",
+      "description": "Count adjacent symbol-pair frequencies, find the most frequent pair, and merge it across the corpus."
+    },
+    {
+      "title": "Training the Merges",
+      "description": "Learn an ordered list of merges and build the rank table that drives encoding."
+    },
+    {
+      "title": "Tokenizing & Vocab",
+      "description": "Greedily apply learned merges to a word and assign integer ids to every token."
+    },
+    {
+      "title": "Encode & Decode",
+      "description": "Turn text into token ids and reconstruct the original text from ids."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "pretokenize",
+      "part": 0,
+      "points": 5,
+      "signature": "pretokenize(text)",
+      "doc": "Split text on whitespace into a list of non-empty word strings."
+    },
+    {
+      "id": "0002",
+      "name": "word_to_symbols",
+      "part": 0,
+      "points": 5,
+      "signature": "word_to_symbols(word)",
+      "doc": "Return the word's characters followed by the END marker as a tuple."
+    },
+    {
+      "id": "0003",
+      "name": "build_word_frequencies",
+      "part": 0,
+      "points": 5,
+      "signature": "build_word_frequencies(words)",
+      "doc": "Map each word's symbol-tuple to the number of times that word occurs."
+    },
+    {
+      "id": "0004",
+      "name": "initial_vocab",
+      "part": 0,
+      "points": 5,
+      "signature": "initial_vocab(word_freqs)",
+      "doc": "Return the set of all distinct symbols appearing across the keys."
+    },
+    {
+      "id": "0005",
+      "name": "count_pairs",
+      "part": 1,
+      "points": 5,
+      "signature": "count_pairs(word_freqs)",
+      "doc": "Count every adjacent symbol pair, weighted by each word's frequency."
+    },
+    {
+      "id": "0006",
+      "name": "best_pair",
+      "part": 1,
+      "points": 5,
+      "signature": "best_pair(pair_counts)",
+      "doc": "Return the highest-count pair, breaking ties by lexicographically smallest pair."
+    },
+    {
+      "id": "0007",
+      "name": "merge_word",
+      "part": 1,
+      "points": 5,
+      "signature": "merge_word(symbols, pair)",
+      "doc": "Replace each adjacent occurrence of pair=(a,b) in the tuple with the merged symbol a+b."
+    },
+    {
+      "id": "0008",
+      "name": "apply_merge",
+      "part": 1,
+      "points": 5,
+      "signature": "apply_merge(word_freqs, pair)",
+      "doc": "Return a new word_freqs with pair merged in every key, preserving frequencies."
+    },
+    {
+      "id": "0009",
+      "name": "train_bpe",
+      "part": 2,
+      "points": 5,
+      "signature": "train_bpe(word_freqs, num_merges)",
+      "doc": "Return the ordered list of merge pairs learned by greedy BPE over the corpus."
+    },
+    {
+      "id": "0010",
+      "name": "build_merge_ranks",
+      "part": 2,
+      "points": 5,
+      "signature": "build_merge_ranks(merges)",
+      "doc": "Map each merge pair to its position (rank) in the learned merge list."
+    },
+    {
+      "id": "0011",
+      "name": "bpe_encode_word",
+      "part": 3,
+      "points": 5,
+      "signature": "bpe_encode_word(word, merge_ranks)",
+      "doc": "Greedily merge the word's symbols by repeatedly applying the lowest-rank adjacent merge until none remain."
+    },
+    {
+      "id": "0012",
+      "name": "build_token_to_id",
+      "part": 3,
+      "points": 5,
+      "signature": "build_token_to_id(initial_symbols, merges)",
+      "doc": "Assign ids to the sorted initial symbols, then to each merged token in merge order, with no duplicates."
+    },
+    {
+      "id": "0013",
+      "name": "build_id_to_token",
+      "part": 3,
+      "points": 5,
+      "signature": "build_id_to_token(token_to_id)",
+      "doc": "Return the inverse mapping from id back to token string."
+    },
+    {
+      "id": "0014",
+      "name": "encode",
+      "part": 4,
+      "points": 5,
+      "signature": "encode(text, merge_ranks, token_to_id)",
+      "doc": "Tokenize text into BPE tokens and map them to their integer ids."
+    },
+    {
+      "id": "0015",
+      "name": "decode",
+      "part": 4,
+      "points": 5,
+      "signature": "decode(ids, id_to_token)",
+      "doc": "Map ids back to tokens and reconstruct the original whitespace-joined text."
+    }
+  ]
+}
