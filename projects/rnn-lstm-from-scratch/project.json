@@ -1,0 +1,196 @@
+{
+  "name": "rnn-lstm-from-scratch",
+  "title": "Build an RNN and LSTM from Scratch",
+  "parts": [
+    {
+      "title": "Character Data",
+      "description": "Build a character vocabulary, encode text to ids, make next-char training windows, and one-hot encode."
+    },
+    {
+      "title": "Vanilla RNN",
+      "description": "Implement the recurrent cell, unroll it over a sequence, and project hidden states to vocab logits."
+    },
+    {
+      "title": "LSTM",
+      "description": "Implement the gated LSTM cell (input/forget/output/candidate), unroll it, and project to logits."
+    },
+    {
+      "title": "Loss & Training",
+      "description": "Sequence cross-entropy, the loss over a model's logits, an SGD step (torch autograd), and the training loop."
+    },
+    {
+      "title": "Sampling & Evaluation",
+      "description": "Sample the next character with temperature, autoregressively generate text, and measure perplexity."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "build_char_vocab",
+      "part": 0,
+      "points": 5,
+      "signature": "build_char_vocab(text)",
+      "doc": "Build sorted character-to-id and id-to-character mappings from text."
+    },
+    {
+      "id": "0002",
+      "name": "encode_text",
+      "part": 0,
+      "points": 5,
+      "signature": "encode_text(text, stoi)",
+      "doc": "Map each character in text to its integer id, returning a LongTensor (L,)."
+    },
+    {
+      "id": "0003",
+      "name": "make_training_pairs",
+      "part": 0,
+      "points": 5,
+      "signature": "make_training_pairs(ids, seq_len)",
+      "doc": "Split ids into non-overlapping windows X and next-char targets Y, dropping the remainder."
+    },
+    {
+      "id": "0004",
+      "name": "one_hot",
+      "part": 0,
+      "points": 5,
+      "signature": "one_hot(ids, vocab_size)",
+      "doc": "One-hot encode an integer id tensor along a new last axis of size vocab_size."
+    },
+    {
+      "id": "0005",
+      "name": "init_rnn_params",
+      "part": 1,
+      "points": 5,
+      "signature": "init_rnn_params(vocab_size, hidden, seed=0)",
+      "doc": "Create the trainable parameter dict for a vanilla RNN."
+    },
+    {
+      "id": "0006",
+      "name": "rnn_cell_step",
+      "part": 1,
+      "points": 5,
+      "signature": "rnn_cell_step(x_t, h_prev, params)",
+      "doc": "Advance the RNN hidden state by one time step."
+    },
+    {
+      "id": "0007",
+      "name": "rnn_forward",
+      "part": 1,
+      "points": 5,
+      "signature": "rnn_forward(X_onehot, h0, params)",
+      "doc": "Unroll the RNN cell over the sequence axis starting from h0."
+    },
+    {
+      "id": "0008",
+      "name": "output_logits",
+      "part": 1,
+      "points": 5,
+      "signature": "output_logits(H_seq, params)",
+      "doc": "Project hidden states to vocabulary logits."
+    },
+    {
+      "id": "0009",
+      "name": "rnn_logits",
+      "part": 1,
+      "points": 5,
+      "signature": "rnn_logits(params, X_onehot)",
+      "doc": "Run the RNN from a zero initial state and produce logits."
+    },
+    {
+      "id": "0010",
+      "name": "init_lstm_params",
+      "part": 2,
+      "points": 5,
+      "signature": "init_lstm_params(vocab_size, hidden, seed=0)",
+      "doc": "Initialize LSTM weight/bias tensors (4H gate block ordered [i,f,o,g]) as small random requires_grad params."
+    },
+    {
+      "id": "0011",
+      "name": "lstm_gates",
+      "part": 2,
+      "points": 5,
+      "signature": "lstm_gates(x_t, h_prev, params)",
+      "doc": "Compute the LSTM input, forget, output, and candidate gates for one time step."
+    },
+    {
+      "id": "0012",
+      "name": "lstm_cell_step",
+      "part": 2,
+      "points": 5,
+      "signature": "lstm_cell_step(x_t, h_prev, c_prev, params)",
+      "doc": "Advance the LSTM cell and hidden state by one time step using the gated update."
+    },
+    {
+      "id": "0013",
+      "name": "lstm_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "lstm_forward(X_onehot, h0, c0, params)",
+      "doc": "Unroll the LSTM cell over the sequence axis, returning all hidden states and the final h and c."
+    },
+    {
+      "id": "0014",
+      "name": "lstm_logits",
+      "part": 2,
+      "points": 5,
+      "signature": "lstm_logits(params, X_onehot)",
+      "doc": "Run the LSTM from zero initial states and project the hidden sequence to vocabulary logits."
+    },
+    {
+      "id": "0015",
+      "name": "sequence_cross_entropy",
+      "part": 3,
+      "points": 5,
+      "signature": "sequence_cross_entropy(logits, targets)",
+      "doc": "Mean cross-entropy of (B,S,V) logits against (B,S) integer targets."
+    },
+    {
+      "id": "0016",
+      "name": "compute_sequence_loss",
+      "part": 3,
+      "points": 5,
+      "signature": "compute_sequence_loss(params, X_onehot, targets, forward_fn)",
+      "doc": "Run forward_fn to get logits, then return their sequence cross-entropy."
+    },
+    {
+      "id": "0017",
+      "name": "train_step",
+      "part": 3,
+      "points": 5,
+      "signature": "train_step(params, X_onehot, targets, lr, forward_fn)",
+      "doc": "One SGD step: zero grads, backprop the sequence loss, update params in place, return the float loss."
+    },
+    {
+      "id": "0018",
+      "name": "train_model",
+      "part": 3,
+      "points": 5,
+      "signature": "train_model(params, X_onehot, targets, lr, n_steps, forward_fn)",
+      "doc": "Run n_steps of train_step and return the list of per-step losses."
+    },
+    {
+      "id": "0019",
+      "name": "sample_next_char",
+      "part": 4,
+      "points": 5,
+      "signature": "sample_next_char(logits, temperature=1.0, generator=None)",
+      "doc": "Sample one character id from the temperature-scaled softmax of a (V,) logit vector."
+    },
+    {
+      "id": "0020",
+      "name": "generate_text",
+      "part": 4,
+      "points": 5,
+      "signature": "generate_text(params, stoi, itos, prompt, length, forward_fn, temperature=1.0, generator=None)",
+      "doc": "Autoregressively generate `length` new chars after `prompt` by sampling the model's last-step logits."
+    },
+    {
+      "id": "0021",
+      "name": "sequence_perplexity",
+      "part": 4,
+      "points": 5,
+      "signature": "sequence_perplexity(params, X_onehot, targets, forward_fn)",
+      "doc": "Return the perplexity (exp of mean cross-entropy) of the model on the given data."
+    }
+  ]
+}
