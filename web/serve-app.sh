@@ -19,6 +19,25 @@ command -v ttyd >/dev/null || { echo "ttyd not found: sudo apt-get install -y tt
 
 rm -f "$SOCK"
 
+# Free the ports from any previous run BEFORE relaunching, so a stale or
+# half-dead ttyd/API doesn't make startup fail (address already in use) or make
+# the new instance silently bind a different port. TERM first, then KILL.
+free_port() {
+  local port="$1" pids
+  pids=$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u || true)
+  if [ -z "$pids" ]; then return 0; fi
+  echo "  freeing :$port (killing $(echo $pids | tr '\n' ' '))"
+  kill $pids 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    if ! ss -ltnH "sport = :$port" 2>/dev/null | grep -q .; then return 0; fi
+    sleep 0.1
+  done
+  pids=$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u || true)
+  if [ -n "$pids" ]; then kill -9 $pids 2>/dev/null || true; fi
+}
+free_port "$TTYD_PORT"
+free_port "$APIPORT"
+
 # 1) ttyd + nvim (with the remote socket). Loopback only.
 NVIM_LISTEN="$SOCK" PORT="$TTYD_PORT" BIND=lo "$REPO/web/serve-nvim.sh" >/tmp/mle_ttyd.log 2>&1 &
 TTYD_PID=$!
