@@ -295,8 +295,15 @@ def teardown():
     except Exception:
         pass
     try:
+        with open("/tmp/mle_nvim_server.pid") as f:
+            os.kill(int(f.read().strip()), signal.SIGTERM)
+    except Exception:
+        pass
+    try:
         if os.path.exists(NVIM_SOCK):
             os.remove(NVIM_SOCK)
+        if os.path.exists("/tmp/mle_nvim_server.pid"):
+            os.remove("/tmp/mle_nvim_server.pid")
     except Exception:
         pass
     threading.Timer(0.4, lambda: os._exit(0)).start()

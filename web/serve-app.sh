@@ -50,7 +50,11 @@ NVIM_SOCK="$SOCK" TTYD_PORT="$TTYD_PORT" APIPORT="$APIPORT" TTYD_PID="$TTYD_PID"
   "$PYTHON" "$REPO/web/app.py" &
 API_PID=$!
 
-cleanup() { kill "$TTYD_PID" "$API_PID" 2>/dev/null || true; rm -f "$SOCK"; }
+cleanup() {
+  kill "$TTYD_PID" "$API_PID" 2>/dev/null || true
+  [ -f /tmp/mle_nvim_server.pid ] && kill "$(cat /tmp/mle_nvim_server.pid)" 2>/dev/null || true
+  rm -f "$SOCK" /tmp/mle_nvim_server.pid
+}
 trap cleanup EXIT INT TERM
 
 echo

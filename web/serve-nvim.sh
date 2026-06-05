@@ -37,18 +37,44 @@ fi
 # `python`/`uv` resolve to the project's), then exec your real nvim.
 # NVIM_LISTEN (optional): start nvim with a --listen socket so the web app can
 # drive it remotely (open buffers, save) — see web/serve-app.sh.
-inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\""
-nvim_cmd="exec nvim"
-if [ -n "${NVIM_LISTEN:-}" ]; then
-  # ttyd spawns a fresh nvim per browser connection; clear any stale socket from
-  # a previous (now-dead) connection first so --listen always binds cleanly.
-  inner="$inner && rm -f '$NVIM_LISTEN'"
-  nvim_cmd="$nvim_cmd --listen '$NVIM_LISTEN'"
+SOCK="${NVIM_LISTEN:-}"
+PERSIST="${NVIM_PERSISTENT:-1}"          # 1 = ONE persistent server + a UI client per connection (default); 0 = legacy fresh-nvim-per-connection
+SRV_PIDFILE="/tmp/mle_nvim_server.pid"
+SRV_LOG="/tmp/mle_nvim_server.log"
+
+# Ensure exactly ONE persistent headless nvim is listening on $SOCK, (re)starting
+# it if needed. Idempotent; safe under ttyd -m 1. This is the fix for the old race
+# where every browser (re)connection spawned a new nvim that rm-ed and rebound the
+# shared socket, orphaning the others and leaving a stale, unresponsive socket.
+ensure_server() {
+  nvim --server "$SOCK" --remote-expr 1 >/dev/null 2>&1 && return 0
+  rm -f "$SOCK"
+  if [ -n "$START_FILE" ]; then
+    setsid nvim --headless --listen "$SOCK" "$START_FILE" >"$SRV_LOG" 2>&1 &
+  else
+    setsid nvim --headless --listen "$SOCK" >"$SRV_LOG" 2>&1 &
+  fi
+  echo $! > "$SRV_PIDFILE"
+  for _ in $(seq 1 100); do nvim --server "$SOCK" --remote-expr 1 >/dev/null 2>&1 && return 0; sleep 0.1; done
+  return 1
+}
+
+if [ -n "$SOCK" ] && [ "$PERSIST" = "1" ]; then
+  ensure_server || echo "warning: nvim server slow to start; reconnect if the editor looks blank" >&2
+  ESC_START=""; [ -n "$START_FILE" ] && ESC_START=" '$START_FILE'"
+  # Per ttyd connection: attach a UI to the persistent server, reviving it first if
+  # it ever exited (e.g. the user ran :qa). Buffers survive reconnects; no race.
+  inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\"
+if ! nvim --server '$SOCK' --remote-expr 1 >/dev/null 2>&1; then rm -f '$SOCK'; setsid nvim --headless --listen '$SOCK'$ESC_START >'$SRV_LOG' 2>&1 & echo \$! > '$SRV_PIDFILE'; for _ in \$(seq 1 100); do nvim --server '$SOCK' --remote-expr 1 >/dev/null 2>&1 && break; sleep 0.1; done; fi
+exec nvim --server '$SOCK' --remote-ui"
+else
+  # legacy: a fresh nvim per connection (set NVIM_PERSISTENT=0 to force this)
+  inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\""
+  nvim_cmd="exec nvim"
+  if [ -n "$SOCK" ]; then inner="$inner && rm -f '$SOCK'"; nvim_cmd="$nvim_cmd --listen '$SOCK'"; fi
+  [ -n "$START_FILE" ] && nvim_cmd="$nvim_cmd '$START_FILE'"
+  inner="$inner && $nvim_cmd"
 fi
-if [ -n "$START_FILE" ]; then
-  nvim_cmd="$nvim_cmd '$START_FILE'"
-fi
-inner="$inner && $nvim_cmd"
 
 creds=()
 [ -n "$AUTH" ] && creds=(-c "$AUTH")
