@@ -1,5 +1,6 @@
 {
   "name": "bpe-tokenizer-from-scratch",
+  "primer": "\nConvention used throughout this tokenizer:\n\n  The end-of-word marker is the literal string \"</w>\". Append it as the FINAL symbol of\n  every word (so a word-final piece is distinguishable from a word-internal one), and strip\n  it again when decoding back to text. Symbol sequences are tuples of strings, e.g.\n  (\"l\", \"o\", \"w\", \"</w>\").\nEvery other function in this project is also available in your namespace at grade\ntime \u2014 call earlier steps by name; you do not import them. Run\n`uv run python projects.py bpe-tokenizer-from-scratch` (or the outline drawer) to see all signatures.",
   "title": "Build a BPE Tokenizer from Scratch",
   "parts": [
     {
@@ -70,7 +71,7 @@
       "part": 1,
       "points": 5,
       "signature": "best_pair(pair_counts)",
-      "doc": "Return the highest-count pair, breaking ties by lexicographically smallest pair."
+      "doc": "Return the highest-count pair, breaking ties by lexicographically smallest pair.\n\nReturn None if pair_counts is empty or None (treat a falsy argument as having no pairs)."
     },
     {
       "id": "0007",
@@ -78,7 +79,7 @@
       "part": 1,
       "points": 5,
       "signature": "merge_word(symbols, pair)",
-      "doc": "Replace each adjacent occurrence of pair=(a,b) in the tuple with the merged symbol a+b."
+      "doc": "Replace each adjacent occurrence of pair=(a,b) in the tuple with the merged symbol a+b.\n\nScan left to right, consuming matches non-overlapping: when symbols[i]==a and symbols[i+1]==b emit the merged symbol a+b and advance by 2, else emit symbols[i] and advance by 1. So ('a','a','a') -> ('aa','a'). Return a tuple."
     },
     {
       "id": "0008",
@@ -86,7 +87,7 @@
       "part": 1,
       "points": 5,
       "signature": "apply_merge(word_freqs, pair)",
-      "doc": "Return a new word_freqs with pair merged in every key, preserving frequencies."
+      "doc": "Return a new word_freqs with pair merged in every key, preserving frequencies.\n\nIf two different keys collapse to the same merged tuple, sum their frequencies into one entry. Build and return a NEW dict; do not mutate the input."
     },
     {
       "id": "0009",
@@ -110,7 +111,7 @@
       "part": 3,
       "points": 5,
       "signature": "bpe_encode_word(word, merge_ranks)",
-      "doc": "Greedily merge the word's symbols by repeatedly applying the lowest-rank adjacent merge until none remain."
+      "doc": "Greedily merge the word's symbols by repeatedly applying the lowest-rank adjacent merge until none remain.\n\nReturn a LIST (not a tuple) of token strings; with empty merge_ranks this is just the word's characters plus the '</w>' marker. When several adjacent pairs are mergeable, apply the one with the lowest rank (earliest learned) first, repeating until no adjacent pair appears in merge_ranks."
     },
     {
       "id": "0012",

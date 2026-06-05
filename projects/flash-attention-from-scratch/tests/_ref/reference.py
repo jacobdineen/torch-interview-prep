@@ -47,7 +47,10 @@ def update_normalizer(l_prev, m_prev, m_new, p_block):
 
 
 def online_softmax_step(m_prev, l_prev, O_prev, S_block, V_block):
-    """One fused flash step folding a key/value block into the running (max, denominator, unnormalized output)."""
+    """One fused flash step folding a key/value block into the running (max, denominator, unnormalized output).
+
+    Return (m_new, l_new, O_new) in that order, where m_new=update_running_max(m_prev, stable_rowmax(S_block)), p=block_exp_scores(S_block, m_new), l_new=update_normalizer(l_prev, m_prev, m_new, p), and O_new = correction(m_prev, m_new)[:,None]*O_prev + p @ V_block. The old output accumulator O_prev is rescaled by the SAME correction factor as l before adding the new block.
+    """
     m_block = stable_rowmax(S_block)
     m_new = update_running_max(m_prev, m_block)
     p = block_exp_scores(S_block, m_new)
@@ -104,7 +107,10 @@ def masked_attention_reference(Q, K, V, scale):
 
 
 def flash_attention_causal(Q, K, V, scale, block_size):
-    """Compute causal self-attention by tiling over key blocks, masking future keys per block before each online-softmax step."""
+    """Compute causal self-attention by tiling over key blocks, masking future keys per block before each online-softmax step.
+
+    Return O ONLY — the finalized (N, d) output. Unlike flash_attention_forward, do NOT also return L. Tile over key blocks (q_start=0, k_start=ks) and mask each S_block with causal_block_mask before online_softmax_step.
+    """
     N = Q.shape[0]
     M = K.shape[0]
     d = Q.shape[1]
@@ -123,7 +129,10 @@ def attention_backward_D(dO, O):
 
 
 def flash_attention_backward(Q, K, V, O, dO, L, scale):
-    """Gradients dQ, dK, dV, recomputing the softmax from the saved log-sum-exp instead of storing it."""
+    """Gradients dQ, dK, dV, recomputing the softmax from the saved log-sum-exp instead of storing it.
+
+    Return (dQ, dK, dV). Recompute S=attention_scores(Q,K,scale); P=exp(S - L[:,None]) (P is the normalized softmax, since L is the full log-sum-exp); D=attention_backward_D(dO,O); then dV=P.T@dO, dP=dO@V.T, dS=P*(dP - D[:,None]), dQ=scale*(dS@K), dK=scale*(dS.T@Q). Shapes: dQ (N,d), dK (M,d), dV (M,d).
+    """
     S = attention_scores(Q, K, scale)
     P = np.exp(S - L[:, None])
     D = attention_backward_D(dO, O)

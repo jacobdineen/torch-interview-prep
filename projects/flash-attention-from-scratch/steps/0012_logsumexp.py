@@ -3,7 +3,14 @@ Step 0012: logsumexp
 
 Part 3 — Flash Forward (Tiled)
 Per-row log-sum-exp recovered from the running max and denominator.
-"""
+
+Conventions: single-head, no batch. Q (N,d), K (M,d), V (M,d), output O (N,d); scores S (N,M);
+per-row stats m, l, L, D are shape (N,). `scale` is the scalar the caller passes (1/sqrt(d)).
+The flash forward tiles over key/value blocks and keeps an UNNORMALIZED running output that is
+divided by the running denominator l only at the end.
+Every other function in this project is also available in your namespace at grade
+time — call earlier steps by name; you do not import them. Run
+`uv run python projects.py flash-attention-from-scratch` (or the outline drawer) to see all signatures."""
 import numpy as np  # noqa: F401
 
 

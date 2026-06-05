@@ -3,7 +3,16 @@ Step 0009: train_bpe
 
 Part 3 — Training the Merges
 Return the ordered list of merge pairs learned by greedy BPE over the corpus.
-"""
+
+Convention used throughout this tokenizer:
+
+  The end-of-word marker is the literal string "</w>". Append it as the FINAL symbol of
+  every word (so a word-final piece is distinguishable from a word-internal one), and strip
+  it again when decoding back to text. Symbol sequences are tuples of strings, e.g.
+  ("l", "o", "w", "</w>").
+Every other function in this project is also available in your namespace at grade
+time — call earlier steps by name; you do not import them. Run
+`uv run python projects.py bpe-tokenizer-from-scratch` (or the outline drawer) to see all signatures."""
 import numpy as np  # noqa: F401
 
 

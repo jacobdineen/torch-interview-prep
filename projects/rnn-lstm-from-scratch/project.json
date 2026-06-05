@@ -1,5 +1,6 @@
 {
   "name": "rnn-lstm-from-scratch",
+  "primer": "\nConventions: inputs X are one-hot, shape (B, S, V); targets Y are (B, S) longs; hidden size H.\nParameters are a dict of tensors with requires_grad=True; a linear is x @ W + b with W (in, out).\nTraining uses torch autograd (loss.backward() then a manual SGD update under torch.no_grad()).\nThe RNN and LSTM share one train/sample path \u2014 you pass rnn_logits or lstm_logits as forward_fn.\nEvery other function in this project is also available in your namespace at grade\ntime \u2014 call earlier steps by name; you do not import them. Run\n`uv run python projects.py rnn-lstm-from-scratch` (or the outline drawer) to see all signatures.",
   "title": "Build an RNN and LSTM from Scratch",
   "parts": [
     {
@@ -54,7 +55,7 @@
       "part": 0,
       "points": 5,
       "signature": "one_hot(ids, vocab_size)",
-      "doc": "One-hot encode an integer id tensor along a new last axis of size vocab_size."
+      "doc": "One-hot encode an integer id tensor along a new last axis of size vocab_size.\n\nReturn a float32 tensor (NOT long); the hot index along the new last axis is 1.0."
     },
     {
       "id": "0005",
@@ -62,7 +63,7 @@
       "part": 1,
       "points": 5,
       "signature": "init_rnn_params(vocab_size, hidden, seed=0)",
-      "doc": "Create the trainable parameter dict for a vanilla RNN."
+      "doc": "Create the trainable parameter dict for a vanilla RNN.\n\nReturn a dict with keys \"Wxh\" (vocab_size,hidden), \"Whh\" (hidden,hidden), \"bh\" (hidden,), \"Why\" (hidden,vocab_size), \"by\" (vocab_size,); weights small random (~0.1*randn) seeded by seed, biases zero, all float32 with requires_grad=True."
     },
     {
       "id": "0006",
@@ -70,7 +71,7 @@
       "part": 1,
       "points": 5,
       "signature": "rnn_cell_step(x_t, h_prev, params)",
-      "doc": "Advance the RNN hidden state by one time step."
+      "doc": "Advance the RNN hidden state by one time step.\n\nReturn h_t = tanh(x_t @ params[\"Wxh\"] + h_prev @ params[\"Whh\"] + params[\"bh\"]); shape (B, hidden)."
     },
     {
       "id": "0007",
@@ -78,7 +79,7 @@
       "part": 1,
       "points": 5,
       "signature": "rnn_forward(X_onehot, h0, params)",
-      "doc": "Unroll the RNN cell over the sequence axis starting from h0."
+      "doc": "Unroll the RNN cell over the sequence axis starting from h0.\n\nIf h0 is None use a zeros(B,hidden) initial state. Apply rnn_cell_step at each t; return (H_seq, h_last) where H_seq stacks all hidden states along dim=1 with shape (B,S,hidden) and h_last is the final (B,hidden) state."
     },
     {
       "id": "0008",
@@ -86,7 +87,7 @@
       "part": 1,
       "points": 5,
       "signature": "output_logits(H_seq, params)",
-      "doc": "Project hidden states to vocabulary logits."
+      "doc": "Project hidden states to vocabulary logits.\n\nReturn H_seq @ params[\"Why\"] + params[\"by\"], shape (B,S,vocab_size)."
     },
     {
       "id": "0009",
@@ -102,7 +103,7 @@
       "part": 2,
       "points": 5,
       "signature": "init_lstm_params(vocab_size, hidden, seed=0)",
-      "doc": "Initialize LSTM weight/bias tensors (4H gate block ordered [i,f,o,g]) as small random requires_grad params."
+      "doc": "Initialize LSTM weight/bias tensors (4H gate block ordered [i,f,o,g]) as small random requires_grad params.\n\nReturn a dict with keys \"Wx\" (vocab_size,4*hidden), \"Wh\" (hidden,4*hidden), \"b\" (4*hidden,), \"Why\" (hidden,vocab_size), \"by\" (vocab_size,); the 4*hidden axis is the concatenated [i,f,o,g] gate block; weights small random (~0.01*randn) seeded by seed, biases zero, all float32 with requires_grad=True."
     },
     {
       "id": "0011",
@@ -110,7 +111,7 @@
       "part": 2,
       "points": 5,
       "signature": "lstm_gates(x_t, h_prev, params)",
-      "doc": "Compute the LSTM input, forget, output, and candidate gates for one time step."
+      "doc": "Compute the LSTM input, forget, output, and candidate gates for one time step.\n\nCompute z = x_t @ params[\"Wx\"] + h_prev @ params[\"Wh\"] + params[\"b\"], split z into four (B,hidden) blocks in order [i,f,o,g], and return (sigmoid(i), sigmoid(f), sigmoid(o), tanh(g))."
     },
     {
       "id": "0012",
@@ -118,7 +119,7 @@
       "part": 2,
       "points": 5,
       "signature": "lstm_cell_step(x_t, h_prev, c_prev, params)",
-      "doc": "Advance the LSTM cell and hidden state by one time step using the gated update."
+      "doc": "Advance the LSTM cell and hidden state by one time step using the gated update.\n\nUsing gates (i,f,o,g) from lstm_gates, compute c_t = f*c_prev + i*g and h_t = o*tanh(c_t); return (h_t, c_t), each (B,hidden)."
     },
     {
       "id": "0013",
@@ -126,7 +127,7 @@
       "part": 2,
       "points": 5,
       "signature": "lstm_forward(X_onehot, h0, c0, params)",
-      "doc": "Unroll the LSTM cell over the sequence axis, returning all hidden states and the final h and c."
+      "doc": "Unroll the LSTM cell over the sequence axis, returning all hidden states and the final h and c.\n\nIf h0 or c0 is None use a zeros(B,hidden) initial state for it. Return (H_seq, h_last, c_last) where H_seq stacks all hidden states along dim=1 with shape (B,S,hidden) and h_last,c_last are the final (B,hidden) states."
     },
     {
       "id": "0014",

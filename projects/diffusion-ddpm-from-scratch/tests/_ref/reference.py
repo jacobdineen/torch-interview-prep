@@ -6,7 +6,10 @@ import torch
 import torch.nn.functional as F  # noqa: F401
 
 def linear_beta_schedule(T, beta_start=1e-4, beta_end=0.02):
-    """Build the variance (beta) schedule as a linear ramp over T diffusion steps."""
+    """Build the variance (beta) schedule as a linear ramp over T diffusion steps.
+
+    Return torch.linspace(beta_start, beta_end, T): a length-T tensor with betas[0]=beta_start and betas[-1]=beta_end, evenly spaced.
+    """
     return torch.linspace(beta_start, beta_end, T)
 
 
@@ -46,7 +49,10 @@ def sample_timesteps_and_noise(x0, T, generator=None):
     return t, noise
 
 def sinusoidal_time_embedding(t, dim):
-    """Map integer timesteps to Transformer-style sinusoidal feature vectors."""
+    """Map integer timesteps to Transformer-style sinusoidal feature vectors.
+
+    Let half=dim//2 and freqs=exp(-(arange(half)/max(half,1))*log(10000)). With args = t[:,None].float()*freqs (shape (B,half)), return a (B,dim) float32 tensor whose even columns (0::2) are sin(args) and odd columns (1::2) are cos(args) (so t=0 gives sin 0, cos 1).
+    """
     device = t.device
     half = dim // 2
     t = t.float().unsqueeze(1)  # (B, 1)
@@ -60,7 +66,10 @@ def sinusoidal_time_embedding(t, dim):
 
 
 def init_denoiser_params(data_dim, time_dim, hidden, seed=0):
-    """Initialize MLP weights/biases mapping data+time features to a data-dim output."""
+    """Initialize MLP weights/biases mapping data+time features to a data-dim output.
+
+    Return a list of (W, b) tuples, one per layer, for sizes [data_dim+time_dim] + list(hidden) + [data_dim]. Each W has shape (in_dim, out_dim) initialized as randn*0.1; each b has shape (out_dim,) initialized to zeros; both float32 with requires_grad=True. Seed with torch.Generator().manual_seed(seed) for determinism.
+    """
     g = torch.Generator().manual_seed(seed)
     sizes = [data_dim + time_dim] + list(hidden) + [data_dim]
     params = []
@@ -128,7 +137,10 @@ def predict_x0_from_noise(x_t, t, noise, alpha_bars):
 
 
 def posterior_mean(x0, x_t, t, betas, alphas, alpha_bars):
-    """Compute the mean of the DDPM posterior q(x_{t-1}|x_t,x0)."""
+    """Compute the mean of the DDPM posterior q(x_{t-1}|x_t,x0).
+
+    Gather beta_t, alpha_t, alpha_bar_t at t and alpha_bar_prev at t-1 (use alpha_bar_prev=1 where t==0). Return coef0*x0 + coeft*x_t, where coef0 = beta_t*sqrt(alpha_bar_prev)/(1-alpha_bar_t) and coeft = (1-alpha_bar_prev)*sqrt(alpha_t)/(1-alpha_bar_t); shape (B,D).
+    """
     beta_t = gather_at_timesteps(betas, t)
     alpha_t = gather_at_timesteps(alphas, t)
     alpha_bar_t = gather_at_timesteps(alpha_bars, t)
@@ -142,7 +154,10 @@ def posterior_mean(x0, x_t, t, betas, alphas, alpha_bars):
 
 
 def ddpm_sample_step(params, x_t, t, betas, alphas, alpha_bars, time_dim, generator=None):
-    """Take one reverse DDPM denoising step from x_t to x_{t-1}."""
+    """Take one reverse DDPM denoising step from x_t to x_{t-1}.
+
+    t is a python int; broadcast it to a (B,) tensor. Predict noise, recover x0_hat via predict_x0_from_noise, then mean=posterior_mean(...). If t==0 return mean. Else return mean + sqrt(posterior_variance)*z with z~randn(generator), posterior_variance = beta_t*(1-alpha_bar_{t-1})/(1-alpha_bar_t).
+    """
     B = x_t.shape[0]
     t_batch = torch.full((B,), int(t), dtype=torch.long, device=x_t.device)
     noise = predict_noise(params, x_t, t_batch, time_dim)
@@ -168,7 +183,10 @@ def ddpm_sample_loop(params, shape, betas, alphas, alpha_bars, time_dim, generat
     return x_t
 
 def ddim_sample_step(params, x_t, t, t_prev, alpha_bars, time_dim):
-    """Take one deterministic (eta=0) DDIM reverse step from timestep t to t_prev."""
+    """Take one deterministic (eta=0) DDIM reverse step from timestep t to t_prev.
+
+    t and t_prev are python ints. Predict eps, get x0_hat via predict_x0_from_noise. Let ab_prev = alpha_bar at t_prev, or 1 when t_prev<0. Return sqrt(ab_prev)*x0_hat + sqrt(1-ab_prev)*eps (shape (B,D)); deterministic, no added noise (eta=0).
+    """
     t_batch = torch.full((x_t.shape[0],), t, dtype=torch.long, device=x_t.device)
     eps = predict_noise(params, x_t, t_batch, time_dim)
     x0_hat = predict_x0_from_noise(x_t, t_batch, eps, alpha_bars)
@@ -181,7 +199,10 @@ def ddim_sample_step(params, x_t, t, t_prev, alpha_bars, time_dim):
 
 
 def ddim_sample_loop(params, shape, alpha_bars, time_dim, n_steps):
-    """Generate samples by iterating deterministic DDIM steps over evenly-spaced timesteps."""
+    """Generate samples by iterating deterministic DDIM steps over evenly-spaced timesteps.
+
+    Build ts = torch.linspace(T-1, 0, n_steps).round().long().tolist(); start x=torch.randn(shape). For each index i with timestep t, set t_prev = ts[i+1] if it exists else -1, and x = ddim_sample_step(params, x, t, t_prev, alpha_bars, time_dim). Return the final x of shape `shape`.
+    """
     T = alpha_bars.shape[0]
     ts = torch.linspace(T - 1, 0, n_steps).round().long().tolist()
     x = torch.randn(shape)

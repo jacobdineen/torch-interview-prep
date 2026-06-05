@@ -121,7 +121,10 @@ def backward(root):
         node._backward()
 
 def init_neuron(nin, seed=0):
-    """Create a neuron as a dict of nin random weights in [-1,1] and a zero bias."""
+    """Create a neuron as a dict of nin random weights in [-1,1] and a zero bias.
+
+    Return {"w": <list of nin weight Values>, "b": <bias Value with data 0.0>}. Build weights with rng = random.Random(seed), then Value(rng.uniform(-1, 1)) for each of the nin weights in draw order, so the seeded sequence matches exactly.
+    """
     import random
     rng = random.Random(seed)
     w = [Value(rng.uniform(-1, 1)) for _ in range(nin)]
@@ -130,7 +133,10 @@ def init_neuron(nin, seed=0):
 
 
 def neuron_forward(neuron, x):
-    """Compute tanh of the weighted sum of inputs x plus the neuron's bias."""
+    """Compute tanh of the weighted sum of inputs x plus the neuron's bias.
+
+    neuron["w"] is the list of weight Values and neuron["b"] is the bias Value; return tanh(neuron["b"] + sum(w_i * x_i)) pairing neuron["w"] with x in order (build the sum with v_mul/v_add and apply v_tanh).
+    """
     act = neuron["b"]
     for wi, xi in zip(neuron["w"], x):
         act = v_add(act, v_mul(wi, xi))
@@ -150,7 +156,10 @@ def mlp_forward(mlp, x):
     return out
 
 def parameters(mlp):
-    """Return a flat list of all weight and bias Values across every neuron in every layer."""
+    """Return a flat list of all weight and bias Values across every neuron in every layer.
+
+    mlp is a list of layers, each a list of neuron dicts ("w": list of weight Values, "b": bias Value). Return the same Value objects (not copies), ordered per layer, then per neuron, emitting all of neuron["w"] in order followed by neuron["b"].
+    """
     params = []
     for layer in mlp:
         for neuron in layer:
@@ -183,7 +192,10 @@ def sgd_step(params, lr):
 
 
 def train(mlp, X, Y, lr, n_steps):
-    """Run n_steps of full-batch SGD on the MLP and return the list of per-step loss floats."""
+    """Run n_steps of full-batch SGD on the MLP and return the list of per-step loss floats.
+
+    X is a list of input vectors (each a list of floats); Y a list of target floats (single-output MLP). Each step: zero_grad(parameters(mlp)); for every input, WRAP its floats as [Value(xi) for xi in x] (mlp_forward operates on Value nodes, not raw floats) and take mlp_forward(mlp, xv)[0] as the scalar prediction; mse_loss over all predictions vs Y; backward; sgd_step. Return the list of per-step loss floats (loss.data), which should decrease.
+    """
     losses = []
     for _ in range(n_steps):
         params = parameters(mlp)

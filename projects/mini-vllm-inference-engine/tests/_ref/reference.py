@@ -181,7 +181,10 @@ def batch_decode_step(model, running, k_pool, v_pool, block_size, scale):
 
 
 def run_batched(model, requests, num_blocks, block_size, scale, max_new):
-    """Continuously batch (admit/prefill/decode) all requests; return {req_id: generated ids}."""
+    """Continuously batch (admit/prefill/decode) all requests; return {req_id: generated ids}.
+
+    requests is a list of (req_id, prompt_ids) tuples. Admit each waiting request in list order whenever can_admit holds (else keep it waiting), allocate len(prompt_ids)+max_new blocks, prefill_request it, then advance all running requests one token per round and free a request's blocks when it finishes. Return {req_id: generated_ids}, one entry per request.
+    """
     d = model['d']
     mgr = new_block_manager(num_blocks, block_size)
     k_pool = np.zeros((num_blocks, block_size, d))
@@ -238,7 +241,10 @@ def greedy_sample(logits):
 
 
 def sample_token(logits, temperature, top_k, top_p, rng):
-    """Sample a token id from logits with temperature, top-k, and nucleus (top-p) filtering."""
+    """Sample a token id from logits with temperature, top-k, and nucleus (top-p) filtering.
+
+    If temperature <= 0, return greedy_sample(logits) (argmax). Otherwise scale logits by 1/temperature then softmax. A top_k of 0 (falsy) disables top-k; otherwise keep only the top_k largest logits (rest -inf). top_p >= 1.0 disables nucleus filtering; otherwise keep the smallest set of highest-probability tokens whose cumulative prob reaches top_p (at least the top token), renormalize, and draw with rng.choice(len(logits), p=probs). Return a python int.
+    """
     if temperature <= 0:
         return greedy_sample(logits)
     z = np.asarray(logits, dtype=np.float64) / temperature

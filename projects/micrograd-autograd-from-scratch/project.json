@@ -1,5 +1,6 @@
 {
   "name": "micrograd-autograd-from-scratch",
+  "primer": "\nProvided for you (already defined in your namespace at grade time \u2014 use it, do NOT redefine):\n\n  class Value: a scalar node in the autograd graph. Construct with\n      Value(data, _children=(), _op=\"\").\n    Attributes:\n      .data       float \u2014 the scalar value\n      .grad       float \u2014 the accumulated dL/d(self); starts at 0.0\n      ._prev      set of the parent Value nodes this one was built from\n      ._op        short str label (e.g. \"+\", \"*\", \"tanh\"); for debugging\n      ._backward  a zero-arg closure. Each op you write sets it to ADD (+=) this\n                  node's local gradient into each input's .grad, scaled by out.grad.\n\nPattern for an op: out = Value(result, (inputs...), \"op\"); define a local _backward()\nthat pushes gradient to the inputs; set out._backward = _backward; return out.\nbackward(root) seeds root.grad = 1.0 and runs every _backward in reverse topological order.\nEvery other function in this project is also available in your namespace at grade\ntime \u2014 call earlier steps by name; you do not import them. Run\n`uv run python projects.py micrograd-autograd-from-scratch` (or the outline drawer) to see all signatures.",
   "title": "Build Your Own Autograd Engine (micrograd)",
   "parts": [
     {
@@ -102,7 +103,7 @@
       "part": 3,
       "points": 5,
       "signature": "init_neuron(nin, seed=0)",
-      "doc": "Create a neuron as a dict of nin random weights in [-1,1] and a zero bias."
+      "doc": "Create a neuron as a dict of nin random weights in [-1,1] and a zero bias.\n\nReturn {\"w\": <list of nin weight Values>, \"b\": <bias Value with data 0.0>}. Build weights with rng = random.Random(seed), then Value(rng.uniform(-1, 1)) for each of the nin weights in draw order, so the seeded sequence matches exactly."
     },
     {
       "id": "0011",
@@ -110,7 +111,7 @@
       "part": 3,
       "points": 5,
       "signature": "neuron_forward(neuron, x)",
-      "doc": "Compute tanh of the weighted sum of inputs x plus the neuron's bias."
+      "doc": "Compute tanh of the weighted sum of inputs x plus the neuron's bias.\n\nneuron[\"w\"] is the list of weight Values and neuron[\"b\"] is the bias Value; return tanh(neuron[\"b\"] + sum(w_i * x_i)) pairing neuron[\"w\"] with x in order (build the sum with v_mul/v_add and apply v_tanh)."
     },
     {
       "id": "0012",
@@ -134,7 +135,7 @@
       "part": 4,
       "points": 5,
       "signature": "parameters(mlp)",
-      "doc": "Return a flat list of all weight and bias Values across every neuron in every layer."
+      "doc": "Return a flat list of all weight and bias Values across every neuron in every layer.\n\nmlp is a list of layers, each a list of neuron dicts (\"w\": list of weight Values, \"b\": bias Value). Return the same Value objects (not copies), ordered per layer, then per neuron, emitting all of neuron[\"w\"] in order followed by neuron[\"b\"]."
     },
     {
       "id": "0015",
@@ -166,7 +167,7 @@
       "part": 4,
       "points": 5,
       "signature": "train(mlp, X, Y, lr, n_steps)",
-      "doc": "Run n_steps of full-batch SGD on the MLP and return the list of per-step loss floats."
+      "doc": "Run n_steps of full-batch SGD on the MLP and return the list of per-step loss floats.\n\nX is a list of input vectors (each a list of floats); Y a list of target floats (single-output MLP). Each step: zero_grad(parameters(mlp)); for every input, WRAP its floats as [Value(xi) for xi in x] (mlp_forward operates on Value nodes, not raw floats) and take mlp_forward(mlp, xv)[0] as the scalar prediction; mse_loss over all predictions vs Y; backward; sgd_step. Return the list of per-step loss floats (loss.data), which should decrease."
     }
   ]
 }

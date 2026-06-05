@@ -3,7 +3,16 @@ Step 0006: rnn_cell_step
 
 Part 2 — Vanilla RNN
 Advance the RNN hidden state by one time step.
-"""
+
+Return h_t = tanh(x_t @ params["Wxh"] + h_prev @ params["Whh"] + params["bh"]); shape (B, hidden).
+
+Conventions: inputs X are one-hot, shape (B, S, V); targets Y are (B, S) longs; hidden size H.
+Parameters are a dict of tensors with requires_grad=True; a linear is x @ W + b with W (in, out).
+Training uses torch autograd (loss.backward() then a manual SGD update under torch.no_grad()).
+The RNN and LSTM share one train/sample path — you pass rnn_logits or lstm_logits as forward_fn.
+Every other function in this project is also available in your namespace at grade
+time — call earlier steps by name; you do not import them. Run
+`uv run python projects.py rnn-lstm-from-scratch` (or the outline drawer) to see all signatures."""
 import torch  # noqa: F401
 
 

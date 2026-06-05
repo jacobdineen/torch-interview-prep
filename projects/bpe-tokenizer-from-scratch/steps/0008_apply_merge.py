@@ -3,7 +3,18 @@ Step 0008: apply_merge
 
 Part 2 — Pair Statistics & Merging
 Return a new word_freqs with pair merged in every key, preserving frequencies.
-"""
+
+If two different keys collapse to the same merged tuple, sum their frequencies into one entry. Build and return a NEW dict; do not mutate the input.
+
+Convention used throughout this tokenizer:
+
+  The end-of-word marker is the literal string "</w>". Append it as the FINAL symbol of
+  every word (so a word-final piece is distinguishable from a word-internal one), and strip
+  it again when decoding back to text. Symbol sequences are tuples of strings, e.g.
+  ("l", "o", "w", "</w>").
+Every other function in this project is also available in your namespace at grade
+time — call earlier steps by name; you do not import them. Run
+`uv run python projects.py bpe-tokenizer-from-scratch` (or the outline drawer) to see all signatures."""
 import numpy as np  # noqa: F401
 
 

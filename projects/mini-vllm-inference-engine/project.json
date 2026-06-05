@@ -1,5 +1,6 @@
 {
   "name": "mini-vllm-inference-engine",
+  "primer": "\nProvided for you (already defined in your namespace at grade time \u2014 use, do NOT redefine):\n\n  make_model(vocab=16, d=8, seed=0) -> model: a tiny single-head attention LM, a dict:\n      model[\"vocab\"], model[\"d\"]              the sizes\n      model[\"E\"]    (vocab, d)                token embeddings\n      model[\"Wq\"], model[\"Wk\"], model[\"Wv\"]   (d, d)  query / key / value projections\n      model[\"Wout\"] (d, vocab)                maps an attention output to next-token logits\n\nData structures shared across steps:\n  block manager:     {\"free\": [block ids], \"block_size\": int, \"num_blocks\": int}\n  running request:   {\"id\", \"block_table\", \"num_tokens\", \"cur_logits\", \"generated\", \"steps_left\"}\n  radix (prefix) node: {\"children\": {token_id: node}}\nThe KV pools k_pool, v_pool are arrays of shape (num_blocks, block_size, d).\nEvery other function in this project is also available in your namespace at grade\ntime \u2014 call earlier steps by name; you do not import them. Run\n`uv run python projects.py mini-vllm-inference-engine` (or the outline drawer) to see all signatures.",
   "title": "Build a Mini vLLM Inference Engine",
   "parts": [
     {
@@ -150,7 +151,7 @@
       "part": 3,
       "points": 5,
       "signature": "run_batched(model, requests, num_blocks, block_size, scale, max_new)",
-      "doc": "Continuously batch (admit/prefill/decode) all requests; return {req_id: generated ids}."
+      "doc": "Continuously batch (admit/prefill/decode) all requests; return {req_id: generated ids}.\n\nrequests is a list of (req_id, prompt_ids) tuples. Admit each waiting request in list order whenever can_admit holds (else keep it waiting), allocate len(prompt_ids)+max_new blocks, prefill_request it, then advance all running requests one token per round and free a request's blocks when it finishes. Return {req_id: generated_ids}, one entry per request."
     },
     {
       "id": "0017",
@@ -182,7 +183,7 @@
       "part": 4,
       "points": 5,
       "signature": "sample_token(logits, temperature, top_k, top_p, rng)",
-      "doc": "Sample a token id from logits with temperature, top-k, and nucleus (top-p) filtering."
+      "doc": "Sample a token id from logits with temperature, top-k, and nucleus (top-p) filtering.\n\nIf temperature <= 0, return greedy_sample(logits) (argmax). Otherwise scale logits by 1/temperature then softmax. A top_k of 0 (falsy) disables top-k; otherwise keep only the top_k largest logits (rest -inf). top_p >= 1.0 disables nucleus filtering; otherwise keep the smallest set of highest-probability tokens whose cumulative prob reaches top_p (at least the top token), renormalize, and draw with rng.choice(len(logits), p=probs). Return a python int."
     }
   ]
 }

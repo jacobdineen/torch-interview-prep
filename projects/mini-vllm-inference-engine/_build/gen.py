@@ -38,7 +38,7 @@ Step {id}: {name}
 
 Part {pnum} — {ptitle}
 {doc}
-"""
+{primer}"""
 import numpy as np  # noqa: F401
 
 
@@ -64,7 +64,7 @@ Step {id}: {name}
 
 Part {pnum} — {ptitle}
 {doc}
-"""
+{primer}"""
 import numpy as np  # noqa: F401
 
 
@@ -126,6 +126,7 @@ def main():
     os.makedirs(COMPILED, exist_ok=True)
 
     manifest_steps = []
+    primer = getattr(spec, "PRIMER", "")
     written, skipped = 0, 0
     for i, (name, part) in enumerate(spec.STEPS, start=1):
         sid = spec.step_id(i)
@@ -146,14 +147,15 @@ def main():
         with open(path, "w") as f:
             if inspect.isclass(fn):
                 f.write(CLASS_STUB_TEMPLATE.format(id=sid, name=name, doc=doc,
-                        pnum=part + 1, ptitle=ptitle, methods=_class_methods_src(fn)))
+                        pnum=part + 1, ptitle=ptitle, primer=primer, methods=_class_methods_src(fn)))
             else:
                 f.write(STUB_TEMPLATE.format(id=sid, name=name, sig=sig, doc=doc,
-                                             pnum=part + 1, ptitle=ptitle))
+                                             pnum=part + 1, ptitle=ptitle, primer=primer))
         written += 1
 
     manifest = {
         "name": os.path.basename(PROJECT),
+        "primer": primer,
         "title": getattr(spec, "TITLE", os.path.basename(PROJECT)),
         "parts": [{"title": t, "description": d} for t, d in spec.PARTS],
         "steps": manifest_steps,

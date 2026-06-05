@@ -44,14 +44,20 @@ def count_pairs(word_freqs):
 
 
 def best_pair(pair_counts):
-    """Return the highest-count pair, breaking ties by lexicographically smallest pair."""
+    """Return the highest-count pair, breaking ties by lexicographically smallest pair.
+
+    Return None if pair_counts is empty or None (treat a falsy argument as having no pairs).
+    """
     if not pair_counts:
         return None
     return min(pair_counts, key=lambda p: (-pair_counts[p], p))
 
 
 def merge_word(symbols, pair):
-    """Replace each adjacent occurrence of pair=(a,b) in the tuple with the merged symbol a+b."""
+    """Replace each adjacent occurrence of pair=(a,b) in the tuple with the merged symbol a+b.
+
+    Scan left to right, consuming matches non-overlapping: when symbols[i]==a and symbols[i+1]==b emit the merged symbol a+b and advance by 2, else emit symbols[i] and advance by 1. So ('a','a','a') -> ('aa','a'). Return a tuple.
+    """
     a, b = pair
     merged = a + b
     out = []
@@ -68,7 +74,10 @@ def merge_word(symbols, pair):
 
 
 def apply_merge(word_freqs, pair):
-    """Return a new word_freqs with pair merged in every key, preserving frequencies."""
+    """Return a new word_freqs with pair merged in every key, preserving frequencies.
+
+    If two different keys collapse to the same merged tuple, sum their frequencies into one entry. Build and return a NEW dict; do not mutate the input.
+    """
     new_freqs = {}
     for symbols, freq in word_freqs.items():
         new_key = merge_word(symbols, pair)
@@ -94,7 +103,10 @@ def build_merge_ranks(merges):
     return {pair: i for i, pair in enumerate(merges)}
 
 def bpe_encode_word(word, merge_ranks):
-    """Greedily merge the word's symbols by repeatedly applying the lowest-rank adjacent merge until none remain."""
+    """Greedily merge the word's symbols by repeatedly applying the lowest-rank adjacent merge until none remain.
+
+    Return a LIST (not a tuple) of token strings; with empty merge_ranks this is just the word's characters plus the '</w>' marker. When several adjacent pairs are mergeable, apply the one with the lowest rank (earliest learned) first, repeating until no adjacent pair appears in merge_ranks.
+    """
     symbols = list(word_to_symbols(word))
     while len(symbols) >= 2:
         best_rank = None

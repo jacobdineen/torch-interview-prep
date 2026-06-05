@@ -3,7 +3,23 @@ Step 0014: prefill_request
 
 Part 4 — Continuous Batching
 Process all prompt tokens into the paged pool and return the running-request dict.
-"""
+
+Provided for you (already defined in your namespace at grade time — use, do NOT redefine):
+
+  make_model(vocab=16, d=8, seed=0) -> model: a tiny single-head attention LM, a dict:
+      model["vocab"], model["d"]              the sizes
+      model["E"]    (vocab, d)                token embeddings
+      model["Wq"], model["Wk"], model["Wv"]   (d, d)  query / key / value projections
+      model["Wout"] (d, vocab)                maps an attention output to next-token logits
+
+Data structures shared across steps:
+  block manager:     {"free": [block ids], "block_size": int, "num_blocks": int}
+  running request:   {"id", "block_table", "num_tokens", "cur_logits", "generated", "steps_left"}
+  radix (prefix) node: {"children": {token_id: node}}
+The KV pools k_pool, v_pool are arrays of shape (num_blocks, block_size, d).
+Every other function in this project is also available in your namespace at grade
+time — call earlier steps by name; you do not import them. Run
+`uv run python projects.py mini-vllm-inference-engine` (or the outline drawer) to see all signatures."""
 import numpy as np  # noqa: F401
 
 
