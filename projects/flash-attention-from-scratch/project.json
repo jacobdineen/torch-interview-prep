@@ -1,0 +1,172 @@
+{
+  "name": "flash-attention-from-scratch",
+  "title": "Build Flash Attention from Scratch",
+  "parts": [
+    {
+      "title": "Standard Attention",
+      "description": "The baseline we optimize: scaled dot-product scores, a numerically stable row softmax, and full materialized attention."
+    },
+    {
+      "title": "Online Softmax",
+      "description": "The streaming-softmax core: a running max + running denominator that fold one key/value block into the result without ever seeing all scores at once."
+    },
+    {
+      "title": "Flash Forward (Tiled)",
+      "description": "Tile over key/value blocks, run the online-softmax update per block, normalize, and save the log-sum-exp \u2014 exact attention with O(N) extra memory."
+    },
+    {
+      "title": "Causal Flash Attention",
+      "description": "Mask future keys per block and tile a causal (autoregressive) attention that matches a masked reference."
+    },
+    {
+      "title": "Flash Backward (Recomputation)",
+      "description": "The backward pass that recomputes the softmax from the saved log-sum-exp instead of storing the N x M probabilities."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "attention_scores",
+      "part": 0,
+      "points": 5,
+      "signature": "attention_scores(Q, K, scale)",
+      "doc": "Compute the scaled dot-product attention score matrix S (N, M)."
+    },
+    {
+      "id": "0002",
+      "name": "stable_rowmax",
+      "part": 0,
+      "points": 5,
+      "signature": "stable_rowmax(S)",
+      "doc": "Return the per-row maximum of S over the last (keys) axis."
+    },
+    {
+      "id": "0003",
+      "name": "softmax_rows",
+      "part": 0,
+      "points": 5,
+      "signature": "softmax_rows(S)",
+      "doc": "Compute a numerically stable row-wise softmax of S."
+    },
+    {
+      "id": "0004",
+      "name": "attention_reference",
+      "part": 0,
+      "points": 5,
+      "signature": "attention_reference(Q, K, V, scale)",
+      "doc": "Compute ground-truth attention: row-softmax of scaled scores applied to V."
+    },
+    {
+      "id": "0005",
+      "name": "correction",
+      "part": 1,
+      "points": 5,
+      "signature": "correction(m_old, m_new)",
+      "doc": "Rescaling factor exp(m_old - m_new) for old stats when the running max grows (m_old=-inf -> 0)."
+    },
+    {
+      "id": "0006",
+      "name": "update_running_max",
+      "part": 1,
+      "points": 5,
+      "signature": "update_running_max(m_prev, m_block)",
+      "doc": "Elementwise running maximum of the previous max and the new block's row max."
+    },
+    {
+      "id": "0007",
+      "name": "block_exp_scores",
+      "part": 1,
+      "points": 5,
+      "signature": "block_exp_scores(S_block, m_new)",
+      "doc": "Unnormalized block probabilities: exp of the block scores shifted by the new running max."
+    },
+    {
+      "id": "0008",
+      "name": "update_normalizer",
+      "part": 1,
+      "points": 5,
+      "signature": "update_normalizer(l_prev, m_prev, m_new, p_block)",
+      "doc": "Updated softmax denominator: rescaled old denominator plus the new block's exp-score row sums."
+    },
+    {
+      "id": "0009",
+      "name": "online_softmax_step",
+      "part": 1,
+      "points": 5,
+      "signature": "online_softmax_step(m_prev, l_prev, O_prev, S_block, V_block)",
+      "doc": "One fused flash step folding a key/value block into the running (max, denominator, unnormalized output)."
+    },
+    {
+      "id": "0010",
+      "name": "make_blocks",
+      "part": 2,
+      "points": 5,
+      "signature": "make_blocks(n, block_size)",
+      "doc": "Contiguous (start, end) index ranges that tile 0..n; the last may be shorter."
+    },
+    {
+      "id": "0011",
+      "name": "finalize",
+      "part": 2,
+      "points": 5,
+      "signature": "finalize(O_acc, l)",
+      "doc": "Normalize the unnormalized output accumulator by the running denominator."
+    },
+    {
+      "id": "0012",
+      "name": "logsumexp",
+      "part": 2,
+      "points": 5,
+      "signature": "logsumexp(m, l)",
+      "doc": "Per-row log-sum-exp recovered from the running max and denominator."
+    },
+    {
+      "id": "0013",
+      "name": "flash_attention_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "flash_attention_forward(Q, K, V, scale, block_size)",
+      "doc": "Exact attention by tiling over key/value blocks; return output and saved log-sum-exp."
+    },
+    {
+      "id": "0014",
+      "name": "causal_block_mask",
+      "part": 3,
+      "points": 5,
+      "signature": "causal_block_mask(S_block, q_start, k_start)",
+      "doc": "Return a copy of S_block with entries whose absolute key index exceeds the absolute query index set to -inf."
+    },
+    {
+      "id": "0015",
+      "name": "masked_attention_reference",
+      "part": 3,
+      "points": 5,
+      "signature": "masked_attention_reference(Q, K, V, scale)",
+      "doc": "Compute full causal self-attention by masking future keys, softmaxing each row, and weighting V."
+    },
+    {
+      "id": "0016",
+      "name": "flash_attention_causal",
+      "part": 3,
+      "points": 5,
+      "signature": "flash_attention_causal(Q, K, V, scale, block_size)",
+      "doc": "Compute causal self-attention by tiling over key blocks, masking future keys per block before each online-softmax step."
+    },
+    {
+      "id": "0017",
+      "name": "attention_backward_D",
+      "part": 4,
+      "points": 5,
+      "signature": "attention_backward_D(dO, O)",
+      "doc": "Per-row dot product of the upstream gradient and the attention output."
+    },
+    {
+      "id": "0018",
+      "name": "flash_attention_backward",
+      "part": 4,
+      "points": 5,
+      "signature": "flash_attention_backward(Q, K, V, O, dO, L, scale)",
+      "doc": "Gradients dQ, dK, dV, recomputing the softmax from the saved log-sum-exp instead of storing it."
+    }
+  ]
+}
