@@ -1,0 +1,200 @@
+{
+  "name": "diffusion-ddpm-from-scratch",
+  "title": "Build a Diffusion Model (DDPM) from Scratch",
+  "parts": [
+    {
+      "title": "Noise Schedule",
+      "description": "Build the linear beta schedule and the alpha / cumulative-alpha buffers that define the forward diffusion."
+    },
+    {
+      "title": "Forward Diffusion Process",
+      "description": "Noise a clean sample to an arbitrary timestep in one shot, and draw random timesteps + noise for training."
+    },
+    {
+      "title": "Time Embedding & Denoiser",
+      "description": "Sinusoidal timestep embeddings and a small MLP that predicts the noise added to a noisy sample."
+    },
+    {
+      "title": "Training Objective",
+      "description": "The simple noise-prediction MSE loss, a single optimization step, and the training loop."
+    },
+    {
+      "title": "DDPM Sampling",
+      "description": "Reverse the diffusion one stochastic step at a time, from pure noise back to a sample."
+    },
+    {
+      "title": "DDIM Sampling",
+      "description": "Deterministic accelerated sampling and an end-to-end generation helper."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "linear_beta_schedule",
+      "part": 0,
+      "points": 5,
+      "signature": "linear_beta_schedule(T, beta_start=0.0001, beta_end=0.02)",
+      "doc": "Build the variance (beta) schedule as a linear ramp over T diffusion steps."
+    },
+    {
+      "id": "0002",
+      "name": "compute_alphas",
+      "part": 0,
+      "points": 5,
+      "signature": "compute_alphas(betas)",
+      "doc": "Compute per-step alphas as one minus the betas."
+    },
+    {
+      "id": "0003",
+      "name": "compute_alpha_bars",
+      "part": 0,
+      "points": 5,
+      "signature": "compute_alpha_bars(alphas)",
+      "doc": "Compute cumulative alpha products (alpha_bar) along the time axis."
+    },
+    {
+      "id": "0004",
+      "name": "gather_at_timesteps",
+      "part": 0,
+      "points": 5,
+      "signature": "gather_at_timesteps(buf, t)",
+      "doc": "Index a 1-D schedule buffer at the given timesteps and reshape to (B,1) for broadcasting."
+    },
+    {
+      "id": "0005",
+      "name": "sqrt_alpha_bar_terms",
+      "part": 1,
+      "points": 5,
+      "signature": "sqrt_alpha_bar_terms(alpha_bars, t)",
+      "doc": "Return sqrt(alpha_bar_t) and sqrt(1 - alpha_bar_t) gathered at timesteps t."
+    },
+    {
+      "id": "0006",
+      "name": "q_sample",
+      "part": 1,
+      "points": 5,
+      "signature": "q_sample(x0, t, noise, alpha_bars)",
+      "doc": "Apply the closed-form forward noising to produce x_t from x0 and noise at timesteps t."
+    },
+    {
+      "id": "0007",
+      "name": "sample_timesteps_and_noise",
+      "part": 1,
+      "points": 5,
+      "signature": "sample_timesteps_and_noise(x0, T, generator=None)",
+      "doc": "Draw random integer timesteps in [0, T) and standard-normal noise shaped like x0."
+    },
+    {
+      "id": "0008",
+      "name": "sinusoidal_time_embedding",
+      "part": 2,
+      "points": 5,
+      "signature": "sinusoidal_time_embedding(t, dim)",
+      "doc": "Map integer timesteps to Transformer-style sinusoidal feature vectors."
+    },
+    {
+      "id": "0009",
+      "name": "init_denoiser_params",
+      "part": 2,
+      "points": 5,
+      "signature": "init_denoiser_params(data_dim, time_dim, hidden, seed=0)",
+      "doc": "Initialize MLP weights/biases mapping data+time features to a data-dim output."
+    },
+    {
+      "id": "0010",
+      "name": "denoiser_mlp_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "denoiser_mlp_forward(params, h)",
+      "doc": "Run the MLP forward with ReLU after every layer except the linear last."
+    },
+    {
+      "id": "0011",
+      "name": "predict_noise",
+      "part": 2,
+      "points": 5,
+      "signature": "predict_noise(params, x_t, t, time_dim)",
+      "doc": "Predict the noise added to x_t at timestep t using the time-conditioned denoiser."
+    },
+    {
+      "id": "0012",
+      "name": "diffusion_loss",
+      "part": 3,
+      "points": 5,
+      "signature": "diffusion_loss(params, x0, alpha_bars, T, time_dim, generator=None)",
+      "doc": "Compute the DDPM training loss: MSE between the denoiser's predicted noise and the true noise."
+    },
+    {
+      "id": "0013",
+      "name": "denoiser_train_step",
+      "part": 3,
+      "points": 5,
+      "signature": "denoiser_train_step(params, x0, alpha_bars, T, time_dim, lr, generator=None)",
+      "doc": "Run one SGD step on the diffusion loss and return the scalar loss value before the update."
+    },
+    {
+      "id": "0014",
+      "name": "train_denoiser",
+      "part": 3,
+      "points": 5,
+      "signature": "train_denoiser(params, x0, alpha_bars, T, time_dim, lr, n_steps, generator=None)",
+      "doc": "Train the denoiser for n_steps on a fixed batch and return the list of per-step losses."
+    },
+    {
+      "id": "0015",
+      "name": "predict_x0_from_noise",
+      "part": 4,
+      "points": 5,
+      "signature": "predict_x0_from_noise(x_t, t, noise, alpha_bars)",
+      "doc": "Recover the predicted clean sample x0 from a noisy x_t and the noise."
+    },
+    {
+      "id": "0016",
+      "name": "posterior_mean",
+      "part": 4,
+      "points": 5,
+      "signature": "posterior_mean(x0, x_t, t, betas, alphas, alpha_bars)",
+      "doc": "Compute the mean of the DDPM posterior q(x_{t-1}|x_t,x0)."
+    },
+    {
+      "id": "0017",
+      "name": "ddpm_sample_step",
+      "part": 4,
+      "points": 5,
+      "signature": "ddpm_sample_step(params, x_t, t, betas, alphas, alpha_bars, time_dim, generator=None)",
+      "doc": "Take one reverse DDPM denoising step from x_t to x_{t-1}."
+    },
+    {
+      "id": "0018",
+      "name": "ddpm_sample_loop",
+      "part": 4,
+      "points": 5,
+      "signature": "ddpm_sample_loop(params, shape, betas, alphas, alpha_bars, time_dim, generator=None)",
+      "doc": "Run the full reverse DDPM chain from pure noise x_T down to x_0."
+    },
+    {
+      "id": "0019",
+      "name": "ddim_sample_step",
+      "part": 5,
+      "points": 5,
+      "signature": "ddim_sample_step(params, x_t, t, t_prev, alpha_bars, time_dim)",
+      "doc": "Take one deterministic (eta=0) DDIM reverse step from timestep t to t_prev."
+    },
+    {
+      "id": "0020",
+      "name": "ddim_sample_loop",
+      "part": 5,
+      "points": 5,
+      "signature": "ddim_sample_loop(params, shape, alpha_bars, time_dim, n_steps)",
+      "doc": "Generate samples by iterating deterministic DDIM steps over evenly-spaced timesteps."
+    },
+    {
+      "id": "0021",
+      "name": "generate_samples",
+      "part": 5,
+      "points": 5,
+      "signature": "generate_samples(params, n_samples, data_dim, betas, alphas, alpha_bars, time_dim, method='ddpm', ddim_steps=None, generator=None)",
+      "doc": "Generate samples from the trained denoiser using either DDPM or DDIM sampling."
+    }
+  ]
+}
