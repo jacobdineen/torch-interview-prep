@@ -152,10 +152,14 @@ def _catalog():
                       "title": _problem_title(pid), "framework": frameworks.problem_framework(pid),
                       "numpy": frameworks.problem_has_numpy(pid),
                       "solved": bool(prog.get(pid, {}).get("ever_passed"))})
+    projects = {}
     for d in _project_dirs():
         man = _manifest(d)
         name = man.get("name", os.path.basename(d))
         sources.append(name)
+        parts = man.get("parts", [])
+        projects[name] = {"title": man.get("title", name),
+                          "description": (parts[0].get("description") if parts else "") or ""}
         fw = frameworks.project_framework(d)
         pp = _project_progress(d)
         for s in man.get("steps", []):
@@ -166,7 +170,8 @@ def _catalog():
                           "group": f"Part {s.get('part', 0) + 1}: {_part(man, s.get('part', 0))['title']}",
                           "id": s["id"], "title": s["name"],
                           "solved": bool(pp.get(s["id"], {}).get("ever_passed"))})
-    return {"sources": sources, "items": items, "frameworks": [frameworks.NUMPY, frameworks.TORCH]}
+    return {"sources": sources, "items": items, "projects": projects,
+            "frameworks": [frameworks.NUMPY, frameworks.TORCH]}
 
 
 def _resolve(key):

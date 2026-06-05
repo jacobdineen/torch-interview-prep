@@ -2,14 +2,19 @@
 
 const $ = (id) => document.getElementById(id);
 const api = {
-  async get(p) { const r = await fetch(p); return r.json(); },
-  async post(p, body) { const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); },
+  async get(p) { const r = await fetch(p); if (!r.ok) throw new Error(`GET ${p} → ${r.status}`); return r.json(); },
+  async post(p, body) {
+    const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    if (!r.ok) throw new Error(`POST ${p} → ${r.status}`); return r.json();
+  },
 };
 
-let ITEMS = [];        // full catalog
-let SOURCES = [];      // ["Problems", "tiny-gpt-from-scratch", ...]
-let CURRENT = null;    // current item key
-let HILITE = 0;        // highlighted index in the palette
+let ITEMS = [];          // full catalog
+let SOURCES = [];        // ["Problems", "tiny-gpt-from-scratch", ...]
+let PROJECTS = {};       // name -> {title, description}
+let CURRENT = null;      // current item key
+let HILITE = 0;          // highlighted palette index
+let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
 
 async function init() {
   applyTheme(localStorage.getItem("mle_theme") || "dark");
@@ -21,6 +26,7 @@ async function init() {
   const cat = await api.get("/api/catalog");
   ITEMS = cat.items || [];
   SOURCES = cat.sources || [];
+  PROJECTS = cat.projects || {};
 
   const sourceSel = $("source");
   sourceSel.innerHTML = "";
@@ -44,6 +50,8 @@ async function init() {
 
   setupSplitters();
   setupShortcuts();
+  window.addEventListener("resize", debounce(clampSplits, 120));
+  window.addEventListener("popstate", onPopState);
 
   sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); updateProgress(); });
   const f = $("filter");
@@ -64,7 +72,6 @@ async function init() {
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
 
-  // Deep-link (?key=prob:02a) jumps straight into the workspace; otherwise show home.
   const deep = new URLSearchParams(location.search).get("key");
   if (deep && ITEMS.find((x) => x.key === deep)) {
     const it = ITEMS.find((x) => x.key === deep);
@@ -73,6 +80,18 @@ async function init() {
     showHome();
   }
 }
+
+function showInitError(err) {
+  console.error(err);
+  const el = document.createElement("div");
+  el.id = "init-error";
+  el.innerHTML = `<div class="ie-card"><h2>Couldn't reach the server</h2>` +
+    `<p>${esc((err && err.message) || "Network error")}. The API on this port may be down — is <code>serve-app.sh</code> still running?</p>` +
+    `<button onclick="location.reload()">Retry</button></div>`;
+  document.body.appendChild(el);
+}
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 // ===== theme =====
 function applyTheme(t) {
@@ -115,16 +134,29 @@ function card(cls, icon, title, sub, desc, stats, onClick) {
   return el;
 }
 function renderHome() {
+  // resume banner
+  const rb = $("resume-banner"); rb.innerHTML = "";
+  const lastKey = localStorage.getItem("mle_last_key");
+  const last = lastKey && ITEMS.find((x) => x.key === lastKey);
+  if (last) {
+    rb.classList.remove("hidden");
+    rb.innerHTML = `<div><div class="rb-label">Resume</div>` +
+      `<div class="rb-title">${esc(last.title)}</div>` +
+      `<div class="rb-sub">${esc(last.source === "Problems" ? "" : last.source + " · ")}${esc(last.id)}${last.solved ? " · solved" : ""}</div></div>`;
+    const btn = document.createElement("button"); btn.textContent = "Continue →";
+    btn.addEventListener("click", () => enterTrack(last.source, last.framework || "All", last.key));
+    rb.appendChild(btn);
+  } else rb.classList.add("hidden");
+
   const probs = $("home-problems"); probs.innerHTML = "";
+  if (!ITEMS.length) { probs.innerHTML = `<div class="hc-desc">No items loaded — the catalog came back empty.</div>`; return; }
   const isProb = (x) => x.source === "Problems";
   probs.appendChild(card("torch", "🔥", "PyTorch Problems", "Tensors, autograd, nn, losses",
     "Core deep-learning building blocks implemented in PyTorch.",
-    trackStats((x) => isProb(x) && x.framework === "torch"),
-    () => enterTrack("Problems", "torch")));
+    trackStats((x) => isProb(x) && x.framework === "torch"), () => enterTrack("Problems", "torch")));
   probs.appendChild(card("numpy", "▦", "NumPy Problems", "Same problems, pure NumPy",
     "Everything that has a NumPy variant — no autograd, just arrays.",
-    trackStats((x) => isProb(x) && (x.framework === "numpy" || x.numpy)),
-    () => enterTrack("Problems", "numpy")));
+    trackStats((x) => isProb(x) && (x.framework === "numpy" || x.numpy)), () => enterTrack("Problems", "numpy")));
   probs.appendChild(card("all", "∑", "All Problems", "Every standalone problem",
     "Browse the whole problem set across both frameworks.",
     trackStats(isProb), () => enterTrack("Problems", "All")));
@@ -133,10 +165,10 @@ function renderHome() {
   for (const name of SOURCES.filter((s) => s !== "Problems")) {
     const items = ITEMS.filter((x) => x.source === name);
     const parts = new Set(items.map((x) => x.group)).size;
-    projs.appendChild(card("project", "📦", name, `${parts} part${parts === 1 ? "" : "s"} · ${items.length} steps`,
-      "Build it end-to-end, one graded step at a time.",
-      trackStats((x) => x.source === name),
-      () => enterTrack(name, "All")));
+    const meta = PROJECTS[name] || {};
+    projs.appendChild(card("project", "📦", meta.title || name, `${parts} part${parts === 1 ? "" : "s"} · ${items.length} steps`,
+      meta.description || "Build it end-to-end, one graded step at a time.",
+      trackStats((x) => x.source === name), () => enterTrack(name, "All")));
   }
 }
 function showHome() {
@@ -145,6 +177,8 @@ function showHome() {
   $("home").classList.remove("hidden");
   closePalette();
   renderHome();
+  try { history.replaceState({}, "", location.pathname); } catch (e) {}
+  const h = $("home").querySelector("h1"); if (h) h.focus();
 }
 function enterTrack(source, fw, key) {
   document.body.classList.remove("home-active");
@@ -152,14 +186,15 @@ function enterTrack(source, fw, key) {
   $("split").classList.remove("hidden");
   if ([...$("source").options].some((o) => o.value === source)) $("source").value = source;
   if ([...$("framework").options].some((o) => o.value === fw)) $("framework").value = fw;
-  renderPalette(); updateProgress();
+  localStorage.setItem("mle_last_track", JSON.stringify({ source, fw }));
+  renderPalette(); updateProgress(); clampSplits();
   const v = view();
-  const target = key ? v.find((x) => x.key === key) || ITEMS.find((x) => x.key === key)
+  const target = key ? (v.find((x) => x.key === key) || ITEMS.find((x) => x.key === key))
     : (v.find((x) => !x.solved) || v[0]);
   if (target) selectItem(target.key);
 }
 
-// ===== progress (current filtered view) =====
+// ===== progress =====
 function updateProgress() {
   const v = view();
   const solved = v.filter((x) => x.solved).length;
@@ -178,21 +213,24 @@ function setupSplitters() {
     if (!gutter) return;
     gutter.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      try { gutter.setPointerCapture(e.pointerId); } catch (_) {}
       gutter.classList.add("dragging");
       document.body.classList.add("resizing", axisClass);
       const move = (ev) => root.style.setProperty(cssVar, compute(ev) + "px");
-      const up = () => {
+      const end = () => {
         gutter.classList.remove("dragging");
         document.body.classList.remove("resizing", axisClass);
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
+        gutter.removeEventListener("pointermove", move);
+        gutter.removeEventListener("pointerup", end);
+        gutter.removeEventListener("pointercancel", end);
+        try { gutter.releasePointerCapture(e.pointerId); } catch (_) {}
         localStorage.setItem(storeKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
       };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
+      gutter.addEventListener("pointermove", move);
+      gutter.addEventListener("pointerup", end);
+      gutter.addEventListener("pointercancel", end);
     });
   };
-
   const split = $("split"), right = $("right");
   drag($("gutter-x"), "cols", (ev) => {
     const r = split.getBoundingClientRect();
@@ -202,28 +240,52 @@ function setupSplitters() {
     const r = right.getBoundingClientRect();
     return Math.max(70, Math.min(r.height - 150, r.bottom - ev.clientY));
   }, "mle_results_h", "--results-h");
+  clampSplits();
+}
+
+// keep stored pixel splits usable after the window changes size
+function clampSplits() {
+  if (document.body.classList.contains("home-active")) return;
+  const root = document.documentElement, split = $("split"), left = $("left"), right = $("right");
+  if (!split || !left) return;
+  const sw = split.getBoundingClientRect().width;
+  if (sw > 0) {
+    const lw = Math.max(280, Math.min(sw - 360, left.getBoundingClientRect().width));
+    root.style.setProperty("--left-w", Math.round(lw) + "px");
+  }
+  const rh = right.getBoundingClientRect().height;
+  if (rh > 0) {
+    const cur = parseFloat(getComputedStyle(root).getPropertyValue("--results-h")) || 230;
+    root.style.setProperty("--results-h", Math.round(Math.max(70, Math.min(rh - 180, cur))) + "px");
+  }
 }
 
 function setupShortcuts() {
   document.addEventListener("keydown", (e) => {
     const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (e.key === "/" && !inField && !document.body.classList.contains("home-active")) {
-      e.preventDefault(); $("filter").focus(); $("filter").select();
-    }
-    // Editor zoom with Ctrl/Cmd +/-/0 (when the page, not the terminal iframe, has focus)
+    // editor zoom (page-focused; the terminal iframe captures its own keys)
     if ((e.ctrlKey || e.metaKey) && !inField) {
-      if (e.key === "=" || e.key === "+") { e.preventDefault(); bumpZoom(+0.1); }
-      else if (e.key === "-" || e.key === "_") { e.preventDefault(); bumpZoom(-0.1); }
-      else if (e.key === "0") { e.preventDefault(); applyZoom(1); }
+      if (e.key === "=" || e.key === "+") { e.preventDefault(); bumpZoom(+0.1); return; }
+      if (e.key === "-" || e.key === "_") { e.preventDefault(); bumpZoom(-0.1); return; }
+      if (e.key === "0") { e.preventDefault(); applyZoom(1); return; }
     }
+    if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "/" && !document.body.classList.contains("home-active")) { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }
+    if (document.body.classList.contains("home-active")) return;
+    // workspace keyboard loop
+    if (e.key === "r") { e.preventDefault(); run(false); }
+    else if (e.key === "s") { e.preventDefault(); run(true); }
+    else if (e.key === "n") { e.preventDefault(); gotoNextUnsolved(); }
+    else if (e.key === "h") { e.preventDefault(); showHint(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+    else if (e.key === "g") { e.preventDefault(); showHome(); }
   });
 }
 
-// ===== filtered view (source + framework + text) =====
+// ===== filtered view =====
 function view() {
-  const src = $("source").value;
-  const fw = $("framework").value;
-  const q = $("filter").value.trim().toLowerCase();
+  const src = $("source").value, fw = $("framework").value, q = $("filter").value.trim().toLowerCase();
   return ITEMS.filter((x) => {
     if (src !== "All" && x.source !== src) return false;
     if (fw !== "All" && x.framework !== fw && !(fw === "numpy" && x.numpy)) return false;
@@ -231,20 +293,16 @@ function view() {
     return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
   });
 }
-function fwShort(it) {
-  if (it.framework === "numpy") return "np";
-  return it.numpy ? "pt+np" : "pt";
-}
+function fwShort(it) { if (it.framework === "numpy") return "np"; return it.numpy ? "pt+np" : "pt"; }
 
 // ===== palette =====
 function renderPalette() {
-  const v = view();
-  const pal = $("palette");
+  const v = view(), pal = $("palette");
   if (HILITE >= v.length) HILITE = Math.max(0, v.length - 1);
   let html = "", group = null;
   v.forEach((it, i) => {
-    if (it.group !== group) { group = it.group; html += `<div class="pal-group">${esc(group)}</div>`; }
-    html += `<div class="pal-row${i === HILITE ? " hi" : ""}" data-key="${esc(it.key)}" data-i="${i}">` +
+    if (it.group !== group) { group = it.group; html += `<div class="pal-group" role="presentation">${esc(group)}</div>`; }
+    html += `<div class="pal-row${i === HILITE ? " hi" : ""}" role="option" aria-selected="${i === HILITE}" data-key="${esc(it.key)}" data-i="${i}">` +
       `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
       `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
       `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
@@ -259,7 +317,9 @@ function renderPalette() {
 }
 function setHilite(i) {
   HILITE = i;
-  $("palette").querySelectorAll(".pal-row").forEach((r) => r.classList.toggle("hi", parseInt(r.dataset.i, 10) === i));
+  $("palette").querySelectorAll(".pal-row").forEach((r) => {
+    const on = parseInt(r.dataset.i, 10) === i; r.classList.toggle("hi", on); r.setAttribute("aria-selected", on);
+  });
 }
 function scrollHiliteIntoView() { const el = $("palette").querySelector(".pal-row.hi"); if (el) el.scrollIntoView({ block: "nearest" }); }
 function openPalette() { $("palette").classList.remove("hidden"); }
@@ -288,10 +348,24 @@ function gotoNextUnsolved() {
 }
 
 // ===== selection =====
-async function selectItem(key) {
+async function openEditor(key) {
+  try { const r = await api.post("/api/open", { key }); setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim"); }
+  catch (e) { setEditorWarn("editor open failed"); }
+}
+function setEditorWarn(msg) { const w = $("editor-warn"); if (w) w.textContent = msg || ""; }
+
+async function selectItem(key, push = true) {
+  const seq = ++_selSeq;
   CURRENT = key;
-  const m = await api.get("/api/item?key=" + encodeURIComponent(key));
-  if (m.error) return;
+  localStorage.setItem("mle_last_key", key);
+  $("left").classList.add("loading");
+  let m;
+  try { [m] = await Promise.all([api.get("/api/item?key=" + encodeURIComponent(key)), openEditor(key)]); }
+  catch (e) { if (seq === _selSeq) { $("left").classList.remove("loading"); flashResults("fail", "Couldn't load " + key + ": " + e.message); } return; }
+  if (seq !== _selSeq) return;            // a newer selection won
+  $("left").classList.remove("loading");
+  if (!m || m.error) return;
+
   $("prob-id").textContent = (m.source && m.source !== "Problems" ? m.source + " · " : "") + (m.id || "");
   $("prob-title").textContent = m.title || m.id;
   $("prob-group").textContent = m.group || "";
@@ -313,34 +387,52 @@ async function selectItem(key) {
     ew.style.display = "";
   } else ew.style.display = "none";
   const cw = $("concept-wrap");
-  if (m.concept) { $("prob-concept").textContent = m.concept; cw.style.display = ""; }
-  else cw.style.display = "none";
+  if (m.concept) { $("prob-concept").textContent = m.concept; cw.style.display = ""; } else cw.style.display = "none";
   $("aux-out").textContent = "";
   resetResults();
   if (m.source && [...$("source").options].some((o) => o.value === m.source)) $("source").value = m.source;
-  api.post("/api/open", { key });
+
+  const url = "?key=" + encodeURIComponent(key);
+  try { if (push && new URLSearchParams(location.search).get("key") !== key) history.pushState({ key }, "", url); }
+  catch (e) {}
+}
+function onPopState() {
+  const k = new URLSearchParams(location.search).get("key");
+  if (k && ITEMS.find((x) => x.key === k)) { if (k !== CURRENT) selectItem(k, false); }
+  else showHome();
 }
 
 function resetResults() {
-  const b = $("results-body");
-  b.className = "results-body muted";
-  b.textContent = "Edit in the editor, then Run.";
+  const b = $("results-body"); b.className = "results-body muted"; b.textContent = "Edit in the editor, then Run.";
 }
+function flashResults(kind, text) { const b = $("results-body"); b.className = "results-body " + kind; b.textContent = text; }
 
 async function run(submit) {
-  const key = CURRENT;
-  const b = $("results-body");
-  b.className = "results-body muted";
+  const seq = ++_runSeq, key = CURRENT;
+  if (!key) return;
+  $("run-btn").disabled = true; $("submit-btn").disabled = true;
+  const b = $("results-body"); b.className = "results-body muted";
   b.textContent = (submit ? "Submitting" : "Running") + " " + label(key) + " …";
-  const r = await api.post("/api/run", { key });
+  let r;
+  try { r = await api.post("/api/run", { key }); }
+  catch (e) { if (seq === _runSeq) flashResults("fail", "error: " + e.message); }
+  finally { if (seq === _runSeq) { $("run-btn").disabled = false; $("submit-btn").disabled = false; } }
+  if (seq !== _runSeq || !r) return;
   renderResult(r, submit);
+  setRunStatus(r.status);
   if (r.status === "pass") markSolved(key);
+}
+function setRunStatus(status) {
+  const btn = $("run-btn");
+  if (status !== "pass" && status !== "fail") return;
+  btn.dataset.runStatus = status;
+  clearTimeout(_runStatusTimer);
+  _runStatusTimer = setTimeout(() => { delete btn.dataset.runStatus; }, 3000);
 }
 function markSolved(key) {
   const it = ITEMS.find((x) => x.key === key);
   if (it && !it.solved) { it.solved = true; updateProgress(); }
-  $("prob-status").className = "tag solved";
-  $("prob-status").textContent = "solved";
+  $("prob-status").className = "tag solved"; $("prob-status").textContent = "solved";
 }
 function renderResult(r, submit) {
   const b = $("results-body");
@@ -349,7 +441,7 @@ function renderResult(r, submit) {
     let out = `✓ PASS ${r.problem || ""}`;
     if (r.progress) out += `\n\n${r.progress}`;
     if (submit && r.concept) out += `\n\nConcept:\n${r.concept}`;
-    if (r.next) out += `\n\nNext: ${r.next}  (use “next ›”)`;
+    if (r.next) out += `\n\nNext: ${r.next}  (press n)`;
     b.textContent = out;
   } else if (r.status === "fail") {
     b.className = "results-body fail";
@@ -358,34 +450,35 @@ function renderResult(r, submit) {
     if (r.detail) out += `\n${r.detail}`;
     if (r.message) out += `\n\n${r.message}`;
     b.textContent = out;
-  } else {
-    b.className = "results-body fail";
-    b.textContent = "error: " + (r.message || "unknown");
-  }
+  } else { b.className = "results-body fail"; b.textContent = "error: " + (r.message || "unknown"); }
 }
 function label(key) { const it = ITEMS.find((x) => x.key === key); return it ? it.id : key; }
 
 async function teardown() {
   if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. Unsaved edits in the editor are written first.")) return;
-  try { await api.post("/api/shutdown", {}); } catch (e) { /* server exits mid-response */ }
+  try { await api.post("/api/shutdown", {}); } catch (e) {}
+  const dark = document.documentElement.dataset.theme !== "light";
+  const fg = dark ? "#e6edf3" : "#1c2128", mut = dark ? "#9aa7b8" : "#586272", bg = dark ? "#0b0f16" : "#f4f6f9";
   document.body.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
-    'flex-direction:column;gap:8px;color:#8b98a9;font:14px system-ui">' +
-    "<div style=\"font-size:18px;color:#e6edf3\">⏻ torn down</div>" +
+    `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:${bg};` +
+    `flex-direction:column;gap:8px;color:${mut};font:14px system-ui">` +
+    `<div style="font-size:18px;color:${fg}">⏻ torn down</div>` +
     "<div>nvim, ttyd, and the server have stopped. You can close this tab.</div>" +
     "<div>Restart with <code>./web/serve-app.sh</code>.</div></div>";
 }
 async function showHint() {
-  $("aux-out").textContent = "…";
-  const r = await api.get("/api/hint?key=" + encodeURIComponent(CURRENT));
-  $("aux-out").textContent = (r.text || "").trim() || "(no hint)";
+  const a = $("aux-out"); a.textContent = "Loading hint…"; a.scrollIntoView({ block: "nearest" });
+  try { const r = await api.get("/api/hint?key=" + encodeURIComponent(CURRENT)); a.textContent = (r.text || "").trim() || "(no hint)"; }
+  catch (e) { a.textContent = "hint failed: " + e.message; }
+  a.scrollIntoView({ block: "nearest" });
 }
 async function showSolution() {
   if (!confirm("Show the reference solution for " + label(CURRENT) + "? (unlocks it)")) return;
-  $("aux-out").textContent = "…";
-  const r = await api.post("/api/solution", { key: CURRENT, give_up: true });
-  $("aux-out").textContent = (r.text || "").trim() || "(no solution)";
+  const a = $("aux-out"); a.textContent = "Loading solution…"; a.scrollIntoView({ block: "nearest" });
+  try { const r = await api.post("/api/solution", { key: CURRENT, give_up: true }); a.textContent = (r.text || "").trim() || "(no solution)"; }
+  catch (e) { a.textContent = "solution failed: " + e.message; }
+  a.scrollIntoView({ block: "nearest" });
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-init();
+init().catch(showInitError);

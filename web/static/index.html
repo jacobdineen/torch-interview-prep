@@ -8,36 +8,38 @@
 </head>
 <body class="home-active">
   <header id="topbar">
-    <button class="brand" id="home-btn" title="Home"><span class="brand-mark">▚</span> mle_prep</button>
+    <button class="brand" id="home-btn" title="Home (g)" aria-label="Home"><span class="brand-mark" aria-hidden="true">▚</span> mle_prep</button>
 
     <div class="workspace-only" style="gap:11px; align-items:center; flex:1; min-width:0;">
-      <select id="source" title="Problems or a project"></select>
-      <select id="framework" title="Filter by framework"></select>
+      <select id="source" title="Problems or a project" aria-label="Source"></select>
+      <select id="framework" title="Filter by framework" aria-label="Framework"></select>
       <div class="search-wrap">
-        <input id="filter" type="text" placeholder="Search by id or title…   ( / to focus · ↑↓ Enter · Esc )" autocomplete="off" spellcheck="false" />
-        <div id="palette" class="palette hidden"></div>
+        <input id="filter" type="text" role="combobox" aria-expanded="false" aria-controls="palette"
+          placeholder="Search…   ( / focus · ↑↓ · r run · s submit · n next · h hint )" autocomplete="off" spellcheck="false" />
+        <div id="palette" class="palette hidden" role="listbox" aria-label="Problems"></div>
       </div>
       <div class="nav-group">
-        <button id="prev-btn" class="icon-btn" title="Previous in list">‹</button>
-        <button id="next-btn" title="Next unsolved">next ›</button>
+        <button id="prev-btn" class="icon-btn" title="Previous (←)" aria-label="Previous">‹</button>
+        <button id="next-btn" title="Next unsolved (n)">next ›</button>
       </div>
     </div>
 
     <div class="progress-wrap workspace-only">
-      <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      <div class="progress-track" title="Solved in this view"><div id="progress-fill" class="progress-fill"></div></div>
       <div id="overall" class="overall">—</div>
     </div>
 
-    <button id="theme-btn" class="icon-btn" title="Toggle light / dark">☾</button>
-    <button id="teardown-btn" class="icon-btn danger" title="Stop nvim, ttyd, and the server">⏻</button>
+    <button id="theme-btn" class="icon-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme">☾</button>
+    <button id="teardown-btn" class="icon-btn danger" title="Stop nvim, ttyd, and the server" aria-label="Tear down">⏻</button>
   </header>
 
   <!-- ===== home / track picker ===== -->
   <main id="home">
     <div class="home-hero">
-      <h1>Pick a track</h1>
-      <p>Standalone problems by framework, or work end-to-end through a project. Pick up where you left off.</p>
+      <h1 tabindex="-1">Pick a track</h1>
+      <p>Standalone problems by framework, or work end-to-end through a project.</p>
     </div>
+    <div id="resume-banner" class="resume-banner hidden"></div>
     <div class="home-section">
       <h2>Problems</h2>
       <div id="home-problems" class="home-grid"></div>
@@ -76,7 +78,7 @@
             <div class="ex-label">Input</div>
             <pre id="ex-input" class="ex-box"></pre>
           </div>
-          <div class="ex-arrow">→</div>
+          <div class="ex-arrow" aria-hidden="true">→</div>
           <div class="ex-cell">
             <div class="ex-label">Output</div>
             <pre id="ex-output" class="ex-box"></pre>
@@ -96,27 +98,28 @@
       <pre id="aux-out" class="aux"></pre>
     </section>
 
-    <div id="gutter-x" class="gutter gutter-x" title="Drag to resize"><div class="grip"></div></div>
+    <div id="gutter-x" class="gutter gutter-x" title="Drag to resize" role="separator" aria-orientation="vertical"><div class="grip"></div></div>
 
     <section id="right">
       <div class="editor-bar">
         <span class="editor-label">editor — your real nvim <code>:w</code> then Run</span>
+        <span id="editor-warn" class="editor-warn"></span>
         <span class="spacer"></span>
         <div class="zoom-group" title="Editor text size (independent of browser zoom)">
-          <button id="zoom-out" title="Smaller">−</button>
+          <button id="zoom-out" title="Smaller (Ctrl -)" aria-label="Editor text smaller">−</button>
           <span id="zoom-val" class="zoom-val">100%</span>
-          <button id="zoom-in" title="Larger">+</button>
+          <button id="zoom-in" title="Larger (Ctrl +)" aria-label="Editor text larger">+</button>
         </div>
-        <button id="run-btn" class="run">▶ Run</button>
-        <button id="submit-btn" class="submit">⚡ Submit</button>
+        <button id="run-btn" class="run" title="Run (r)">▶ Run</button>
+        <button id="submit-btn" class="submit" title="Submit (s)">⚡ Submit</button>
       </div>
       <div class="editor-viewport">
-        <iframe id="nvim" title="nvim"></iframe>
+        <iframe id="nvim" title="nvim editor"></iframe>
       </div>
-      <div id="gutter-y" class="gutter gutter-y" title="Drag to resize the terminal"><div class="grip"></div></div>
+      <div id="gutter-y" class="gutter gutter-y" title="Drag to resize the terminal" role="separator" aria-orientation="horizontal"><div class="grip"></div></div>
       <div id="results" class="results">
         <div class="results-head">Results</div>
-        <div id="results-body" class="results-body muted">Edit in the editor, then Run.</div>
+        <div id="results-body" class="results-body muted" aria-live="polite" aria-atomic="true">Edit in the editor, then Run.</div>
       </div>
     </section>
   </main>
