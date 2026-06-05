@@ -1,0 +1,188 @@
+{
+  "name": "mini-vllm-inference-engine",
+  "title": "Build a Mini vLLM Inference Engine",
+  "parts": [
+    {
+      "title": "KV-Cache Decode",
+      "description": "Autoregressive decoding over a growing KV cache with a tiny single-head attention LM \u2014 the workload the engine serves."
+    },
+    {
+      "title": "PagedAttention: Paging",
+      "description": "A block manager that hands out fixed-size KV blocks from a free pool, with per-sequence block tables and the logical->physical slot map (vLLM's core idea)."
+    },
+    {
+      "title": "PagedAttention: Paged Compute",
+      "description": "Write and gather KV through the block table, attend over the paged cache, and decode a full sequence \u2014 output identical to the contiguous cache."
+    },
+    {
+      "title": "Continuous Batching",
+      "description": "Admit requests when blocks are free, prefill them, and advance many sequences of different lengths together one token per step."
+    },
+    {
+      "title": "Prefix Cache & Sampling",
+      "description": "A radix (token-trie) prefix cache for KV reuse across requests (SGLang's RadixAttention), plus greedy / temperature / top-k / top-p sampling."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "token_qkv",
+      "part": 0,
+      "points": 5,
+      "signature": "token_qkv(model, token_id)",
+      "doc": "Embed a token and project it to its query, key, and value vectors."
+    },
+    {
+      "id": "0002",
+      "name": "kv_attention",
+      "part": 0,
+      "points": 5,
+      "signature": "kv_attention(q, K, V, scale)",
+      "doc": "Compute scaled-dot-product attention of one query over cached keys/values."
+    },
+    {
+      "id": "0003",
+      "name": "decode_step",
+      "part": 0,
+      "points": 5,
+      "signature": "decode_step(model, token_id, K_cache, V_cache, scale)",
+      "doc": "Process one token: append its k/v, attend over the cache, return logits and the new k,v."
+    },
+    {
+      "id": "0004",
+      "name": "greedy_generate",
+      "part": 0,
+      "points": 5,
+      "signature": "greedy_generate(model, prompt_ids, max_new, scale)",
+      "doc": "Greedily decode max_new tokens with a contiguous KV cache (the canonical ground truth)."
+    },
+    {
+      "id": "0005",
+      "name": "new_block_manager",
+      "part": 1,
+      "points": 5,
+      "signature": "new_block_manager(num_blocks, block_size)",
+      "doc": "Create a paging manager with a FIFO free-list of physical block ids."
+    },
+    {
+      "id": "0006",
+      "name": "allocate",
+      "part": 1,
+      "points": 5,
+      "signature": "allocate(mgr, n_tokens)",
+      "doc": "Pop ceil(n_tokens/block_size) blocks from the front of the free-list, or None if OOM."
+    },
+    {
+      "id": "0007",
+      "name": "free",
+      "part": 1,
+      "points": 5,
+      "signature": "free(mgr, block_table)",
+      "doc": "Return every block id in the table to the back of the free-list in order."
+    },
+    {
+      "id": "0008",
+      "name": "slot_for_token",
+      "part": 1,
+      "points": 5,
+      "signature": "slot_for_token(block_table, token_index, block_size)",
+      "doc": "Map a logical token index to its (physical block id, in-block offset)."
+    },
+    {
+      "id": "0009",
+      "name": "write_kv",
+      "part": 2,
+      "points": 5,
+      "signature": "write_kv(k_pool, v_pool, block_table, token_index, block_size, k, v)",
+      "doc": "Write key/value vectors into the paged pool at the logical token's physical slot."
+    },
+    {
+      "id": "0010",
+      "name": "gather_kv",
+      "part": 2,
+      "points": 5,
+      "signature": "gather_kv(k_pool, v_pool, block_table, num_tokens, block_size)",
+      "doc": "Read the first num_tokens KV slots from the pools into logically-contiguous K,V arrays."
+    },
+    {
+      "id": "0011",
+      "name": "paged_attention",
+      "part": 2,
+      "points": 5,
+      "signature": "paged_attention(q, k_pool, v_pool, block_table, num_tokens, block_size, scale)",
+      "doc": "Compute attention of q over the paged KV pool, equivalent to contiguous kv_attention."
+    },
+    {
+      "id": "0012",
+      "name": "paged_generate",
+      "part": 2,
+      "points": 5,
+      "signature": "paged_generate(model, prompt_ids, max_new, scale, num_blocks, block_size)",
+      "doc": "Greedy decode storing KV in a paged pool; output matches greedy_generate exactly."
+    },
+    {
+      "id": "0013",
+      "name": "can_admit",
+      "part": 3,
+      "points": 5,
+      "signature": "can_admit(mgr, n_tokens)",
+      "doc": "Return True if the manager has enough free blocks to hold n_tokens."
+    },
+    {
+      "id": "0014",
+      "name": "prefill_request",
+      "part": 3,
+      "points": 5,
+      "signature": "prefill_request(model, req_id, prompt_ids, block_table, k_pool, v_pool, block_size, scale, max_new)",
+      "doc": "Process all prompt tokens into the paged pool and return the running-request dict."
+    },
+    {
+      "id": "0015",
+      "name": "batch_decode_step",
+      "part": 3,
+      "points": 5,
+      "signature": "batch_decode_step(model, running, k_pool, v_pool, block_size, scale)",
+      "doc": "Advance every running request by one greedy token; return those that just finished."
+    },
+    {
+      "id": "0016",
+      "name": "run_batched",
+      "part": 3,
+      "points": 5,
+      "signature": "run_batched(model, requests, num_blocks, block_size, scale, max_new)",
+      "doc": "Continuously batch (admit/prefill/decode) all requests; return {req_id: generated ids}."
+    },
+    {
+      "id": "0017",
+      "name": "radix_insert",
+      "part": 4,
+      "points": 5,
+      "signature": "radix_insert(root, token_ids)",
+      "doc": "Insert a token sequence as a path of child nodes under the radix root."
+    },
+    {
+      "id": "0018",
+      "name": "radix_longest_prefix",
+      "part": 4,
+      "points": 5,
+      "signature": "radix_longest_prefix(root, token_ids)",
+      "doc": "Return the length of the longest leading run of tokens already cached as a path."
+    },
+    {
+      "id": "0019",
+      "name": "greedy_sample",
+      "part": 4,
+      "points": 5,
+      "signature": "greedy_sample(logits)",
+      "doc": "Return the index of the maximum logit."
+    },
+    {
+      "id": "0020",
+      "name": "sample_token",
+      "part": 4,
+      "points": 5,
+      "signature": "sample_token(logits, temperature, top_k, top_p, rng)",
+      "doc": "Sample a token id from logits with temperature, top-k, and nucleus (top-p) filtering."
+    }
+  ]
+}
