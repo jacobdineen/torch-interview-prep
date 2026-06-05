@@ -18,6 +18,7 @@ const api = {
 let ITEMS = [], SOURCES = [], PROJECTS = {}, TOKEN = "";
 let CURRENT = null, HILITE = 0;
 let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
+let _lastRunTs = 0;   // ts of the most recently handled run (web or nvim) — dedups the /api/sync poll
 
 async function init() {
   applyTheme(localStorage.getItem("mle_theme") || "dark");
@@ -85,6 +86,9 @@ async function init() {
   $("cmdk").addEventListener("click", (e) => { if (e.target.id === "cmdk") $("cmdk").close(); });
   $("sd-close").addEventListener("click", () => $("shortcuts-dlg").close());
   $("shortcuts-dlg").addEventListener("click", (e) => { if (e.target.id === "shortcuts-dlg") $("shortcuts-dlg").close(); });
+
+  try { const s0 = await api.get("/api/sync"); _lastRunTs = (s0 && s0.run && s0.run.ts) || 0; } catch (e) {}
+  setInterval(syncPoll, 1200);
 
   const deep = new URLSearchParams(location.search).get("key");
   if (deep && ITEMS.find((x) => x.key === deep)) {
@@ -395,13 +399,13 @@ async function openEditor(key, seq) {
     if (seq === _selSeq) setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim", "warn");
   } catch (e) { if (seq === _selSeq) setEditorWarn("editor open failed", "warn"); }
 }
-async function selectItem(key, push = true) {
+async function selectItem(key, push = true, openNvim = true) {
   const seq = ++_selSeq;
   CURRENT = key;
   localStorage.setItem("mle_last_key", key);
   setEditorWarn("");
   $("left").classList.add("loading");
-  openEditor(key, seq);                         // switch the editor in the background — never block the description on nvim
+  if (openNvim) openEditor(key, seq);           // switch the editor in the background — never block the description on nvim (skip when we're FOLLOWING nvim)
   let m;
   try { m = await api.get("/api/item?key=" + encodeURIComponent(key)); }
   catch (e) { if (seq === _selSeq) { $("left").classList.remove("loading"); flashResults("fail", "Couldn't load " + key + ": " + e.message); } return; }
@@ -473,6 +477,7 @@ async function run(submit) {
   if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
   renderResult(r, submit);
   setRunStatus(r.status);
+  if (r._ts) _lastRunTs = r._ts;
   if (r.status === "pass") { markSolved(key); maybeAutoAdvance(); }
 }
 function setRunStatus(status) {
@@ -615,6 +620,31 @@ async function resetToStub() {
 // ===== auto-advance =====
 function maybeAutoAdvance() {
   if ($("autoadvance").checked) setTimeout(gotoNextUnsolved, 1100);
+}
+
+function itemExists(key) { return ITEMS.some((x) => x.key === key); }
+
+// Poll the server so runs/navigation started INSIDE nvim (pp, pn, :e) drive the
+// same UI as the Run/Submit buttons: follow the editor's current file, and react
+// to a run we didn't initiate (result panel + solved + auto-next).
+async function syncPoll() {
+  if (document.hidden || !CURRENT) return;
+  let s;
+  try { s = await api.get("/api/sync"); } catch (e) { return; }
+  if (!s) return;
+  const run = s.run, newRun = run && run.ts && run.ts !== _lastRunTs;
+  if (s.current && s.current !== CURRENT && itemExists(s.current)) {
+    await selectItem(s.current, true, false);     // follow nvim (e.g. you pressed `pn`) — don't reopen the file it's already on
+  }
+  if (newRun) {
+    _lastRunTs = run.ts;
+    if (run.key && run.key !== CURRENT && itemExists(run.key)) await selectItem(run.key, true, false);
+    if (run.key === CURRENT) {
+      renderResult(run, false);
+      setRunStatus(run.status);
+      if (run.status === "pass") { markSolved(run.key); maybeAutoAdvance(); }
+    }
+  }
 }
 
 // ===== solve tracking + stats + celebration =====

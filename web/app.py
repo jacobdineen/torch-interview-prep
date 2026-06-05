@@ -51,6 +51,7 @@ _catalog_cache = {"sig": None, "data": None}
 
 WEB = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(WEB)
+LAST_RUN = os.path.join(ROOT, ".last_run.json")  # latest run result (any front-end) — drives /api/sync
 STATIC = os.path.join(WEB, "static")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -396,6 +397,41 @@ def _parse_json_line(proc):
     return {"status": "error", "message": msg}
 
 
+def _path_to_key(path):
+    """Map an absolute problem/step file path back to a catalog key (reverse of _resolve)."""
+    if not path:
+        return None
+    path = os.path.abspath(path)
+    m = re.search(r"/problems/p([A-Za-z0-9]+)_[^/]+\.py$", path)
+    if m:
+        return f"prob:{m.group(1)}"
+    m = re.search(r"/projects/([^/]+)/steps/(\d+)_[^/]+\.py$", path)
+    if m:
+        return f"proj:{m.group(1)}:{m.group(2)}"
+    return None
+
+
+def _current_nvim_key():
+    """Which problem/step the editor is currently showing (so the page can follow
+    nvim navigation like `pn`). Best-effort, short timeout; None if not a known file."""
+    r = _nvim("--remote-expr", "expand('%:p')", timeout=2)
+    if getattr(r, "returncode", 1) != 0:
+        return None
+    return _path_to_key((r.stdout or "").strip())
+
+
+def _sync_state():
+    """Lightweight poll target: the latest run result (from ANY front-end, incl. an
+    nvim `pp`) plus the editor's current file, so the browser stays in lockstep."""
+    run = None
+    try:
+        with open(LAST_RUN) as f:
+            run = json.load(f)
+    except Exception:
+        run = None
+    return {"run": run, "current": _current_nvim_key()}
+
+
 def _run_item(key):
     r = _resolve(key)
     if not r:
@@ -426,7 +462,13 @@ def _run_item(key):
             except Exception:
                 pass
             return {"status": "error", "message": "Run timed out after 600 s and was killed."}
-        return _parse_json_line(subprocess.CompletedProcess(cmd, proc.returncode, out, err))
+        result = _parse_json_line(subprocess.CompletedProcess(cmd, proc.returncode, out, err))
+        try:
+            with open(LAST_RUN) as f:
+                result["_ts"] = json.load(f).get("ts")
+        except Exception:
+            pass
+        return result
     finally:
         _run_lock.release()
 
@@ -548,6 +590,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200 if meta else 404, meta or {"error": "no such item"})
         if u.path == "/api/hint":
             return self._send(200, {"text": _hint_text((q.get("key") or [""])[0])})
+        if u.path == "/api/sync":
+            return self._send(200, _sync_state())
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):

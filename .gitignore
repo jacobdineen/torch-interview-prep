@@ -12,3 +12,4 @@ __pycache__/
 # project mode (generated/per-user)
 projects/*/.project_progress.json
 projects/*/solution.py
+.last_run.json

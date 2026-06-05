@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import textwrap
+import time
 import traceback
 from importlib.machinery import SourcelessFileLoader
 
@@ -22,6 +23,7 @@ PREP = os.path.dirname(os.path.abspath(__file__))
 PROBLEMS_DIR = os.path.join(PREP, "problems")
 COMPILED_DIR = os.path.join(PREP, "tests", "_compiled")
 PROGRESS_FILE = os.path.join(PREP, ".progress.json")
+LAST_RUN_FILE = os.path.join(PREP, ".last_run.json")
 
 _TEST_FILE_RE = re.compile(r"test_p\d+_.+\.py$")
 _TEST_FN_RE = re.compile(r"^test_p\d+_")
@@ -513,9 +515,9 @@ def _progress_payload(num):
         return None, None
 
 
-def _emit_json(num, name, stub_path, status, error_type, message, exc):
-    """Print a single JSON object describing the run. Enabled when PREP_JSON=1, so
-    editors (nvim) can parse a run without scraping human-formatted text."""
+def _result_payload(num, name, stub_path, status, error_type, message, exc):
+    """Build the structured run-result dict (shared by the JSON emitter and the
+    .last_run.json signal that lets the web UI react to nvim-initiated runs)."""
     out = {
         "status": status,            # "pass" | "fail"
         "problem": num,              # e.g. "05b"
@@ -548,7 +550,27 @@ def _emit_json(num, name, stub_path, status, error_type, message, exc):
         except Exception:
             pass
         out["progress"], out["next"] = _progress_payload(num)
-    print(json.dumps(out))
+    return out
+
+
+def _emit_json(num, name, stub_path, status, error_type, message, exc):
+    """Print a single JSON object describing the run (PREP_JSON=1)."""
+    print(json.dumps(_result_payload(num, name, stub_path, status, error_type, message, exc)))
+
+
+def _write_last_run(num, name, stub_path, status, error_type, message, exc):
+    """Persist the latest run result so the web UI can react to runs started from
+    nvim (pp). Written on EVERY run, regardless of PREP_JSON. Best-effort + atomic."""
+    out = _result_payload(num, name, stub_path, status, error_type, message, exc)
+    out["key"] = f"prob:{num}"
+    out["ts"] = time.time()
+    try:
+        tmp = LAST_RUN_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(out, f)
+        os.replace(tmp, LAST_RUN_FILE)
+    except OSError:
+        pass
 
 
 # ---------- main entry ----------
@@ -580,6 +602,8 @@ def run_test_for(stub_path):
         fn = getattr(tmod, test_mod_name)
         fn()
     except NotImplementedError:
+        _write_last_run(num, name, stub_path, "fail", "NotImplementedError",
+                        "one of the functions still raises NotImplementedError", None)
         if json_mode:
             _emit_json(num, name, stub_path, "fail", "NotImplementedError",
                        "one of the functions still raises NotImplementedError", None)
@@ -589,6 +613,7 @@ def run_test_for(stub_path):
         return 1
     except AssertionError as e:
         msg = str(e) if str(e) else "(no message — see test locals below)"
+        _write_last_run(num, name, stub_path, "fail", "AssertionError", msg, e)
         if json_mode:
             _emit_json(num, name, stub_path, "fail", "AssertionError", msg, e)
         else:
@@ -598,6 +623,7 @@ def run_test_for(stub_path):
         _record(num, False)
         return 1
     except Exception as e:
+        _write_last_run(num, name, stub_path, "fail", type(e).__name__, str(e), e)
         if json_mode:
             _emit_json(num, name, stub_path, "fail", type(e).__name__, str(e), e)
         else:
@@ -609,6 +635,7 @@ def run_test_for(stub_path):
     # Record BEFORE printing progress, so the dashboard / "next in tier" reflects
     # this pass (otherwise it reads stale .progress.json and appears to go backwards).
     _record(num, True)
+    _write_last_run(num, name, stub_path, "pass", None, None, None)
     if json_mode:
         _emit_json(num, name, stub_path, "pass", None, None, None)
     else:

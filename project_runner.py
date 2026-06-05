@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import textwrap
+import time
 import traceback
 import types
 from importlib.machinery import SourcelessFileLoader
@@ -213,18 +214,43 @@ def _print_progress_after_pass(project_root, step_id):
 
 # ---------- JSON (editor) ----------
 
-def _emit_json(project_root, step_id, name, step_path, status, error_type, message, exc):
+def _result_payload(project_root, step_id, name, step_path, status, error_type, message, exc):
+    """Structured run-result dict (shared by the JSON emitter and the .last_run.json
+    signal that lets the web UI react to runs started from nvim)."""
     out = {
         "status": status, "problem": step_id, "name": name,
         "file": os.path.abspath(step_path),
         "error_type": error_type, "message": message,
         "fail_file": None, "fail_line": None, "fail_func": None,
-        "diff": None, "hint": _likely_cause(error_type, message),
+        "diff": None, "detail": None, "hint": _likely_cause(error_type, message),
     }
     if exc is not None:
         ff, fl, fn_, _ = _user_fail_site(exc, project_root)
         out["fail_file"], out["fail_line"], out["fail_func"] = ff, fl, fn_
-    print(json.dumps(out))
+    return out
+
+
+def _emit_json(project_root, step_id, name, step_path, status, error_type, message, exc):
+    print(json.dumps(_result_payload(project_root, step_id, name, step_path,
+                                     status, error_type, message, exc)))
+
+
+def _write_last_run(project_root, step_id, name, step_path, status, error_type, message, exc):
+    """Persist the latest run result to the repo-root .last_run.json so the web UI
+    can react to project-step runs started from nvim. Best-effort + atomic."""
+    out = _result_payload(project_root, step_id, name, step_path,
+                          status, error_type, message, exc)
+    out["key"] = f"proj:{os.path.basename(project_root)}:{step_id}"
+    out["ts"] = time.time()
+    repo_root = os.path.dirname(os.path.dirname(project_root))
+    path = os.path.join(repo_root, ".last_run.json")
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(out, f)
+        os.replace(tmp, path)
+    except OSError:
+        pass
 
 
 # ---------- main entry ----------
@@ -276,6 +302,8 @@ def run_step(step_path):
 
         test_fn(ns)
     except NotImplementedError:
+        _write_last_run(root, step_id, name, step_path, "fail", "NotImplementedError",
+                        "the function still raises NotImplementedError", None)
         if json_mode:
             _emit_json(root, step_id, name, step_path, "fail", "NotImplementedError",
                        "the function still raises NotImplementedError", None)
@@ -285,6 +313,7 @@ def run_step(step_path):
         return 1
     except AssertionError as e:
         msg = str(e) or "(no message)"
+        _write_last_run(root, step_id, name, step_path, "fail", "AssertionError", msg, e)
         if json_mode:
             _emit_json(root, step_id, name, step_path, "fail", "AssertionError", msg, e)
         else:
@@ -294,6 +323,7 @@ def run_step(step_path):
         _record(root, step_id, False)
         return 1
     except Exception as e:
+        _write_last_run(root, step_id, name, step_path, "fail", type(e).__name__, str(e), e)
         if json_mode:
             _emit_json(root, step_id, name, step_path, "fail", type(e).__name__, str(e), e)
         else:
@@ -303,6 +333,7 @@ def run_step(step_path):
         return 1
 
     _record(root, step_id, True)
+    _write_last_run(root, step_id, name, step_path, "pass", None, None, None)
     try:
         assemble_solution(root)
     except Exception as e:
