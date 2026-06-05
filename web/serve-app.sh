@@ -25,6 +25,8 @@ rm -f "$SOCK"
 free_port() {
   local port="$1" pids
   pids=$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u || true)
+  # never kill ourselves or this script's own process group
+  pids=$(echo "$pids" | grep -vxE "$$|$PPID" || true)
   if [ -z "$pids" ]; then return 0; fi
   echo "  freeing :$port (killing $(echo $pids | tr '\n' ' '))"
   kill $pids 2>/dev/null || true

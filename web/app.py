@@ -22,8 +22,13 @@ import signal
 import subprocess
 import sys
 import threading
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+
+_SECRET = secrets.token_hex(16)        # CSRF token for mutating POSTs (exposed via same-origin /api/config)
+_run_lock = threading.Lock()           # serialize /api/run (avoid racing check.py + torn progress files)
+_catalog_cache = {"sig": None, "data": None}
 
 WEB = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(WEB)
@@ -135,7 +140,26 @@ def _part(man, idx):
 
 # ---------- catalog + resolution ----------
 
+def _catalog_sig():
+    paths = glob.glob(os.path.join(ROOT, "problems", "p*_*.py")) + \
+            glob.glob(os.path.join(ROOT, "projects", "*", "project.json"))
+    try:
+        return (len(paths), max((os.path.getmtime(p) for p in paths), default=0))
+    except OSError:
+        return None
+
+
 def _catalog():
+    """Cached: rebuild only when a problem/project file changes (mtime)."""
+    sig = _catalog_sig()
+    if sig is not None and _catalog_cache["sig"] == sig and _catalog_cache["data"] is not None:
+        return _catalog_cache["data"]
+    data = _build_catalog()
+    _catalog_cache["sig"], _catalog_cache["data"] = sig, data
+    return data
+
+
+def _build_catalog():
     """All selectable items (problems + built project steps), with a source list
     for grouping/filtering in the picker."""
     items, sources = [], ["Problems"]
@@ -177,12 +201,16 @@ def _catalog():
 def _resolve(key):
     if key.startswith("prob:"):
         pid = key[5:]
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", pid):
+            return None
         path = _problem_path(pid)
         return {"kind": "problem", "pid": pid, "path": path} if path else None
     if key.startswith("proj:"):
         try:
             _, name, sid = key.split(":", 2)
         except ValueError:
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not re.fullmatch(r"[A-Za-z0-9_]+", sid):
             return None
         d = os.path.join(ROOT, "projects", name)
         if not os.path.isfile(os.path.join(d, "project.json")):
@@ -276,7 +304,7 @@ def nvim_open(path):
 
 
 def nvim_save_all():
-    _nvim("--remote-send", "<C-\\><C-N>:wa<CR>")
+    return _nvim("--remote-send", "<C-\\><C-N>:wa<CR>").returncode == 0
 
 
 def teardown():
@@ -319,21 +347,46 @@ def _parse_json_line(proc):
                 return json.loads(line)
             except Exception:
                 continue
-    return {"status": "error", "message": (proc.stderr or proc.stdout or "no output").strip()[:4000]}
+    msg = (proc.stderr or proc.stdout or "no output").strip()[:4000]
+    rc = getattr(proc, "returncode", 0)
+    if rc not in (0, 1):
+        msg = f"(exit {rc}) {msg}"
+    return {"status": "error", "message": msg}
 
 
 def _run_item(key):
     r = _resolve(key)
     if not r:
         return {"status": "error", "message": "unknown item"}
-    nvim_save_all()
-    if r["kind"] == "problem":
-        cmd = [PYTHON, os.path.join(ROOT, "check.py"), r["pid"]]
-    else:
-        cmd = [PYTHON, r["path"]]  # step file's __main__ -> project_runner, emits PREP_JSON
-    env = dict(os.environ, PREP_JSON="1")
-    proc = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=600)
-    return _parse_json_line(proc)
+    if not _run_lock.acquire(blocking=False):
+        return {"status": "error", "message": "A run is already in progress \u2014 wait for it to finish."}
+    try:
+        if not nvim_save_all():
+            return {"status": "error",
+                    "message": "Could not save the editor buffers \u2014 is the nvim terminal connected? Reconnect the tab and retry."}
+        cmd = [PYTHON, os.path.join(ROOT, "check.py"), r["pid"]] if r["kind"] == "problem" else [PYTHON, r["path"]]
+        env = dict(os.environ, PREP_JSON="1")
+        try:
+            # new session so a timeout kills the whole tree (check.py spawns grandchildren)
+            proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, start_new_session=True)
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to launch run: {e}"}
+        try:
+            out, err = proc.communicate(timeout=600)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                proc.kill()
+            try:
+                proc.communicate(timeout=5)
+            except Exception:
+                pass
+            return {"status": "error", "message": "Run timed out after 600 s and was killed."}
+        return _parse_json_line(subprocess.CompletedProcess(cmd, proc.returncode, out, err))
+    finally:
+        _run_lock.release()
 
 
 def _text(cmd):
@@ -388,13 +441,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, f.read(), ctype)
 
     def _body_json(self):
-        n = int(self.headers.get("Content-Length", 0) or 0)
+        try:
+            n = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            n = 0
+        n = max(0, min(n, 1 << 20))   # floor at 0 (no negative read -> no hang), cap at 1 MiB
         try:
             return json.loads(self.rfile.read(n) or b"{}")
         except Exception:
             return {}
 
+    def _authed(self):
+        """Block CSRF: a malicious page in another tab can POST to loopback, but
+        cannot read our same-origin /api/config token, and its Origin won't match."""
+        if self.headers.get("X-MLE-Token") != _SECRET:
+            return False
+        origin = self.headers.get("Origin") or ""
+        if not origin:
+            return True   # non-browser / same-origin fetch without Origin
+        host = urlparse(origin).hostname
+        return host in ("127.0.0.1", "localhost", "::1")   # any loopback port (tunnel-friendly); token is the real guard
+
     def do_GET(self):
+        try:
+            return self._do_GET()
+        except Exception as e:
+            try: self._send(500, {"status": "error", "error": str(e)[:2000]})
+            except Exception: pass
+
+    def _do_GET(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if u.path in ("/", "/index.html"):
@@ -402,7 +477,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path.startswith("/static/"):
             return self._serve_static(u.path[len("/static/"):])
         if u.path == "/api/config":
-            return self._send(200, {"ttyd_port": TTYD_PORT})
+            return self._send(200, {"ttyd_port": TTYD_PORT, "token": _SECRET})
         if u.path == "/api/catalog":
             return self._send(200, _catalog())
         if u.path == "/api/item":
@@ -413,7 +488,16 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        try:
+            return self._do_POST()
+        except Exception as e:
+            try: self._send(500, {"status": "error", "error": str(e)[:2000]})
+            except Exception: pass
+
+    def _do_POST(self):
         u = urlparse(self.path)
+        if not self._authed():
+            return self._send(403, {"error": "forbidden (missing/invalid token)"})
         data = self._body_json()
         key = str(data.get("key", ""))
         if u.path == "/api/open":

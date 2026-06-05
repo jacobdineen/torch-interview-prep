@@ -39,40 +39,22 @@ fi
 # drive it remotely (open buffers, save) — see web/serve-app.sh.
 SOCK="${NVIM_LISTEN:-}"
 PERSIST="${NVIM_PERSISTENT:-1}"          # 1 = ONE persistent server + a UI client per connection (default); 0 = legacy fresh-nvim-per-connection
-SRV_PIDFILE="/tmp/mle_nvim_server.pid"
-SRV_LOG="/tmp/mle_nvim_server.log"
+ENSURE="$REPO/web/mle-nvim-ensure.sh"
 
-# Ensure exactly ONE persistent headless nvim is listening on $SOCK, (re)starting
-# it if needed. Idempotent; safe under ttyd -m 1. This is the fix for the old race
-# where every browser (re)connection spawned a new nvim that rm-ed and rebound the
-# shared socket, orphaning the others and leaving a stale, unresponsive socket.
-ensure_server() {
-  nvim --server "$SOCK" --remote-expr 1 >/dev/null 2>&1 && return 0
-  rm -f "$SOCK"
-  if [ -n "$START_FILE" ]; then
-    setsid nvim --headless --listen "$SOCK" "$START_FILE" >"$SRV_LOG" 2>&1 &
-  else
-    setsid nvim --headless --listen "$SOCK" >"$SRV_LOG" 2>&1 &
-  fi
-  echo $! > "$SRV_PIDFILE"
-  for _ in $(seq 1 100); do nvim --server "$SOCK" --remote-expr 1 >/dev/null 2>&1 && return 0; sleep 0.1; done
-  return 1
-}
+q() { printf '%q' "$1"; }   # shell-quote a value safely for embedding in the ttyd command
 
 if [ -n "$SOCK" ] && [ "$PERSIST" = "1" ]; then
-  ensure_server || echo "warning: nvim server slow to start; reconnect if the editor looks blank" >&2
-  ESC_START=""; [ -n "$START_FILE" ] && ESC_START=" '$START_FILE'"
-  # Per ttyd connection: attach a UI to the persistent server, reviving it first if
-  # it ever exited (e.g. the user ran :qa). Buffers survive reconnects; no race.
-  inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\"
-if ! nvim --server '$SOCK' --remote-expr 1 >/dev/null 2>&1; then rm -f '$SOCK'; setsid nvim --headless --listen '$SOCK'$ESC_START >'$SRV_LOG' 2>&1 & echo \$! > '$SRV_PIDFILE'; for _ in \$(seq 1 100); do nvim --server '$SOCK' --remote-expr 1 >/dev/null 2>&1 && break; sleep 0.1; done; fi
-exec nvim --server '$SOCK' --remote-ui"
+  # One persistent headless nvim; ttyd attaches a UI client per connection. Fixes the
+  # old race where every (re)connection spawned a new nvim that rm-ed and rebound the
+  # shared socket, orphaning the others and leaving a stale, unresponsive socket.
+  bash "$ENSURE" "$SOCK" "$START_FILE" || echo "warning: nvim server slow to start; reconnect if the editor looks blank" >&2
+  inner="cd $(q "$REPO") && export PATH=$(q "$REPO/.venv/bin"):\"\$PATH\"; bash $(q "$ENSURE") $(q "$SOCK") $(q "$START_FILE"); exec nvim --server $(q "$SOCK") --remote-ui"
 else
   # legacy: a fresh nvim per connection (set NVIM_PERSISTENT=0 to force this)
-  inner="cd '$REPO' && export PATH='$REPO/.venv/bin':\"\$PATH\""
+  inner="cd $(q "$REPO") && export PATH=$(q "$REPO/.venv/bin"):\"\$PATH\""
   nvim_cmd="exec nvim"
-  if [ -n "$SOCK" ]; then inner="$inner && rm -f '$SOCK'"; nvim_cmd="$nvim_cmd --listen '$SOCK'"; fi
-  [ -n "$START_FILE" ] && nvim_cmd="$nvim_cmd '$START_FILE'"
+  if [ -n "$SOCK" ]; then inner="$inner && rm -f $(q "$SOCK")"; nvim_cmd="$nvim_cmd --listen $(q "$SOCK")"; fi
+  [ -n "$START_FILE" ] && nvim_cmd="$nvim_cmd $(q "$START_FILE")"
   inner="$inner && $nvim_cmd"
 fi
 
@@ -85,9 +67,10 @@ if [ "$BIND" = "lo" ]; then
   echo "    ssh -L $PORT:localhost:$PORT $(whoami)@<this-host>"
   echo "or set BIND=tailscale0 (and AUTH=user:pass) to expose on Tailscale. See docs/web-nvim.md."
 elif [ -z "$AUTH" ]; then
-  echo "WARNING: binding to interface '$BIND' with NO auth — anyone who can reach it gets your shell." >&2
-  echo "         Set AUTH=user:password (and ideally TLS). Continuing in 3s; Ctrl-C to abort." >&2
-  sleep 3
+  echo "ERROR: BIND='$BIND' is not loopback but AUTH is empty — refusing to expose your shell." >&2
+  echo "       Set AUTH=user:password (recommended), or ALLOW_NO_AUTH=1 to override." >&2
+  [ "${ALLOW_NO_AUTH:-0}" = "1" ] || exit 1
+  echo "       ALLOW_NO_AUTH=1 set — continuing WITHOUT auth." >&2
 fi
 
 # -W writable, -O check-origin, -m 1 single client.

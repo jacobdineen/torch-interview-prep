@@ -9,7 +9,7 @@ const api = {
   },
 };
 
-let ITEMS = [], SOURCES = [], PROJECTS = {};
+let ITEMS = [], SOURCES = [], PROJECTS = {}, TOKEN = "";
 let CURRENT = null, HILITE = 0;
 let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
 
@@ -18,6 +18,7 @@ async function init() {
   applyZoom(parseFloat(localStorage.getItem("mle_ed_zoom")) || 1);
 
   const cfg = await api.get("/api/config");
+  TOKEN = cfg.token || "";
   $("nvim").src = `${location.protocol}//${location.hostname}:${cfg.ttyd_port}/`;
 
   const cat = await api.get("/api/catalog");
@@ -47,7 +48,7 @@ async function init() {
   window.addEventListener("resize", debounce(clampSplits, 120));
   window.addEventListener("popstate", onPopState);
 
-  sourceSel.addEventListener("change", () => { renderPalette(); openPalette(); updateProgress(); });
+  sourceSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
   const f = $("filter");
   f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
   f.addEventListener("focus", () => { renderPalette(); openPalette(); });
@@ -416,8 +417,15 @@ async function selectItem(key, push = true) {
 }
 function onPopState() {
   const k = new URLSearchParams(location.search).get("key");
-  if (k && ITEMS.find((x) => x.key === k)) { if (k !== CURRENT) selectItem(k, false); }
-  else showHome();
+  if (k && ITEMS.find((x) => x.key === k)) {
+    if (document.body.classList.contains("home-active")) {   // came from the home view
+      document.body.classList.remove("home-active");
+      $("home").classList.add("hidden");
+      $("split").classList.remove("hidden");
+      renderPalette(); updateProgress(); clampSplits();
+    }
+    if (k !== CURRENT) selectItem(k, false);
+  } else showHome();
 }
 
 function resetResults() {
