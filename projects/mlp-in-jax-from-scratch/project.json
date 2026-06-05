@@ -1,0 +1,204 @@
+{
+  "name": "mlp-in-jax-from-scratch",
+  "title": "Build an MLP in JAX from Scratch",
+  "parts": [
+    {
+      "title": "PRNG & Random Sampling",
+      "description": "Set up JAX's functional PRNG: wrap seeds, split keys, and sample random tensors."
+    },
+    {
+      "title": "Synthetic Data & Labels",
+      "description": "Generate input features, assign deterministic class labels, and one-hot encode targets."
+    },
+    {
+      "title": "Parameter Initialization",
+      "description": "Initialize a single linear layer and extend to a full MLP parameter list."
+    },
+    {
+      "title": "Forward Pass Building Blocks",
+      "description": "Implement the linear layer, ReLU, softmax, and the full MLP forward pass."
+    },
+    {
+      "title": "Loss & Metrics",
+      "description": "Compute log-softmax, mean cross-entropy loss, and classification accuracy."
+    },
+    {
+      "title": "Autodiff & SGD Update",
+      "description": "Wrap the loss for autodiff, take gradients with jax.grad, and apply SGD updates."
+    },
+    {
+      "title": "Training Loop & Inference",
+      "description": "Combine the pieces into a training step, an epoch loop, and a prediction function."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "make_prng_key",
+      "part": 0,
+      "points": 5,
+      "signature": "make_prng_key(seed)",
+      "doc": "Create a PRNG key from an integer seed."
+    },
+    {
+      "id": "0002",
+      "name": "split_prng_key",
+      "part": 0,
+      "points": 5,
+      "signature": "split_prng_key(key, num=2)",
+      "doc": "Split a PRNG key into `num` independent keys."
+    },
+    {
+      "id": "0003",
+      "name": "sample_normal_matrix",
+      "part": 0,
+      "points": 5,
+      "signature": "sample_normal_matrix(key, shape)",
+      "doc": "Sample a standard normal array of the given shape."
+    },
+    {
+      "id": "0004",
+      "name": "sample_input_features",
+      "part": 1,
+      "points": 5,
+      "signature": "sample_input_features(key, n_samples, n_features)",
+      "doc": "Draw a standard-normal feature matrix of shape (n_samples, n_features)."
+    },
+    {
+      "id": "0005",
+      "name": "assign_class_labels",
+      "part": 1,
+      "points": 5,
+      "signature": "assign_class_labels(X, n_classes)",
+      "doc": "Label each row by argmax over sums of n_classes contiguous feature-column groups."
+    },
+    {
+      "id": "0006",
+      "name": "one_hot_encode_labels",
+      "part": 1,
+      "points": 5,
+      "signature": "one_hot_encode_labels(labels, n_classes)",
+      "doc": "Return float one-hot rows of the integer labels with n_classes columns."
+    },
+    {
+      "id": "0007",
+      "name": "init_linear_layer",
+      "part": 2,
+      "points": 5,
+      "signature": "init_linear_layer(key, in_dim, out_dim, scale=0.1)",
+      "doc": "Initialize one linear layer: W = scale * normal((in_dim, out_dim)), b = zeros(out_dim)."
+    },
+    {
+      "id": "0008",
+      "name": "init_mlp_params",
+      "part": 2,
+      "points": 5,
+      "signature": "init_mlp_params(key, layer_sizes)",
+      "doc": "Initialize a list of (W, b) layers by splitting keys across consecutive layer sizes."
+    },
+    {
+      "id": "0009",
+      "name": "linear_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "linear_forward(layer, x)",
+      "doc": "Apply an affine layer (W, b) to x: x @ W + b."
+    },
+    {
+      "id": "0010",
+      "name": "relu_activation",
+      "part": 3,
+      "points": 5,
+      "signature": "relu_activation(x)",
+      "doc": "Elementwise ReLU: max(x, 0)."
+    },
+    {
+      "id": "0011",
+      "name": "softmax_probabilities",
+      "part": 3,
+      "points": 5,
+      "signature": "softmax_probabilities(logits)",
+      "doc": "Numerically stable softmax over the last axis."
+    },
+    {
+      "id": "0012",
+      "name": "mlp_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "mlp_forward(params, x)",
+      "doc": "Run the MLP: linear+ReLU on every layer except the last, which is linear only."
+    },
+    {
+      "id": "0013",
+      "name": "log_softmax_logits",
+      "part": 4,
+      "points": 5,
+      "signature": "log_softmax_logits(logits)",
+      "doc": "Compute the numerically stable log-softmax of logits over the last axis."
+    },
+    {
+      "id": "0014",
+      "name": "cross_entropy_loss",
+      "part": 4,
+      "points": 5,
+      "signature": "cross_entropy_loss(logits, one_hot_targets)",
+      "doc": "Compute the mean cross-entropy loss between logits and one-hot targets."
+    },
+    {
+      "id": "0015",
+      "name": "classification_accuracy",
+      "part": 4,
+      "points": 5,
+      "signature": "classification_accuracy(logits, labels)",
+      "doc": "Compute the fraction of rows whose argmax prediction matches the integer labels."
+    },
+    {
+      "id": "0016",
+      "name": "loss_fn_of_params",
+      "part": 5,
+      "points": 5,
+      "signature": "loss_fn_of_params(params, x, one_hot_targets)",
+      "doc": "Cross-entropy loss as a pure function of params, for jax.grad to differentiate."
+    },
+    {
+      "id": "0017",
+      "name": "compute_param_grads",
+      "part": 5,
+      "points": 5,
+      "signature": "compute_param_grads(params, x, one_hot_targets)",
+      "doc": "Gradient of the loss with respect to params (same pytree structure)."
+    },
+    {
+      "id": "0018",
+      "name": "sgd_update_params",
+      "part": 5,
+      "points": 5,
+      "signature": "sgd_update_params(params, grads, lr)",
+      "doc": "Apply one SGD step: subtract lr * grad from each parameter leaf."
+    },
+    {
+      "id": "0019",
+      "name": "training_step",
+      "part": 6,
+      "points": 5,
+      "signature": "training_step(params, x, one_hot_targets, lr)",
+      "doc": "Perform one SGD step: compute the loss and grads, update params, return (new_params, loss)."
+    },
+    {
+      "id": "0020",
+      "name": "train_mlp",
+      "part": 6,
+      "points": 5,
+      "signature": "train_mlp(params, X, one_hot_targets, lr, n_steps)",
+      "doc": "Run n_steps of full-batch SGD, returning the final params and the list of per-step losses."
+    },
+    {
+      "id": "0021",
+      "name": "predict_classes",
+      "part": 6,
+      "points": 5,
+      "signature": "predict_classes(params, X)",
+      "doc": "Return the predicted integer class for each row as the argmax of the MLP logits."
+    }
+  ]
+}
