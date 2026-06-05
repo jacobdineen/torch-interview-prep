@@ -366,10 +366,12 @@ function setEditorWarn(msg, kind) {
   const w = $("editor-warn"); if (!w) return;
   w.textContent = msg || ""; w.className = "editor-warn" + (msg ? " " + (kind || "warn") : "");
 }
-async function openEditor(key) {
+async function openEditor(key, seq) {
   setEditorWarn("opening…", "info");
-  try { const r = await api.post("/api/open", { key }); setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim", "warn"); }
-  catch (e) { setEditorWarn("editor open failed", "warn"); }
+  try {
+    const r = await api.post("/api/open", { key });
+    if (seq === _selSeq) setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim", "warn");
+  } catch (e) { if (seq === _selSeq) setEditorWarn("editor open failed", "warn"); }
 }
 async function selectItem(key, push = true) {
   const seq = ++_selSeq;
@@ -377,8 +379,9 @@ async function selectItem(key, push = true) {
   localStorage.setItem("mle_last_key", key);
   setEditorWarn("");
   $("left").classList.add("loading");
+  openEditor(key, seq);                         // switch the editor in the background — never block the description on nvim
   let m;
-  try { [m] = await Promise.all([api.get("/api/item?key=" + encodeURIComponent(key)), openEditor(key)]); }
+  try { m = await api.get("/api/item?key=" + encodeURIComponent(key)); }
   catch (e) { if (seq === _selSeq) { $("left").classList.remove("loading"); flashResults("fail", "Couldn't load " + key + ": " + e.message); } return; }
   if (seq !== _selSeq) return;
   $("left").classList.remove("loading");

@@ -271,7 +271,8 @@ def _nvim(*args, timeout=10):
 
 
 def nvim_open(path):
-    return _nvim("--remote", path).returncode == 0
+    # Short timeout: a busy/stale nvim must not block the open request for long.
+    return _nvim("--remote", path, timeout=3).returncode == 0
 
 
 def nvim_save_all():
