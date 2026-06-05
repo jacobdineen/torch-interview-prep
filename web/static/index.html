@@ -13,12 +13,17 @@
     <div class="workspace-only" style="gap:11px; align-items:center; flex:1; min-width:0;">
       <select id="source" title="Problems or a project" aria-label="Source"></select>
       <select id="framework" title="Filter by framework" aria-label="Framework"></select>
+      <select id="status-filter" title="Filter by status" aria-label="Status">
+        <option value="all">All</option><option value="unsolved">Unsolved</option>
+        <option value="attempted">Attempted</option><option value="solved">Solved</option>
+      </select>
       <div class="search-wrap">
         <input id="filter" type="text" role="combobox" aria-expanded="false" aria-controls="palette"
           placeholder="Search id or title…   ( ↑↓ · Enter )" title="Press ? for keyboard shortcuts" autocomplete="off" spellcheck="false" />
         <div id="palette" class="palette hidden" role="listbox" aria-label="Problems"></div>
       </div>
       <div class="nav-group">
+        <button id="outline-btn" class="icon-btn" title="Project outline (o)" aria-label="Outline">☰</button>
         <button id="prev-btn" class="icon-btn" title="Previous (←)" aria-label="Previous">‹</button>
         <button id="next-btn" title="Next unsolved (n)">next ›</button>
       </div>
@@ -39,6 +44,7 @@
       <h1 tabindex="-1">Pick a track</h1>
       <p>Standalone problems by framework, or work end-to-end through a project.</p>
     </div>
+    <div id="home-stats" class="home-stats"></div>
     <div id="resume-banner" class="resume-banner hidden"></div>
     <div class="home-section">
       <h2>Problems</h2>
@@ -57,6 +63,7 @@
         <div class="prob-head-main">
           <div id="prob-id" class="prob-eyebrow"></div>
           <h1 id="prob-title">—</h1>
+          <div id="prob-crumb" class="prob-crumb"></div>
         </div>
         <div class="tags">
           <span id="prob-status" class="tag"></span>
@@ -94,6 +101,7 @@
       <div class="left-actions">
         <button id="hint-btn">💡 Hint</button>
         <button id="solution-btn">Show solution</button>
+        <button id="reset-btn" class="reset" title="Restore the starting stub (discards your code)">↺ Reset</button>
       </div>
       <pre id="aux-out" class="aux"></pre>
     </section>
@@ -105,6 +113,7 @@
         <span class="editor-label">editor — your real nvim <code>:w</code> then Run</span>
         <span id="editor-warn" class="editor-warn"></span>
         <span class="spacer"></span>
+        <label class="autoadv" title="On a pass, jump to the next unsolved"><input type="checkbox" id="autoadvance"> auto-next</label>
         <div class="zoom-group" title="Editor text size (independent of browser zoom)">
           <button id="zoom-out" title="Smaller (Ctrl -)" aria-label="Editor text smaller">−</button>
           <span id="zoom-val" class="zoom-val">100%</span>
@@ -132,9 +141,26 @@
       <tr><td><kbd>Enter</kbd></td><td>open highlighted</td><td><kbd>n</kbd></td><td>next unsolved</td></tr>
       <tr><td><kbd>←</kbd><kbd>→</kbd></td><td>prev / next item</td><td><kbd>h</kbd></td><td>hint</td></tr>
       <tr><td><kbd>g</kbd></td><td>home</td><td><kbd>Ctrl</kbd>+<kbd>±</kbd></td><td>editor zoom</td></tr>
-      <tr><td><kbd>?</kbd></td><td>this help</td><td><kbd>Esc</kbd></td><td>close search</td></tr>
+      <tr><td><kbd>?</kbd></td><td>this help</td><td><kbd>Esc</kbd></td><td>close search / outline</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>command palette</td><td><kbd>o</kbd></td><td>project outline</td></tr>
     </table>
   </dialog>
+
+  <!-- project outline drawer -->
+  <aside id="outline" class="outline hidden" aria-label="Project outline">
+    <div class="outline-head"><span id="outline-title">Outline</span><button id="outline-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <div id="outline-body" class="outline-body"></div>
+  </aside>
+  <div id="outline-scrim" class="scrim hidden"></div>
+
+  <!-- command palette (Ctrl-K) -->
+  <dialog id="cmdk" class="cmdk">
+    <input id="cmdk-input" type="text" placeholder="Jump to a problem, project, or action…" autocomplete="off" spellcheck="false" />
+    <div id="cmdk-list" class="cmdk-list" role="listbox"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="confetti" class="confetti" aria-hidden="true"></div>
 
   <script src="/static/app.js"></script>
 </body>

@@ -194,7 +194,8 @@ def _build_catalog():
                       "group": _tier(pid) or "Problems", "id": pid,
                       "title": _problem_title(pid), "framework": frameworks.problem_framework(pid),
                       "numpy": frameworks.problem_has_numpy(pid),
-                      "solved": bool(prog.get(pid, {}).get("ever_passed"))})
+                      "solved": bool(prog.get(pid, {}).get("ever_passed")),
+                      "last_status": prog.get(pid, {}).get("last_status")})
     projects = {}
     for d in _project_dirs():
         man = _manifest(d)
@@ -212,7 +213,8 @@ def _build_catalog():
                           "source": name, "framework": fw,
                           "group": f"Part {s.get('part', 0) + 1}: {_part(man, s.get('part', 0))['title']}",
                           "id": s["id"], "title": s["name"],
-                          "solved": bool(pp.get(s["id"], {}).get("ever_passed"))})
+                          "solved": bool(pp.get(s["id"], {}).get("ever_passed")),
+                          "last_status": pp.get(s["id"], {}).get("last_status")})
     return {"sources": sources, "items": items, "projects": projects,
             "frameworks": [frameworks.NUMPY, frameworks.TORCH]}
 
@@ -454,6 +456,27 @@ def _solution_text(key, give_up):
     return _text([PYTHON, os.path.join(ROOT, "projects.py"), r["name"], r["sid"], *extra])
 
 
+def _reset_to_stub(key):
+    """Restore a step/problem working file to its committed pristine stub (discards
+    the user's solution for that item) and reload it in the editor."""
+    r = _resolve(key)
+    if not r:
+        return {"ok": False, "error": "unknown item"}
+    rel = os.path.relpath(r["path"], ROOT)
+    try:
+        proc = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=ROOT,
+                              capture_output=True, text=True, timeout=10)
+        if proc.returncode != 0:
+            return {"ok": False, "error": "no committed stub for this item"}
+        with open(r["path"], "w") as f:
+            f.write(proc.stdout)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    nvim_open(r["path"])
+    _nvim("--remote-send", "<C-\\><C-N>:edit!<CR>", timeout=4)
+    return {"ok": True}
+
+
 # ---------- HTTP ----------
 
 class Handler(BaseHTTPRequestHandler):
@@ -545,6 +568,8 @@ class Handler(BaseHTTPRequestHandler):
             if not r:
                 return self._send(404, {"error": "no such item"})
             return self._send(200, {"ok": nvim_open(r["path"])})
+        if u.path == "/api/reset":
+            return self._send(200, _reset_to_stub(key))
         if u.path == "/api/run":
             return self._send(200, _run_item(key))
         if u.path == "/api/solution":

@@ -60,6 +60,7 @@ async function init() {
   f.addEventListener("focus", () => { renderPalette(); openPalette(); });
   f.addEventListener("keydown", onFilterKey);
   document.addEventListener("click", (e) => { if (!e.target.closest(".search-wrap")) closePalette(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("outline").classList.contains("hidden")) closeOutline(); });
 
   $("home-btn").addEventListener("click", showHome);
   $("theme-btn").addEventListener("click", toggleTheme);
@@ -72,6 +73,16 @@ async function init() {
   $("hint-btn").addEventListener("click", showHint);
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
+  $("status-filter").addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
+  $("outline-btn").addEventListener("click", toggleOutline);
+  $("outline-close").addEventListener("click", closeOutline);
+  $("outline-scrim").addEventListener("click", closeOutline);
+  $("reset-btn").addEventListener("click", resetToStub);
+  $("autoadvance").checked = localStorage.getItem("mle_autoadvance") === "1";
+  $("autoadvance").addEventListener("change", (e) => localStorage.setItem("mle_autoadvance", e.target.checked ? "1" : "0"));
+  $("cmdk-input").addEventListener("input", () => { CMDK_HI = 0; renderCmdk(); });
+  $("cmdk-input").addEventListener("keydown", onCmdkKey);
+  $("cmdk").addEventListener("click", (e) => { if (e.target.id === "cmdk") $("cmdk").close(); });
   $("sd-close").addEventListener("click", () => $("shortcuts-dlg").close());
   $("shortcuts-dlg").addEventListener("click", (e) => { if (e.target.id === "shortcuts-dlg") $("shortcuts-dlg").close(); });
 
@@ -137,6 +148,7 @@ function card(cls, icon, title, sub, desc, stats, onClick) {
   return el;
 }
 function renderHome() {
+  renderStats();
   const rb = $("resume-banner"); rb.innerHTML = "";
   const lastKey = localStorage.getItem("mle_last_key");
   const last = lastKey && ITEMS.find((x) => x.key === lastKey);
@@ -261,6 +273,7 @@ function clampSplits() {
 
 function setupShortcuts() {
   document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openCmdk(); return; }
     const field = inField();
     const home = document.body.classList.contains("home-active");
     // editor zoom: only in the workspace, page-focused
@@ -280,6 +293,7 @@ function setupShortcuts() {
     else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
     else if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
     else if (e.key === "g") { e.preventDefault(); showHome(); }
+    else if (e.key === "o") { e.preventDefault(); toggleOutline(); }
   });
 }
 
@@ -289,6 +303,7 @@ function view() {
   return ITEMS.filter((x) => {
     if (src !== "All" && x.source !== src) return false;
     if (fw !== "All" && x.framework !== fw && !(fw === "numpy" && x.numpy)) return false;
+    if (!statusOk(x)) return false;
     if (!q) return true;
     return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
   });
@@ -397,6 +412,8 @@ async function selectItem(key, push = true) {
   $("prob-id").textContent = (m.source && m.source !== "Problems" ? m.source + " · " : "") + (m.id || "");
   $("prob-title").textContent = m.title || m.id;
   $("prob-group").textContent = m.group || "";
+  setBreadcrumb(key);
+  if (!$("outline").classList.contains("hidden")) renderOutline();
   const fwt = $("prob-framework");
   let fwText = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
   if (m.numpy) fwText = "PyTorch + NumPy";
@@ -456,7 +473,7 @@ async function run(submit) {
   if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
   renderResult(r, submit);
   setRunStatus(r.status);
-  if (r.status === "pass") markSolved(key);
+  if (r.status === "pass") { markSolved(key); maybeAutoAdvance(); }
 }
 function setRunStatus(status) {
   const btn = $("run-btn");
@@ -467,7 +484,11 @@ function setRunStatus(status) {
 }
 function markSolved(key) {
   const it = ITEMS.find((x) => x.key === key);
-  if (it && !it.solved) { it.solved = true; updateProgress(); }
+  const newly = it && !it.solved;
+  if (newly) {
+    it.solved = true; updateProgress(); recordSolve(key); celebrate(key);
+    if (!$("outline").classList.contains("hidden")) renderOutline();
+  }
   // reflect in the palette row if present
   const row = $("palette").querySelector(`.pal-row[data-key="${cssEsc(key)}"] .mark`);
   if (row) { row.classList.add("ok"); row.textContent = "✓"; }
@@ -520,5 +541,179 @@ async function showSolution() {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\\]]/g, "\\$&"); }
+
+
+// ===== status filter helper =====
+function statusOk(x) {
+  const st = $("status-filter").value;
+  if (st === "solved") return !!x.solved;
+  if (st === "unsolved") return !x.solved;
+  if (st === "attempted") return !x.solved && x.last_status === "fail";
+  return true;
+}
+
+// ===== breadcrumb: position within the current part =====
+function setBreadcrumb(key) {
+  const el = $("prob-crumb"); if (!el) return;
+  const it = ITEMS.find((x) => x.key === key);
+  if (!it) { el.textContent = ""; return; }
+  const peers = ITEMS.filter((x) => x.source === it.source && x.group === it.group);
+  const idx = peers.findIndex((x) => x.key === key) + 1;
+  const solved = peers.filter((x) => x.solved).length;
+  el.innerHTML = `${esc(it.group)} · step <span class="cur">${idx}</span>/${peers.length}` +
+    ` · ${solved}/${peers.length} solved here`;
+}
+
+// ===== project outline drawer =====
+let _olCollapsed = {};
+function renderOutline() {
+  const src = $("source").value === "All" ? (ITEMS.find((x) => x.key === CURRENT) || {}).source : $("source").value;
+  $("outline-title").textContent = src || "Outline";
+  const items = ITEMS.filter((x) => x.source === src);
+  const groups = [];
+  const byGroup = {};
+  for (const it of items) { if (!byGroup[it.group]) { byGroup[it.group] = []; groups.push(it.group); } byGroup[it.group].push(it); }
+  let html = "";
+  for (const g of groups) {
+    const gi = byGroup[g];
+    const done = gi.filter((x) => x.solved).length;
+    const col = _olCollapsed[g] ? " collapsed" : "";
+    html += `<div class="ol-part${col}" data-group="${esc(g)}">` +
+      `<div class="ol-part-head"><span class="caret">▾</span><span>${esc(g)}</span><span class="ol-count">${done}/${gi.length}</span></div>` +
+      `<div class="ol-steps">`;
+    for (const it of gi) {
+      const cur = it.key === CURRENT ? " cur" : "";
+      const mk = it.solved ? '<span class="mk ok">✓</span>' : (it.last_status === "fail" ? '<span class="mk fail">✗</span>' : '<span class="mk">·</span>');
+      html += `<div class="ol-step${cur}" data-key="${esc(it.key)}">${mk}<span class="sid">${esc(it.id)}</span><span class="snm">${esc(it.title)}</span></div>`;
+    }
+    html += `</div></div>`;
+  }
+  $("outline-body").innerHTML = html || `<div class="cmdk-empty">No steps.</div>`;
+  $("outline-body").querySelectorAll(".ol-part-head").forEach((h) => h.addEventListener("click", () => {
+    const g = h.parentElement.dataset.group; _olCollapsed[g] = !_olCollapsed[g]; h.parentElement.classList.toggle("collapsed");
+  }));
+  $("outline-body").querySelectorAll(".ol-step").forEach((r) => r.addEventListener("click", () => {
+    selectItem(r.dataset.key); closeOutline();
+  }));
+  const cur = $("outline-body").querySelector(".ol-step.cur"); if (cur) cur.scrollIntoView({ block: "center" });
+}
+function openOutline() { renderOutline(); $("outline").classList.remove("hidden"); $("outline-scrim").classList.remove("hidden"); }
+function closeOutline() { $("outline").classList.add("hidden"); $("outline-scrim").classList.add("hidden"); }
+function toggleOutline() { $("outline").classList.contains("hidden") ? openOutline() : closeOutline(); }
+
+// ===== reset to stub =====
+async function resetToStub() {
+  if (!CURRENT) return;
+  if (!confirm("Reset " + label(CURRENT) + " to the starting stub?\n\nThis DISCARDS your current code for this item and reloads the editor.")) return;
+  try {
+    const r = await api.post("/api/reset", { key: CURRENT });
+    if (r.ok) { flashResults("muted", "Reset to the starting stub. Your editor was reloaded."); }
+    else flashResults("fail", "Reset failed: " + (r.error || "unknown"));
+  } catch (e) { flashResults("fail", "Reset failed: " + e.message); }
+}
+
+// ===== auto-advance =====
+function maybeAutoAdvance() {
+  if ($("autoadvance").checked) setTimeout(gotoNextUnsolved, 1100);
+}
+
+// ===== solve tracking + stats + celebration =====
+function recordSolve(key) {
+  try {
+    const m = JSON.parse(localStorage.getItem("mle_solves") || "{}");
+    if (!m[key]) { m[key] = new Date().toISOString().slice(0, 10); localStorage.setItem("mle_solves", JSON.stringify(m)); }
+  } catch (e) {}
+}
+function computeStats() {
+  let solves = {};
+  try { solves = JSON.parse(localStorage.getItem("mle_solves") || "{}"); } catch (e) {}
+  const days = new Set(Object.values(solves));
+  const today = new Date().toISOString().slice(0, 10);
+  const solvedToday = Object.values(solves).filter((d) => d === today).length;
+  // streak: consecutive days up to today (or yesterday) with >=1 solve
+  let streak = 0;
+  const d = new Date();
+  if (!days.has(today)) d.setDate(d.getDate() - 1);  // allow streak to count through yesterday
+  for (;;) {
+    const ds = d.toISOString().slice(0, 10);
+    if (days.has(ds)) { streak++; d.setDate(d.getDate() - 1); } else break;
+  }
+  const total = ITEMS.filter((x) => x.solved).length;
+  return { total, solvedToday, streak, allDays: days.size };
+}
+function renderStats() {
+  const el = $("home-stats"); if (!el) return;
+  const s = computeStats();
+  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  el.innerHTML =
+    stat(s.total + " <span style='font-size:13px;color:var(--muted)'>/ " + ITEMS.length + "</span>", "Solved") +
+    stat(s.solvedToday, "Today") +
+    stat((s.streak > 0 ? "<span class='flame'>🔥</span> " : "") + s.streak, "Day streak");
+}
+let _confettiTimer = null;
+function celebrate(key) {
+  const t = $("toast");
+  t.innerHTML = `<span class="tk">✓</span>Solved ${esc(label(key))}!`;
+  t.classList.add("show");
+  clearTimeout(_confettiTimer);
+  _confettiTimer = setTimeout(() => t.classList.remove("show"), 2600);
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = $("confetti"); const colors = ["#6cb6ff", "#3fb950", "#d29922", "#ff8a65", "#a371f7"];
+  let html = "";
+  for (let i = 0; i < 80; i++) {
+    const left = ((i * 53) % 100), delay = (i % 10) / 18, dur = 1.6 + (i % 7) / 10;
+    const c = colors[i % colors.length], rot = (i * 37) % 360;
+    html += `<i style="left:${left}%;background:${c};transform:rotate(${rot}deg);` +
+      `animation:confetti-fall ${dur}s linear ${delay}s forwards;border-radius:${i % 2 ? '50%' : '1px'}"></i>`;
+  }
+  box.innerHTML = html;
+  setTimeout(() => { box.innerHTML = ""; }, 3200);
+}
+
+// ===== command palette (Ctrl-K) =====
+let CMDK = [], CMDK_HI = 0;
+function cmdkActions() {
+  return [
+    { kind: "act", id: "⌂", title: "Go to Home", src: "action", run: showHome },
+    { kind: "act", id: "☰", title: "Toggle project outline", src: "action", run: toggleOutline },
+    { kind: "act", id: "☾", title: "Toggle light / dark theme", src: "action", run: toggleTheme },
+    { kind: "act", id: "?", title: "Keyboard shortcuts", src: "action", run: () => $("shortcuts-dlg").showModal() },
+  ];
+}
+function openCmdk() {
+  const dlg = $("cmdk"); $("cmdk-input").value = ""; CMDK_HI = 0; renderCmdk();
+  if (!dlg.open) dlg.showModal(); $("cmdk-input").focus();
+}
+function renderCmdk() {
+  const q = $("cmdk-input").value.trim().toLowerCase();
+  const acts = cmdkActions().filter((a) => !q || a.title.toLowerCase().includes(q));
+  const its = ITEMS.filter((x) => !q || (x.id + " " + x.title + " " + x.source).toLowerCase().includes(q)).slice(0, 60);
+  CMDK = [...acts, ...its.map((x) => ({ kind: "item", id: x.id, title: x.title, src: x.source, key: x.key, solved: x.solved }))];
+  if (CMDK_HI >= CMDK.length) CMDK_HI = Math.max(0, CMDK.length - 1);
+  const list = $("cmdk-list");
+  if (!CMDK.length) { list.innerHTML = `<div class="cmdk-empty">no matches</div>`; return; }
+  list.innerHTML = CMDK.map((c, i) =>
+    `<div class="cmdk-row${i === CMDK_HI ? " hi" : ""}" data-i="${i}">` +
+    `<span class="ck-ic">${c.kind === "act" ? esc(c.id) : (c.solved ? "✓" : "·")}</span>` +
+    `<span class="ck-id">${c.kind === "item" ? esc(c.id) : ""}</span>` +
+    `<span class="ck-t">${esc(c.title)}</span><span class="ck-src">${esc(c.src)}</span></div>`).join("");
+  list.querySelectorAll(".cmdk-row").forEach((r) => {
+    r.addEventListener("mousemove", () => { CMDK_HI = parseInt(r.dataset.i, 10); r.parentElement.querySelectorAll(".cmdk-row").forEach((x) => x.classList.toggle("hi", x === r)); });
+    r.addEventListener("click", () => cmdkRun(parseInt(r.dataset.i, 10)));
+  });
+  const hi = list.querySelector(".cmdk-row.hi"); if (hi) hi.scrollIntoView({ block: "nearest" });
+}
+function cmdkRun(i) {
+  const c = CMDK[i]; if (!c) return;
+  $("cmdk").close();
+  if (c.kind === "act") c.run();
+  else { if (document.body.classList.contains("home-active")) { const it = ITEMS.find((x) => x.key === c.key); enterTrack(it.source, it.framework || "All", c.key); } else selectItem(c.key); }
+}
+function onCmdkKey(e) {
+  if (e.key === "ArrowDown") { e.preventDefault(); CMDK_HI = Math.min(CMDK.length - 1, CMDK_HI + 1); renderCmdk(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); CMDK_HI = Math.max(0, CMDK_HI - 1); renderCmdk(); }
+  else if (e.key === "Enter") { e.preventDefault(); cmdkRun(CMDK_HI); }
+}
+
 
 init().catch(showInitError);
