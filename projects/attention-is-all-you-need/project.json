@@ -1,0 +1,684 @@
+{
+  "name": "attention-is-all-you-need",
+  "title": "Attention Is All You Need: Build the Transformer From Scratch",
+  "parts": [
+    {
+      "title": "Tokenization and Batching",
+      "description": "Build the vocabulary, encode and decode token ids, and pack padded sequences into batched tensors."
+    },
+    {
+      "title": "Embeddings and Positional Encoding",
+      "description": "Scale embeddings and construct the sinusoidal positional encoding matrix added to input embeddings."
+    },
+    {
+      "title": "Masks and Scaled Dot-Product Attention",
+      "description": "Build padding and causal masks and assemble scaled dot-product attention step by step."
+    },
+    {
+      "title": "Multi-Head Attention",
+      "description": "Split, permute, and merge heads, project Q/K/V, and assemble the full multi-head attention module."
+    },
+    {
+      "title": "Feed-Forward, LayerNorm, and Dropout",
+      "description": "Implement the position-wise feed-forward network, layer normalization, residual add-and-norm, and dropout."
+    },
+    {
+      "title": "Encoder, Decoder, and Full Model",
+      "description": "Stack encoder and decoder layers, tie output projections to embeddings, and run the complete forward pass."
+    },
+    {
+      "title": "Parameter Initialization",
+      "description": "Allocate the raw weight tensors (with requires_grad) for encoder/decoder layers and embeddings."
+    },
+    {
+      "title": "Training Objective and Schedule",
+      "description": "Implement teacher forcing, Noam warmup, label-smoothed KL loss, and token-level accuracy."
+    },
+    {
+      "title": "Adam Optimizer From Scratch",
+      "description": "Build Adam step by step: moment buffers, EMA updates, bias correction, the update rule, and gradient zeroing."
+    },
+    {
+      "title": "Training Step and Loop",
+      "description": "Run a forward pass, compute the label-smoothed loss, backpropagate, and step Adam across many iterations."
+    },
+    {
+      "title": "Decoding and Beam Search",
+      "description": "Generate sequences with greedy argmax and a length-penalized beam search over candidate hypotheses."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "build_token_to_id_vocab",
+      "part": 0,
+      "points": 5,
+      "signature": "build_token_to_id_vocab(sentences)",
+      "doc": "Build a token-to-id dict: the four special tokens first, then sorted unique whitespace tokens starting at id 4."
+    },
+    {
+      "id": "0002",
+      "name": "build_id_to_token_vocab",
+      "part": 0,
+      "points": 5,
+      "signature": "build_id_to_token_vocab(token_to_id)",
+      "doc": "Return the inverse mapping from id to token."
+    },
+    {
+      "id": "0003",
+      "name": "encode_sentence_to_ids",
+      "part": 0,
+      "points": 5,
+      "signature": "encode_sentence_to_ids(sentence, token_to_id)",
+      "doc": "Map a sentence's whitespace tokens to their ids, sending unknown tokens to the <unk> id 3, as a LongTensor."
+    },
+    {
+      "id": "0004",
+      "name": "decode_ids_to_tokens",
+      "part": 0,
+      "points": 5,
+      "signature": "decode_ids_to_tokens(ids, id_to_token)",
+      "doc": "Map each id in the sequence back to its token string, returning a list."
+    },
+    {
+      "id": "0005",
+      "name": "pad_id_sequence",
+      "part": 0,
+      "points": 5,
+      "signature": "pad_id_sequence(ids, length, pad_id=0)",
+      "doc": "Right-pad with pad_id or truncate the id tensor to exactly `length`, returning a LongTensor."
+    },
+    {
+      "id": "0006",
+      "name": "stack_padded_sequences_to_batch",
+      "part": 0,
+      "points": 5,
+      "signature": "stack_padded_sequences_to_batch(list_of_id_lists, pad_id=0)",
+      "doc": "Pad every id sequence to the batch's max length and stack into a (B, Smax) LongTensor."
+    },
+    {
+      "id": "0007",
+      "name": "scale_embeddings_by_sqrt_d_model",
+      "part": 1,
+      "points": 5,
+      "signature": "scale_embeddings_by_sqrt_d_model(emb, d_model)",
+      "doc": "Scale token embeddings up by the square root of the model dimension."
+    },
+    {
+      "id": "0008",
+      "name": "compute_positional_div_term",
+      "part": 1,
+      "points": 5,
+      "signature": "compute_positional_div_term(d_model)",
+      "doc": "Compute the geometric frequency divisors for the sinusoidal positional encoding."
+    },
+    {
+      "id": "0009",
+      "name": "build_position_index_column",
+      "part": 1,
+      "points": 5,
+      "signature": "build_position_index_column(max_len)",
+      "doc": "Build a column vector of position indices as floats from 0 to max_len-1."
+    },
+    {
+      "id": "0010",
+      "name": "fill_even_indices_with_sin",
+      "part": 1,
+      "points": 5,
+      "signature": "fill_even_indices_with_sin(pe, position, div_term)",
+      "doc": "Write sine values into the even feature columns of the positional encoding table."
+    },
+    {
+      "id": "0011",
+      "name": "fill_odd_indices_with_cos",
+      "part": 1,
+      "points": 5,
+      "signature": "fill_odd_indices_with_cos(pe, position, div_term)",
+      "doc": "Write cosine values into the odd feature columns of the positional encoding table."
+    },
+    {
+      "id": "0012",
+      "name": "build_sinusoidal_positional_encoding",
+      "part": 1,
+      "points": 5,
+      "signature": "build_sinusoidal_positional_encoding(max_len, d_model)",
+      "doc": "Assemble the full fixed sinusoidal positional encoding table of shape (max_len, d_model)."
+    },
+    {
+      "id": "0013",
+      "name": "add_positional_encoding_to_embeddings",
+      "part": 1,
+      "points": 5,
+      "signature": "add_positional_encoding_to_embeddings(emb, pe)",
+      "doc": "Add the positional encoding to the embeddings, broadcasting over the batch dimension."
+    },
+    {
+      "id": "0014",
+      "name": "build_padding_mask",
+      "part": 2,
+      "points": 5,
+      "signature": "build_padding_mask(ids, pad_id=0)",
+      "doc": "Build a boolean mask marking real (non-pad) token positions for attention."
+    },
+    {
+      "id": "0015",
+      "name": "build_causal_mask",
+      "part": 2,
+      "points": 5,
+      "signature": "build_causal_mask(seq_len)",
+      "doc": "Build a lower-triangular boolean mask allowing each position to attend only to earlier or equal positions."
+    },
+    {
+      "id": "0016",
+      "name": "combine_padding_and_causal_masks",
+      "part": 2,
+      "points": 5,
+      "signature": "combine_padding_and_causal_masks(pad_mask, causal_mask)",
+      "doc": "Combine padding and causal masks so a position is kept only if both allow it."
+    },
+    {
+      "id": "0017",
+      "name": "compute_raw_attention_scores",
+      "part": 2,
+      "points": 5,
+      "signature": "compute_raw_attention_scores(Q, K)",
+      "doc": "Compute unnormalized attention scores as the dot products between queries and keys."
+    },
+    {
+      "id": "0018",
+      "name": "scale_attention_scores",
+      "part": 2,
+      "points": 5,
+      "signature": "scale_attention_scores(scores, d_k)",
+      "doc": "Scale attention scores down by the square root of the key dimension."
+    },
+    {
+      "id": "0019",
+      "name": "mask_attention_scores_with_neg_inf",
+      "part": 2,
+      "points": 5,
+      "signature": "mask_attention_scores_with_neg_inf(scores, mask)",
+      "doc": "Replace blocked attention scores with a large negative value before softmax."
+    },
+    {
+      "id": "0020",
+      "name": "softmax_attention_weights",
+      "part": 2,
+      "points": 5,
+      "signature": "softmax_attention_weights(scores)",
+      "doc": "Turn attention scores into a probability distribution over keys."
+    },
+    {
+      "id": "0021",
+      "name": "apply_attention_weights_to_values",
+      "part": 2,
+      "points": 5,
+      "signature": "apply_attention_weights_to_values(weights, V)",
+      "doc": "Form the attention output as the weighted sum of value vectors."
+    },
+    {
+      "id": "0022",
+      "name": "scaled_dot_product_attention",
+      "part": 2,
+      "points": 5,
+      "signature": "scaled_dot_product_attention(Q, K, V, mask=None)",
+      "doc": "Compute scaled dot-product attention output from queries, keys, values, and an optional keep-mask."
+    },
+    {
+      "id": "0023",
+      "name": "split_last_dim_into_heads",
+      "part": 3,
+      "points": 5,
+      "signature": "split_last_dim_into_heads(x, n_heads)",
+      "doc": "Reshape the trailing model dimension into separate head and per-head feature dimensions."
+    },
+    {
+      "id": "0024",
+      "name": "transpose_heads_before_sequence",
+      "part": 3,
+      "points": 5,
+      "signature": "transpose_heads_before_sequence(x)",
+      "doc": "Move the head dimension ahead of the sequence dimension."
+    },
+    {
+      "id": "0025",
+      "name": "merge_heads_back_to_model_dim",
+      "part": 3,
+      "points": 5,
+      "signature": "merge_heads_back_to_model_dim(x)",
+      "doc": "Recombine the per-head features back into a single model dimension."
+    },
+    {
+      "id": "0026",
+      "name": "apply_linear_projection",
+      "part": 3,
+      "points": 5,
+      "signature": "apply_linear_projection(x, W, b)",
+      "doc": "Apply an affine linear map using an (in, out)-shaped weight and bias."
+    },
+    {
+      "id": "0027",
+      "name": "project_to_query_key_value",
+      "part": 3,
+      "points": 5,
+      "signature": "project_to_query_key_value(x_q, x_kv, attn_params)",
+      "doc": "Linearly project inputs into query, key, and value representations."
+    },
+    {
+      "id": "0028",
+      "name": "split_qkv_into_heads",
+      "part": 3,
+      "points": 5,
+      "signature": "split_qkv_into_heads(Q, K, V, n_heads)",
+      "doc": "Split each of query, key, and value into multiple attention heads."
+    },
+    {
+      "id": "0029",
+      "name": "multi_head_scaled_dot_product_attention",
+      "part": 3,
+      "points": 5,
+      "signature": "multi_head_scaled_dot_product_attention(Q, K, V, mask, n_heads)",
+      "doc": "Run scaled dot-product attention independently per head and recombine the results."
+    },
+    {
+      "id": "0030",
+      "name": "merge_heads_and_project_output",
+      "part": 3,
+      "points": 5,
+      "signature": "merge_heads_and_project_output(x, attn_params)",
+      "doc": "Apply the output linear projection to the merged attention result."
+    },
+    {
+      "id": "0031",
+      "name": "assemble_multi_head_attention_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "assemble_multi_head_attention_forward(x_q, x_kv, attn_params, mask, n_heads)",
+      "doc": "Run the full multi-head attention block from inputs to projected output."
+    },
+    {
+      "id": "0032",
+      "name": "apply_ffn_first_linear_and_relu",
+      "part": 4,
+      "points": 5,
+      "signature": "apply_ffn_first_linear_and_relu(x, ffn_params)",
+      "doc": "Project the input up to the feed-forward inner dimension and apply a ReLU nonlinearity."
+    },
+    {
+      "id": "0033",
+      "name": "apply_ffn_second_linear",
+      "part": 4,
+      "points": 5,
+      "signature": "apply_ffn_second_linear(h, ffn_params)",
+      "doc": "Project the inner feed-forward activations back down to the model dimension."
+    },
+    {
+      "id": "0034",
+      "name": "position_wise_feed_forward_network",
+      "part": 4,
+      "points": 5,
+      "signature": "position_wise_feed_forward_network(x, ffn_params)",
+      "doc": "Run the two-layer position-wise feed-forward network with a ReLU in between."
+    },
+    {
+      "id": "0035",
+      "name": "compute_layer_norm_mean_and_variance",
+      "part": 4,
+      "points": 5,
+      "signature": "compute_layer_norm_mean_and_variance(x)",
+      "doc": "Compute the per-position mean and biased variance over the last (feature) dimension, keeping dims."
+    },
+    {
+      "id": "0036",
+      "name": "normalize_and_scale_with_gamma_beta",
+      "part": 4,
+      "points": 5,
+      "signature": "normalize_and_scale_with_gamma_beta(x, mean, var, gamma, beta, eps=1e-05)",
+      "doc": "Standardize the input with the given mean and variance, then apply the learned scale and shift."
+    },
+    {
+      "id": "0037",
+      "name": "apply_residual_add_and_norm",
+      "part": 4,
+      "points": 5,
+      "signature": "apply_residual_add_and_norm(x, sublayer_out, ln_params)",
+      "doc": "Add the sublayer output to its input and layer-normalize the sum (post-norm residual)."
+    },
+    {
+      "id": "0038",
+      "name": "apply_dropout_with_keep_mask",
+      "part": 4,
+      "points": 5,
+      "signature": "apply_dropout_with_keep_mask(x, keep_mask, p)",
+      "doc": "Apply inverted dropout by zeroing masked elements and rescaling the survivors by 1/(1-p)."
+    },
+    {
+      "id": "0039",
+      "name": "encoder_layer_self_attention_sublayer",
+      "part": 5,
+      "points": 5,
+      "signature": "encoder_layer_self_attention_sublayer(x, layer, src_mask, n_heads)",
+      "doc": "Run the encoder self-attention sublayer with a residual add-and-norm around it."
+    },
+    {
+      "id": "0040",
+      "name": "encoder_layer_feed_forward_sublayer",
+      "part": 5,
+      "points": 5,
+      "signature": "encoder_layer_feed_forward_sublayer(x, layer)",
+      "doc": "Run the encoder position-wise feed-forward sublayer with a residual add-and-norm around it."
+    },
+    {
+      "id": "0041",
+      "name": "assemble_encoder_layer",
+      "part": 5,
+      "points": 5,
+      "signature": "assemble_encoder_layer(x, layer, src_mask, n_heads)",
+      "doc": "Apply one full encoder layer: self-attention sublayer then feed-forward sublayer."
+    },
+    {
+      "id": "0042",
+      "name": "stack_encoder_layers",
+      "part": 5,
+      "points": 5,
+      "signature": "stack_encoder_layers(x, encoder_layers, src_mask, n_heads)",
+      "doc": "Pass the input through every encoder layer in sequence and return the final hidden states."
+    },
+    {
+      "id": "0043",
+      "name": "decoder_layer_masked_self_attention_sublayer",
+      "part": 5,
+      "points": 5,
+      "signature": "decoder_layer_masked_self_attention_sublayer(x, layer, tgt_mask, n_heads)",
+      "doc": "Run the decoder masked self-attention sublayer with a residual add-and-norm around it."
+    },
+    {
+      "id": "0044",
+      "name": "decoder_layer_cross_attention_sublayer",
+      "part": 5,
+      "points": 5,
+      "signature": "decoder_layer_cross_attention_sublayer(x, memory, layer, src_mask, n_heads)",
+      "doc": "Run the decoder cross-attention sublayer attending to encoder memory with a residual add-and-norm."
+    },
+    {
+      "id": "0045",
+      "name": "decoder_layer_feed_forward_sublayer",
+      "part": 5,
+      "points": 5,
+      "signature": "decoder_layer_feed_forward_sublayer(x, layer)",
+      "doc": "Run the decoder position-wise feed-forward sublayer with a residual add-and-norm around it."
+    },
+    {
+      "id": "0046",
+      "name": "assemble_decoder_layer",
+      "part": 5,
+      "points": 5,
+      "signature": "assemble_decoder_layer(x, memory, layer, tgt_mask, src_mask, n_heads)",
+      "doc": "Apply one full decoder layer: masked self-attention, cross-attention, then feed-forward sublayers."
+    },
+    {
+      "id": "0047",
+      "name": "stack_decoder_layers",
+      "part": 5,
+      "points": 5,
+      "signature": "stack_decoder_layers(x, memory, decoder_layers, tgt_mask, src_mask, n_heads)",
+      "doc": "Pass the input through every decoder layer in sequence and return the final hidden states."
+    },
+    {
+      "id": "0048",
+      "name": "apply_final_output_projection",
+      "part": 5,
+      "points": 5,
+      "signature": "apply_final_output_projection(h, out_weight, out_bias)",
+      "doc": "Project decoder hidden states to vocabulary logits using the (vocab,D) output weight and bias."
+    },
+    {
+      "id": "0049",
+      "name": "tie_output_projection_to_token_embeddings",
+      "part": 5,
+      "points": 5,
+      "signature": "tie_output_projection_to_token_embeddings(embed)",
+      "doc": "Return the token embedding matrix to be reused as the tied output projection weight."
+    },
+    {
+      "id": "0050",
+      "name": "apply_log_softmax_over_vocab",
+      "part": 5,
+      "points": 5,
+      "signature": "apply_log_softmax_over_vocab(logits)",
+      "doc": "Convert vocabulary logits into log-probabilities over the vocabulary dimension."
+    },
+    {
+      "id": "0051",
+      "name": "run_transformer_forward",
+      "part": 5,
+      "points": 5,
+      "signature": "run_transformer_forward(params, src_ids, tgt_ids)",
+      "doc": "Run the full encoder-decoder Transformer and return log-probabilities over the vocabulary."
+    },
+    {
+      "id": "0052",
+      "name": "init_encoder_layer_parameters",
+      "part": 6,
+      "points": 5,
+      "signature": "init_encoder_layer_parameters(d_model, d_ff, n_heads)",
+      "doc": "Create one encoder layer's parameter dict (self-attention, FFN, two layer norms) as small random leaf tensors that require gradients."
+    },
+    {
+      "id": "0053",
+      "name": "init_decoder_layer_parameters",
+      "part": 6,
+      "points": 5,
+      "signature": "init_decoder_layer_parameters(d_model, d_ff, n_heads)",
+      "doc": "Create one decoder layer's parameter dict (self-attention, cross-attention, FFN, three layer norms) as small random leaf tensors that require gradients."
+    },
+    {
+      "id": "0054",
+      "name": "init_embedding_and_projection_parameters",
+      "part": 6,
+      "points": 5,
+      "signature": "init_embedding_and_projection_parameters(vocab_size, d_model)",
+      "doc": "Create the token embedding matrix (vocab, d_model) and the output projection bias (vocab,) as leaf tensors that require gradients."
+    },
+    {
+      "id": "0055",
+      "name": "collect_model_parameters_into_list",
+      "part": 6,
+      "points": 5,
+      "signature": "collect_model_parameters_into_list(params)",
+      "doc": "Gather every trainable leaf tensor in the model (embedding, output bias, and all encoder/decoder layer weights, biases, gammas, betas) into a single deterministically ordered list."
+    },
+    {
+      "id": "0056",
+      "name": "shift_targets_right_with_start_token",
+      "part": 7,
+      "points": 5,
+      "signature": "shift_targets_right_with_start_token(tgt_ids, bos_id=1)",
+      "doc": "Build the decoder input by prepending a start token column and dropping the final target position."
+    },
+    {
+      "id": "0057",
+      "name": "compute_noam_learning_rate",
+      "part": 7,
+      "points": 5,
+      "signature": "compute_noam_learning_rate(step, d_model, warmup_steps)",
+      "doc": "Compute the Noam schedule learning rate for the given step, warming up linearly then decaying."
+    },
+    {
+      "id": "0058",
+      "name": "build_uniform_smoothing_distribution",
+      "part": 7,
+      "points": 5,
+      "signature": "build_uniform_smoothing_distribution(vocab_size, smoothing, pad_id=0)",
+      "doc": "Create the (vocab,) target distribution filled with the off-target smoothing mass spread over non-target non-pad classes."
+    },
+    {
+      "id": "0059",
+      "name": "set_confidence_on_gold_tokens",
+      "part": 7,
+      "points": 5,
+      "signature": "set_confidence_on_gold_tokens(dist, gold, confidence)",
+      "doc": "Place the confidence probability mass onto each row's gold-token column of the smoothing distribution."
+    },
+    {
+      "id": "0060",
+      "name": "zero_pad_column_and_pad_token_rows",
+      "part": 7,
+      "points": 5,
+      "signature": "zero_pad_column_and_pad_token_rows(dist, gold, pad_id=0)",
+      "doc": "Zero out the pad-token column for every row and zero entire rows whose gold token is the pad token."
+    },
+    {
+      "id": "0061",
+      "name": "compute_label_smoothed_kl_loss",
+      "part": 7,
+      "points": 5,
+      "signature": "compute_label_smoothed_kl_loss(log_probs, smoothed_target)",
+      "doc": "Compute the total label-smoothed cross-entropy as the negative sum of target-weighted log probabilities."
+    },
+    {
+      "id": "0062",
+      "name": "average_loss_over_non_pad_tokens",
+      "part": 7,
+      "points": 5,
+      "signature": "average_loss_over_non_pad_tokens(total_loss, n_tokens)",
+      "doc": "Normalize the summed loss by the number of non-pad target tokens."
+    },
+    {
+      "id": "0063",
+      "name": "compute_token_accuracy_ignoring_pad",
+      "part": 7,
+      "points": 5,
+      "signature": "compute_token_accuracy_ignoring_pad(logits_or_logprobs, gold, pad_id=0)",
+      "doc": "Compute the fraction of non-pad positions where the predicted argmax token matches the gold token."
+    },
+    {
+      "id": "0064",
+      "name": "initialize_adam_optimizer_state",
+      "part": 8,
+      "points": 5,
+      "signature": "initialize_adam_optimizer_state(param_list)",
+      "doc": "Create Adam state with zeroed first/second moment buffers for each parameter and a zero step counter."
+    },
+    {
+      "id": "0065",
+      "name": "update_adam_first_moment",
+      "part": 8,
+      "points": 5,
+      "signature": "update_adam_first_moment(m, grad, beta1)",
+      "doc": "Return the exponential moving average of the gradient (Adam first moment update)."
+    },
+    {
+      "id": "0066",
+      "name": "update_adam_second_moment",
+      "part": 8,
+      "points": 5,
+      "signature": "update_adam_second_moment(v, grad, beta2)",
+      "doc": "Return the exponential moving average of the squared gradient (Adam second moment update)."
+    },
+    {
+      "id": "0067",
+      "name": "apply_adam_bias_correction",
+      "part": 8,
+      "points": 5,
+      "signature": "apply_adam_bias_correction(moment, beta, t)",
+      "doc": "Return the bias-corrected moment estimate by dividing out the accumulated decay at step t."
+    },
+    {
+      "id": "0068",
+      "name": "apply_adam_step_to_all_parameters",
+      "part": 8,
+      "points": 5,
+      "signature": "apply_adam_step_to_all_parameters(param_list, opt_state, lr, beta1=0.9, beta2=0.98, eps=1e-09)",
+      "doc": "Advance the step, update moments and apply the in-place Adam parameter update for every parameter with a gradient."
+    },
+    {
+      "id": "0069",
+      "name": "zero_all_parameter_gradients",
+      "part": 8,
+      "points": 5,
+      "signature": "zero_all_parameter_gradients(param_list)",
+      "doc": "Clear the stored gradient of every parameter so the next backward pass starts fresh."
+    },
+    {
+      "id": "0070",
+      "name": "compute_batch_training_loss",
+      "part": 9,
+      "points": 5,
+      "signature": "compute_batch_training_loss(params, src_ids, tgt_ids, smoothing, pad_id=0, bos_id=1)",
+      "doc": "Forward the model on shifted decoder inputs and return the label-smoothed KL loss averaged over non-pad target tokens plus that token count."
+    },
+    {
+      "id": "0071",
+      "name": "run_training_step_with_backprop",
+      "part": 9,
+      "points": 5,
+      "signature": "run_training_step_with_backprop(params, param_list, opt_state, src_ids, tgt_ids, lr, smoothing)",
+      "doc": "Run one optimization step: zero grads, compute the batch loss, backpropagate, apply an Adam update, and return the new optimizer state with the float loss value."
+    },
+    {
+      "id": "0072",
+      "name": "run_training_loop_for_steps",
+      "part": 9,
+      "points": 5,
+      "signature": "run_training_loop_for_steps(params, src_ids, tgt_ids, n_steps, d_model, warmup, smoothing)",
+      "doc": "Train on a fixed batch for n_steps using a Noam-scheduled learning rate per step and return the list of per-step loss values."
+    },
+    {
+      "id": "0073",
+      "name": "pick_next_token_by_argmax",
+      "part": 10,
+      "points": 5,
+      "signature": "pick_next_token_by_argmax(logits)",
+      "doc": "Greedily choose each position's next token as the highest-scoring vocab entry."
+    },
+    {
+      "id": "0074",
+      "name": "compute_length_penalty",
+      "part": 10,
+      "points": 5,
+      "signature": "compute_length_penalty(length, alpha)",
+      "doc": "Return the GNMT length-normalization factor for a hypothesis of the given length."
+    },
+    {
+      "id": "0075",
+      "name": "compute_candidate_scores",
+      "part": 10,
+      "points": 5,
+      "signature": "compute_candidate_scores(beam_logprob_sums, next_log_probs)",
+      "doc": "Combine each beam's running log-prob with every possible next token's log-prob."
+    },
+    {
+      "id": "0076",
+      "name": "select_top_k_candidates",
+      "part": 10,
+      "points": 5,
+      "signature": "select_top_k_candidates(scores, k)",
+      "doc": "Pick the k best (beam, token) candidates across the flattened score grid."
+    },
+    {
+      "id": "0077",
+      "name": "append_tokens_to_beam_sequences",
+      "part": 10,
+      "points": 5,
+      "signature": "append_tokens_to_beam_sequences(sequences, beam_indices, token_indices)",
+      "doc": "Extend each selected beam's sequence by its chosen next token."
+    },
+    {
+      "id": "0078",
+      "name": "mark_finished_beams",
+      "part": 10,
+      "points": 5,
+      "signature": "mark_finished_beams(sequences, eos_id=2)",
+      "doc": "Flag beams whose most recent token is the end-of-sequence symbol."
+    },
+    {
+      "id": "0079",
+      "name": "select_best_finished_beam",
+      "part": 10,
+      "points": 5,
+      "signature": "select_best_finished_beam(sequences, scores, lengths, alpha)",
+      "doc": "Return the sequence whose length-normalized score is highest."
+    }
+  ]
+}
