@@ -1,0 +1,508 @@
+{
+  "name": "cnn-from-scratch-numpy",
+  "title": "Build a Trainable CNN from Scratch in NumPy",
+  "parts": [
+    {
+      "title": "Softmax, Loss, and Metrics Primitives",
+      "description": "Build the numerically stable softmax, cross-entropy loss, and accuracy helpers used throughout the network."
+    },
+    {
+      "title": "Initialization and Convolution Plumbing",
+      "description": "He initialization, zero biases, padding, output-shape math, and the im2col / col2im transforms."
+    },
+    {
+      "title": "Layer Forward and Backward Passes",
+      "description": "Forward and backward routines for convolution, max pooling, ReLU, flatten, and linear layers."
+    },
+    {
+      "title": "Fused Loss and Optimizers",
+      "description": "Fuse softmax with cross-entropy for stable training and implement SGD and Adam updates."
+    },
+    {
+      "title": "Assembling LeNet",
+      "description": "Compose the layer primitives into conv/classifier blocks, wire the full LeNet forward/backward, and a predict helper."
+    },
+    {
+      "title": "Synthetic Data Pipeline",
+      "description": "Generate a synthetic image dataset and build shuffling, train/test splitting, and minibatch iteration."
+    },
+    {
+      "title": "Training Loop and Evaluation",
+      "description": "A training step, epoch loop, full training driver, and a held-out evaluation routine."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "argmax_rows",
+      "part": 0,
+      "points": 5,
+      "signature": "argmax_rows(x)",
+      "doc": "Index of the max per row, shape (N,)."
+    },
+    {
+      "id": "0002",
+      "name": "row_max",
+      "part": 0,
+      "points": 5,
+      "signature": "row_max(x)",
+      "doc": "Max per row with keepdims, shape (N,1)."
+    },
+    {
+      "id": "0003",
+      "name": "row_sum",
+      "part": 0,
+      "points": 5,
+      "signature": "row_sum(x)",
+      "doc": "Sum per row with keepdims, shape (N,1)."
+    },
+    {
+      "id": "0004",
+      "name": "exp_shifted",
+      "part": 0,
+      "points": 5,
+      "signature": "exp_shifted(x)",
+      "doc": "Numerically stable exp(x - row_max(x)), shape (N,K)."
+    },
+    {
+      "id": "0005",
+      "name": "stable_softmax",
+      "part": 0,
+      "points": 5,
+      "signature": "stable_softmax(x)",
+      "doc": "Row-wise softmax via exp_shifted / row_sum(exp_shifted), shape (N,K)."
+    },
+    {
+      "id": "0006",
+      "name": "one_hot",
+      "part": 0,
+      "points": 5,
+      "signature": "one_hot(labels, num_classes)",
+      "doc": "One-hot encode integer labels into float rows, shape (N, num_classes)."
+    },
+    {
+      "id": "0007",
+      "name": "gather_true_class_probs",
+      "part": 0,
+      "points": 5,
+      "signature": "gather_true_class_probs(probs, labels)",
+      "doc": "Pick probs[i, labels[i]] for each row, shape (N,)."
+    },
+    {
+      "id": "0008",
+      "name": "cross_entropy_loss",
+      "part": 0,
+      "points": 5,
+      "signature": "cross_entropy_loss(probs, labels)",
+      "doc": "Mean of -log(true-class prob + 1e-12) over the batch (scalar float)."
+    },
+    {
+      "id": "0009",
+      "name": "accuracy",
+      "part": 0,
+      "points": 5,
+      "signature": "accuracy(logits, labels)",
+      "doc": "Mean fraction of rows whose argmax equals the label (scalar float)."
+    },
+    {
+      "id": "0010",
+      "name": "he_std",
+      "part": 1,
+      "points": 5,
+      "signature": "he_std(fan_in)",
+      "doc": "He initialization standard deviation sqrt(2/fan_in)."
+    },
+    {
+      "id": "0011",
+      "name": "he_init",
+      "part": 1,
+      "points": 5,
+      "signature": "he_init(shape, fan_in, rng)",
+      "doc": "Sample an array of `shape` from N(0, he_std(fan_in)) using rng."
+    },
+    {
+      "id": "0012",
+      "name": "init_zero_bias",
+      "part": 1,
+      "points": 5,
+      "signature": "init_zero_bias(n)",
+      "doc": "Return a length-n zero bias vector."
+    },
+    {
+      "id": "0013",
+      "name": "pad_2d",
+      "part": 1,
+      "points": 5,
+      "signature": "pad_2d(x, pad)",
+      "doc": "Zero-pad the spatial dims of an NCHW array by `pad` on each side."
+    },
+    {
+      "id": "0014",
+      "name": "output_spatial_size",
+      "part": 1,
+      "points": 5,
+      "signature": "output_spatial_size(in_size, k, stride, pad)",
+      "doc": "Convolution/pool output size along one spatial dim."
+    },
+    {
+      "id": "0015",
+      "name": "im2col",
+      "part": 1,
+      "points": 5,
+      "signature": "im2col(x, kh, kw, stride, pad)",
+      "doc": "Extract sliding patches into (N, C*kh*kw, OH*OW), row=channel-major (c,ki,kj)."
+    },
+    {
+      "id": "0016",
+      "name": "col2im",
+      "part": 1,
+      "points": 5,
+      "signature": "col2im(cols, x_shape, kh, kw, stride, pad)",
+      "doc": "Inverse of im2col, accumulating overlapping gradient contributions."
+    },
+    {
+      "id": "0017",
+      "name": "conv2d_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "conv2d_forward(x, W, b, stride, pad)",
+      "doc": "Forward 2D convolution via im2col returning output and cache."
+    },
+    {
+      "id": "0018",
+      "name": "conv2d_grad_input",
+      "part": 2,
+      "points": 5,
+      "signature": "conv2d_grad_input(dout, x, W, stride, pad)",
+      "doc": "Gradient of conv output w.r.t. input via col2im."
+    },
+    {
+      "id": "0019",
+      "name": "conv2d_grad_weights",
+      "part": 2,
+      "points": 5,
+      "signature": "conv2d_grad_weights(dout, x, W, stride, pad)",
+      "doc": "Gradient of conv output w.r.t. weights."
+    },
+    {
+      "id": "0020",
+      "name": "conv2d_grad_bias",
+      "part": 2,
+      "points": 5,
+      "signature": "conv2d_grad_bias(dout)",
+      "doc": "Gradient of conv output w.r.t. bias (sum over N, OH, OW)."
+    },
+    {
+      "id": "0021",
+      "name": "conv2d_backward",
+      "part": 2,
+      "points": 5,
+      "signature": "conv2d_backward(dout, cache)",
+      "doc": "Compose conv input/weight/bias gradients from cache."
+    },
+    {
+      "id": "0022",
+      "name": "maxpool2d_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "maxpool2d_forward(x, pool, stride)",
+      "doc": "Channelwise max over pool x pool windows; returns (out, cache)."
+    },
+    {
+      "id": "0023",
+      "name": "scatter_grad_window",
+      "part": 2,
+      "points": 5,
+      "signature": "scatter_grad_window(dout_val, window)",
+      "doc": "Route gradient to argmax position of a pooling window (1 at max else 0, times dout_val)."
+    },
+    {
+      "id": "0024",
+      "name": "maxpool2d_backward",
+      "part": 2,
+      "points": 5,
+      "signature": "maxpool2d_backward(dout, cache)",
+      "doc": "Scatter gradients back to the stored max positions; returns dx."
+    },
+    {
+      "id": "0025",
+      "name": "relu_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "relu_forward(x)",
+      "doc": "Elementwise max(x, 0); returns (out, cache)."
+    },
+    {
+      "id": "0026",
+      "name": "relu_backward",
+      "part": 2,
+      "points": 5,
+      "signature": "relu_backward(dout, cache)",
+      "doc": "dout * (x > 0); returns dx."
+    },
+    {
+      "id": "0027",
+      "name": "flatten_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "flatten_forward(x)",
+      "doc": "Reshape (N,C,H,W) -> (N, C*H*W); cache original shape; returns (out, cache)."
+    },
+    {
+      "id": "0028",
+      "name": "flatten_backward",
+      "part": 2,
+      "points": 5,
+      "signature": "flatten_backward(dout, cache)",
+      "doc": "Reshape (N, C*H*W) back to original shape; returns dx."
+    },
+    {
+      "id": "0029",
+      "name": "linear_forward",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_forward(x, W, b)",
+      "doc": "x @ W + b; returns (out, cache)."
+    },
+    {
+      "id": "0030",
+      "name": "linear_grad_input",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_grad_input(dout, W)",
+      "doc": "dout @ W.T; returns dx."
+    },
+    {
+      "id": "0031",
+      "name": "linear_grad_weights",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_grad_weights(dout, x)",
+      "doc": "x.T @ dout; returns dW."
+    },
+    {
+      "id": "0032",
+      "name": "linear_grad_bias",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_grad_bias(dout)",
+      "doc": "Sum over rows; returns db."
+    },
+    {
+      "id": "0033",
+      "name": "linear_backward",
+      "part": 2,
+      "points": 5,
+      "signature": "linear_backward(dout, cache)",
+      "doc": "Compose linear grads from cache; returns (dx, dW, db)."
+    },
+    {
+      "id": "0034",
+      "name": "softmax_cross_entropy_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "softmax_cross_entropy_forward(logits, labels)",
+      "doc": "Fused softmax + cross-entropy loss; returns (loss, cache) with probs and labels."
+    },
+    {
+      "id": "0035",
+      "name": "softmax_cross_entropy_backward",
+      "part": 3,
+      "points": 5,
+      "signature": "softmax_cross_entropy_backward(cache)",
+      "doc": "Gradient of fused softmax cross-entropy w.r.t. logits: (probs - one_hot)/N."
+    },
+    {
+      "id": "0036",
+      "name": "sgd_step",
+      "part": 3,
+      "points": 5,
+      "signature": "sgd_step(param, grad, lr)",
+      "doc": "One vanilla SGD update: param - lr*grad."
+    },
+    {
+      "id": "0037",
+      "name": "adam_update_m",
+      "part": 3,
+      "points": 5,
+      "signature": "adam_update_m(m, grad, beta1)",
+      "doc": "Adam first-moment (mean) EMA update: beta1*m + (1-beta1)*grad."
+    },
+    {
+      "id": "0038",
+      "name": "adam_update_v",
+      "part": 3,
+      "points": 5,
+      "signature": "adam_update_v(v, grad, beta2)",
+      "doc": "Adam second-moment (uncentered variance) EMA update: beta2*v + (1-beta2)*grad**2."
+    },
+    {
+      "id": "0039",
+      "name": "adam_bias_correct",
+      "part": 3,
+      "points": 5,
+      "signature": "adam_bias_correct(moment, beta, t)",
+      "doc": "Bias-correct an Adam moment estimate: moment / (1 - beta**t)."
+    },
+    {
+      "id": "0040",
+      "name": "adam_param_step",
+      "part": 3,
+      "points": 5,
+      "signature": "adam_param_step(param, m_hat, v_hat, lr, eps)",
+      "doc": "Apply a bias-corrected Adam step: param - lr*m_hat/(sqrt(v_hat)+eps)."
+    },
+    {
+      "id": "0041",
+      "name": "adam_step",
+      "part": 3,
+      "points": 5,
+      "signature": "adam_step(param, grad, m, v, t, lr=0.001, beta1=0.9, beta2=0.999, eps=1e-08)",
+      "doc": "Full Adam update for one param at step t (t is the current, already-incremented step); returns (new_param, new_m, new_v)."
+    },
+    {
+      "id": "0042",
+      "name": "init_conv_layer",
+      "part": 4,
+      "points": 5,
+      "signature": "init_conv_layer(in_ch, out_ch, k, rng)",
+      "doc": "Init a conv layer dict with He weights (out_ch,in_ch,k,k), zero bias, stride 1, same-pad."
+    },
+    {
+      "id": "0043",
+      "name": "init_linear_layer",
+      "part": 4,
+      "points": 5,
+      "signature": "init_linear_layer(in_dim, out_dim, rng)",
+      "doc": "Init a linear layer dict with He weights (in,out) and zero bias (out,)."
+    },
+    {
+      "id": "0044",
+      "name": "init_lenet",
+      "part": 4,
+      "points": 5,
+      "signature": "init_lenet(in_ch, num_classes, image_size, rng)",
+      "doc": "Build a small LeNet: 2 conv blocks (3x3 same-pad, pool2) then 2 FC + logits layer."
+    },
+    {
+      "id": "0045",
+      "name": "forward_conv_block",
+      "part": 4,
+      "points": 5,
+      "signature": "forward_conv_block(x, conv_layer, pool, stride)",
+      "doc": "Conv -> ReLU -> MaxPool; returns (out, cache) holding the three sub-caches."
+    },
+    {
+      "id": "0046",
+      "name": "forward_classifier_block",
+      "part": 4,
+      "points": 5,
+      "signature": "forward_classifier_block(x, linear_layer, activation=True)",
+      "doc": "Linear (optionally followed by ReLU); returns (out, cache)."
+    },
+    {
+      "id": "0047",
+      "name": "lenet_forward",
+      "part": 4,
+      "points": 5,
+      "signature": "lenet_forward(params, x)",
+      "doc": "Run conv blocks -> flatten -> FC blocks (ReLU) -> final linear logits; returns (logits, caches)."
+    },
+    {
+      "id": "0048",
+      "name": "backward_conv_block",
+      "part": 4,
+      "points": 5,
+      "signature": "backward_conv_block(dout, cache)",
+      "doc": "Invert MaxPool -> ReLU -> Conv; returns (dx, {'W':dW,'b':db})."
+    },
+    {
+      "id": "0049",
+      "name": "backward_classifier_block",
+      "part": 4,
+      "points": 5,
+      "signature": "backward_classifier_block(dout, cache)",
+      "doc": "Invert (ReLU ->) Linear; returns (dx, {'W':dW,'b':db})."
+    },
+    {
+      "id": "0050",
+      "name": "lenet_backward",
+      "part": 4,
+      "points": 5,
+      "signature": "lenet_backward(dlogits, caches)",
+      "doc": "Backprop through the whole net; returns grads with the same structure as params."
+    },
+    {
+      "id": "0051",
+      "name": "lenet_predict",
+      "part": 4,
+      "points": 5,
+      "signature": "lenet_predict(params, x)",
+      "doc": "Return predicted class labels (N,) via argmax of lenet_forward logits."
+    },
+    {
+      "id": "0052",
+      "name": "build_synthetic_image_dataset",
+      "part": 5,
+      "points": 5,
+      "signature": "build_synthetic_image_dataset(n_samples, image_size, num_classes, rng)",
+      "doc": "Build (X (N,1,H,W), y (N,)) of class-dependent images a CNN can learn."
+    },
+    {
+      "id": "0053",
+      "name": "shuffle_indices",
+      "part": 5,
+      "points": 5,
+      "signature": "shuffle_indices(n, rng)",
+      "doc": "Return a random permutation of range(n) using rng."
+    },
+    {
+      "id": "0054",
+      "name": "train_test_split",
+      "part": 5,
+      "points": 5,
+      "signature": "train_test_split(X, y, test_frac)",
+      "doc": "Deterministically split into (Xtr, ytr, Xte, yte) by fraction, no shuffle here."
+    },
+    {
+      "id": "0055",
+      "name": "iterate_minibatches",
+      "part": 5,
+      "points": 5,
+      "signature": "iterate_minibatches(X, y, batch_size, rng, shuffle=True)",
+      "doc": "Yield (Xb, yb) minibatches covering all data once, optionally shuffled."
+    },
+    {
+      "id": "0056",
+      "name": "train_step",
+      "part": 6,
+      "points": 5,
+      "signature": "train_step(params, X, y, lr, opt_state, t)",
+      "doc": "One optimization step: lenet forward, softmax-CE loss/grad, lenet backward, Adam-update every param."
+    },
+    {
+      "id": "0057",
+      "name": "train_one_epoch",
+      "part": 6,
+      "points": 5,
+      "signature": "train_one_epoch(params, X, y, batch_size, lr, opt_state, t, rng)",
+      "doc": "Run one epoch of minibatch Adam training; return params, opt_state, step t, and mean batch loss."
+    },
+    {
+      "id": "0058",
+      "name": "train_loop",
+      "part": 6,
+      "points": 5,
+      "signature": "train_loop(params, X, y, n_epochs, batch_size, lr, rng)",
+      "doc": "Initialize optimizer state and train for n_epochs of Adam; return params and a loss history."
+    },
+    {
+      "id": "0059",
+      "name": "evaluate",
+      "part": 6,
+      "points": 5,
+      "signature": "evaluate(params, X, y)",
+      "doc": "Forward pass on held-out data; return (mean cross-entropy loss, accuracy)."
+    }
+  ]
+}
