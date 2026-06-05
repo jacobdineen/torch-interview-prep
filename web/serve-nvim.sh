@@ -66,5 +66,5 @@ fi
 
 # -W writable, -O check-origin, -m 1 single client.
 exec ttyd -W -O -m 1 -i "$BIND" -p "$PORT" \
-  -t fontSize=15 -t 'titleFixed=mle_prep — nvim' "${creds[@]}" \
+  -t fontSize="${FONT_SIZE:-15}" -t 'titleFixed=mle_prep — nvim' "${creds[@]}" \
   bash -lc "$inner"

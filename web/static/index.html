@@ -6,31 +6,54 @@
   <title>mle_prep — practice</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body>
+<body class="home-active">
   <header id="topbar">
-    <div class="brand"><span class="brand-mark">▚</span> mle_prep</div>
-    <select id="source" title="Problems or a project"></select>
-    <select id="framework" title="Filter by framework"></select>
-    <div class="search-wrap">
-      <input id="filter" type="text" placeholder="Search by id or title…   ( / to focus · ↑↓ Enter · Esc )" autocomplete="off" spellcheck="false" />
-      <div id="palette" class="palette hidden"></div>
+    <button class="brand" id="home-btn" title="Home"><span class="brand-mark">▚</span> mle_prep</button>
+
+    <div class="workspace-only" style="gap:11px; align-items:center; flex:1; min-width:0;">
+      <select id="source" title="Problems or a project"></select>
+      <select id="framework" title="Filter by framework"></select>
+      <div class="search-wrap">
+        <input id="filter" type="text" placeholder="Search by id or title…   ( / to focus · ↑↓ Enter · Esc )" autocomplete="off" spellcheck="false" />
+        <div id="palette" class="palette hidden"></div>
+      </div>
+      <div class="nav-group">
+        <button id="prev-btn" class="icon-btn" title="Previous in list">‹</button>
+        <button id="next-btn" title="Next unsolved">next ›</button>
+      </div>
     </div>
-    <div class="nav-group">
-      <button id="prev-btn" title="Previous in list">‹</button>
-      <button id="next-btn" class="next" title="Next unsolved">next ›</button>
-    </div>
-    <div class="progress-wrap" title="Solved in this view">
+
+    <div class="progress-wrap workspace-only">
       <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
       <div id="overall" class="overall">—</div>
     </div>
-    <button id="teardown-btn" class="danger" title="Stop nvim, ttyd, and the server">⏻</button>
+
+    <button id="theme-btn" class="icon-btn" title="Toggle light / dark">☾</button>
+    <button id="teardown-btn" class="icon-btn danger" title="Stop nvim, ttyd, and the server">⏻</button>
   </header>
 
-  <main id="split">
+  <!-- ===== home / track picker ===== -->
+  <main id="home">
+    <div class="home-hero">
+      <h1>Pick a track</h1>
+      <p>Standalone problems by framework, or work end-to-end through a project. Pick up where you left off.</p>
+    </div>
+    <div class="home-section">
+      <h2>Problems</h2>
+      <div id="home-problems" class="home-grid"></div>
+    </div>
+    <div class="home-section">
+      <h2>Projects</h2>
+      <div id="home-projects" class="home-grid"></div>
+    </div>
+  </main>
+
+  <!-- ===== workspace ===== -->
+  <main id="split" class="hidden">
     <section id="left">
       <div class="prob-head">
         <div class="prob-head-main">
-          <div class="prob-eyebrow"><span id="prob-id" class="prob-id"></span></div>
+          <div id="prob-id" class="prob-eyebrow"></div>
           <h1 id="prob-title">—</h1>
         </div>
         <div class="tags">
@@ -73,17 +96,24 @@
       <pre id="aux-out" class="aux"></pre>
     </section>
 
-    <div id="gutter-x" class="gutter gutter-x" title="Drag to resize"></div>
+    <div id="gutter-x" class="gutter gutter-x" title="Drag to resize"><div class="grip"></div></div>
 
     <section id="right">
       <div class="editor-bar">
         <span class="editor-label">editor — your real nvim <code>:w</code> then Run</span>
         <span class="spacer"></span>
+        <div class="zoom-group" title="Editor text size (independent of browser zoom)">
+          <button id="zoom-out" title="Smaller">−</button>
+          <span id="zoom-val" class="zoom-val">100%</span>
+          <button id="zoom-in" title="Larger">+</button>
+        </div>
         <button id="run-btn" class="run">▶ Run</button>
         <button id="submit-btn" class="submit">⚡ Submit</button>
       </div>
-      <iframe id="nvim" title="nvim"></iframe>
-      <div id="gutter-y" class="gutter gutter-y" title="Drag to resize the terminal"></div>
+      <div class="editor-viewport">
+        <iframe id="nvim" title="nvim"></iframe>
+      </div>
+      <div id="gutter-y" class="gutter gutter-y" title="Drag to resize the terminal"><div class="grip"></div></div>
       <div id="results" class="results">
         <div class="results-head">Results</div>
         <div id="results-body" class="results-body muted">Edit in the editor, then Run.</div>

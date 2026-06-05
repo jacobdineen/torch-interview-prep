@@ -12,6 +12,9 @@ let CURRENT = null;    // current item key
 let HILITE = 0;        // highlighted index in the palette
 
 async function init() {
+  applyTheme(localStorage.getItem("mle_theme") || "dark");
+  applyZoom(parseFloat(localStorage.getItem("mle_ed_zoom")) || 1);
+
   const cfg = await api.get("/api/config");
   $("nvim").src = `${location.protocol}//${location.hostname}:${cfg.ttyd_port}/`;
 
@@ -39,7 +42,6 @@ async function init() {
   fwSel.value = "All";
   fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
 
-  updateProgress();
   setupSplitters();
   setupShortcuts();
 
@@ -48,10 +50,12 @@ async function init() {
   f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
   f.addEventListener("focus", () => { renderPalette(); openPalette(); });
   f.addEventListener("keydown", onFilterKey);
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest(".search-wrap")) closePalette();
-  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".search-wrap")) closePalette(); });
 
+  $("home-btn").addEventListener("click", showHome);
+  $("theme-btn").addEventListener("click", toggleTheme);
+  $("zoom-in").addEventListener("click", () => bumpZoom(+0.1));
+  $("zoom-out").addEventListener("click", () => bumpZoom(-0.1));
   $("prev-btn").addEventListener("click", () => step(-1));
   $("next-btn").addEventListener("click", gotoNextUnsolved);
   $("run-btn").addEventListener("click", () => run(false));
@@ -60,40 +64,126 @@ async function init() {
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
 
-  // Deep-link support: ?key=prob:02a opens that item directly.
+  // Deep-link (?key=prob:02a) jumps straight into the workspace; otherwise show home.
   const deep = new URLSearchParams(location.search).get("key");
-  const first = (deep && ITEMS.find((x) => x.key === deep))
-    || ITEMS.find((x) => x.source === "Problems" && !x.solved) || ITEMS[0];
-  if (first) selectItem(first.key);
+  if (deep && ITEMS.find((x) => x.key === deep)) {
+    const it = ITEMS.find((x) => x.key === deep);
+    enterTrack(it.source, it.framework || "All", it.key);
+  } else {
+    showHome();
+  }
 }
 
-// ----- progress (reflects the current filtered view) -----
+// ===== theme =====
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $("theme-btn").textContent = t === "light" ? "☀" : "☾";
+  $("theme-btn").title = t === "light" ? "Switch to dark" : "Switch to light";
+}
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  localStorage.setItem("mle_theme", t); applyTheme(t);
+}
+
+// ===== editor zoom (CSS-scales the cross-origin terminal iframe) =====
+const ZMIN = 0.7, ZMAX = 2.2;
+function applyZoom(z) {
+  z = Math.max(ZMIN, Math.min(ZMAX, Math.round(z * 100) / 100));
+  document.documentElement.style.setProperty("--ed-zoom", z);
+  const lbl = $("zoom-val"); if (lbl) lbl.textContent = Math.round(z * 100) + "%";
+  localStorage.setItem("mle_ed_zoom", z);
+}
+function curZoom() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ed-zoom")) || 1; }
+function bumpZoom(d) { applyZoom(curZoom() + d); }
+
+// ===== home / track picker =====
+function trackStats(pred) {
+  const v = ITEMS.filter(pred);
+  return { total: v.length, solved: v.filter((x) => x.solved).length };
+}
+function card(cls, icon, title, sub, desc, stats, onClick) {
+  const pct = stats.total ? Math.round((stats.solved / stats.total) * 100) : 0;
+  const el = document.createElement("button");
+  el.className = "home-card " + cls;
+  el.innerHTML =
+    `<div class="hc-top"><div class="hc-icon">${icon}</div>` +
+    `<div><div class="hc-title">${esc(title)}</div><div class="hc-sub">${esc(sub)}</div></div></div>` +
+    `<div class="hc-desc">${esc(desc)}</div>` +
+    `<div class="hc-bar"><div style="width:${pct}%"></div></div>` +
+    `<div class="hc-meta"><span>${stats.solved}/${stats.total} solved</span><span>${pct}%</span></div>`;
+  el.addEventListener("click", onClick);
+  return el;
+}
+function renderHome() {
+  const probs = $("home-problems"); probs.innerHTML = "";
+  const isProb = (x) => x.source === "Problems";
+  probs.appendChild(card("torch", "🔥", "PyTorch Problems", "Tensors, autograd, nn, losses",
+    "Core deep-learning building blocks implemented in PyTorch.",
+    trackStats((x) => isProb(x) && x.framework === "torch"),
+    () => enterTrack("Problems", "torch")));
+  probs.appendChild(card("numpy", "▦", "NumPy Problems", "Same problems, pure NumPy",
+    "Everything that has a NumPy variant — no autograd, just arrays.",
+    trackStats((x) => isProb(x) && (x.framework === "numpy" || x.numpy)),
+    () => enterTrack("Problems", "numpy")));
+  probs.appendChild(card("all", "∑", "All Problems", "Every standalone problem",
+    "Browse the whole problem set across both frameworks.",
+    trackStats(isProb), () => enterTrack("Problems", "All")));
+
+  const projs = $("home-projects"); projs.innerHTML = "";
+  for (const name of SOURCES.filter((s) => s !== "Problems")) {
+    const items = ITEMS.filter((x) => x.source === name);
+    const parts = new Set(items.map((x) => x.group)).size;
+    projs.appendChild(card("project", "📦", name, `${parts} part${parts === 1 ? "" : "s"} · ${items.length} steps`,
+      "Build it end-to-end, one graded step at a time.",
+      trackStats((x) => x.source === name),
+      () => enterTrack(name, "All")));
+  }
+}
+function showHome() {
+  document.body.classList.add("home-active");
+  $("split").classList.add("hidden");
+  $("home").classList.remove("hidden");
+  closePalette();
+  renderHome();
+}
+function enterTrack(source, fw, key) {
+  document.body.classList.remove("home-active");
+  $("home").classList.add("hidden");
+  $("split").classList.remove("hidden");
+  if ([...$("source").options].some((o) => o.value === source)) $("source").value = source;
+  if ([...$("framework").options].some((o) => o.value === fw)) $("framework").value = fw;
+  renderPalette(); updateProgress();
+  const v = view();
+  const target = key ? v.find((x) => x.key === key) || ITEMS.find((x) => x.key === key)
+    : (v.find((x) => !x.solved) || v[0]);
+  if (target) selectItem(target.key);
+}
+
+// ===== progress (current filtered view) =====
 function updateProgress() {
   const v = view();
   const solved = v.filter((x) => x.solved).length;
-  const total = v.length || 1;
-  const pct = Math.round((solved / total) * 100);
+  const pct = v.length ? Math.round((solved / v.length) * 100) : 0;
   $("progress-fill").style.width = pct + "%";
   $("overall").textContent = `${solved}/${v.length} solved`;
 }
 
-// ----- resizable panes -----
+// ===== resizable panes =====
 function setupSplitters() {
   const root = document.documentElement;
-  const saved = (k, v) => { const s = localStorage.getItem(k); if (s) root.style.setProperty(v, s); };
-  saved("mle_left_w", "--left-w");
-  saved("mle_results_h", "--results-h");
+  const restore = (k, v) => { const s = localStorage.getItem(k); if (s) root.style.setProperty(v, s); };
+  restore("mle_left_w", "--left-w"); restore("mle_results_h", "--results-h");
 
-  const drag = (gutter, rowMode, compute, storeKey, cssVar) => {
+  const drag = (gutter, axisClass, compute, storeKey, cssVar) => {
+    if (!gutter) return;
     gutter.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       gutter.classList.add("dragging");
-      document.body.classList.add("resizing");
-      if (rowMode) document.body.classList.add("rows");
+      document.body.classList.add("resizing", axisClass);
       const move = (ev) => root.style.setProperty(cssVar, compute(ev) + "px");
       const up = () => {
         gutter.classList.remove("dragging");
-        document.body.classList.remove("resizing", "rows");
+        document.body.classList.remove("resizing", axisClass);
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
         localStorage.setItem(storeKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
@@ -104,53 +194,56 @@ function setupSplitters() {
   };
 
   const split = $("split"), right = $("right");
-  drag($("gutter-x"), false, (ev) => {
+  drag($("gutter-x"), "cols", (ev) => {
     const r = split.getBoundingClientRect();
     return Math.max(280, Math.min(r.width - 360, ev.clientX - r.left));
   }, "mle_left_w", "--left-w");
-  drag($("gutter-y"), true, (ev) => {
+  drag($("gutter-y"), "rows", (ev) => {
     const r = right.getBoundingClientRect();
-    return Math.max(80, Math.min(r.height - 160, r.bottom - ev.clientY));
+    return Math.max(70, Math.min(r.height - 150, r.bottom - ev.clientY));
   }, "mle_results_h", "--results-h");
 }
 
 function setupShortcuts() {
   document.addEventListener("keydown", (e) => {
     const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    if (e.key === "/" && !inField) { e.preventDefault(); $("filter").focus(); $("filter").select(); }
+    if (e.key === "/" && !inField && !document.body.classList.contains("home-active")) {
+      e.preventDefault(); $("filter").focus(); $("filter").select();
+    }
+    // Editor zoom with Ctrl/Cmd +/-/0 (when the page, not the terminal iframe, has focus)
+    if ((e.ctrlKey || e.metaKey) && !inField) {
+      if (e.key === "=" || e.key === "+") { e.preventDefault(); bumpZoom(+0.1); }
+      else if (e.key === "-" || e.key === "_") { e.preventDefault(); bumpZoom(-0.1); }
+      else if (e.key === "0") { e.preventDefault(); applyZoom(1); }
+    }
   });
 }
 
-// ----- the filtered view (source + text) -----
+// ===== filtered view (source + framework + text) =====
 function view() {
   const src = $("source").value;
   const fw = $("framework").value;
   const q = $("filter").value.trim().toLowerCase();
   return ITEMS.filter((x) => {
     if (src !== "All" && x.source !== src) return false;
-    // A problem with a verified numpy variant counts as numpy too (dual support).
     if (fw !== "All" && x.framework !== fw && !(fw === "numpy" && x.numpy)) return false;
     if (!q) return true;
     return (x.id + " " + x.title + " " + x.group).toLowerCase().includes(q);
   });
 }
-
 function fwShort(it) {
   if (it.framework === "numpy") return "np";
-  return it.numpy ? "pt+np" : "pt";   // torch problems that also have a numpy variant
+  return it.numpy ? "pt+np" : "pt";
 }
 
-// ----- palette (grouped, filterable dropdown) -----
+// ===== palette =====
 function renderPalette() {
   const v = view();
   const pal = $("palette");
   if (HILITE >= v.length) HILITE = Math.max(0, v.length - 1);
   let html = "", group = null;
   v.forEach((it, i) => {
-    if (it.group !== group) {
-      group = it.group;
-      html += `<div class="pal-group">${esc(group)}</div>`;
-    }
+    if (it.group !== group) { group = it.group; html += `<div class="pal-group">${esc(group)}</div>`; }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" data-key="${esc(it.key)}" data-i="${i}">` +
       `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
       `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
@@ -164,16 +257,11 @@ function renderPalette() {
   });
   scrollHiliteIntoView();
 }
-
 function setHilite(i) {
   HILITE = i;
-  const pal = $("palette");
-  pal.querySelectorAll(".pal-row").forEach((r) => r.classList.toggle("hi", parseInt(r.dataset.i, 10) === i));
+  $("palette").querySelectorAll(".pal-row").forEach((r) => r.classList.toggle("hi", parseInt(r.dataset.i, 10) === i));
 }
-function scrollHiliteIntoView() {
-  const el = $("palette").querySelector(".pal-row.hi");
-  if (el) el.scrollIntoView({ block: "nearest" });
-}
+function scrollHiliteIntoView() { const el = $("palette").querySelector(".pal-row.hi"); if (el) el.scrollIntoView({ block: "nearest" }); }
 function openPalette() { $("palette").classList.remove("hidden"); }
 function closePalette() { $("palette").classList.add("hidden"); }
 
@@ -185,7 +273,7 @@ function onFilterKey(e) {
   else if (e.key === "Escape") { closePalette(); $("filter").blur(); }
 }
 
-// ----- navigation -----
+// ===== navigation =====
 function step(delta) {
   const v = view();
   const i = v.findIndex((x) => x.key === CURRENT);
@@ -199,7 +287,7 @@ function gotoNextUnsolved() {
   if (nxt) selectItem(nxt.key);
 }
 
-// ----- selection -----
+// ===== selection =====
 async function selectItem(key) {
   CURRENT = key;
   const m = await api.get("/api/item?key=" + encodeURIComponent(key));
@@ -209,7 +297,7 @@ async function selectItem(key) {
   $("prob-group").textContent = m.group || "";
   const fwt = $("prob-framework");
   let fwText = m.framework === "torch" ? "PyTorch" : m.framework === "numpy" ? "NumPy" : "";
-  if (m.numpy) fwText = "PyTorch + NumPy";   // also solvable via check.py <id> --numpy
+  if (m.numpy) fwText = "PyTorch + NumPy";
   fwt.textContent = fwText;
   fwt.title = m.numpy ? "Also solvable in NumPy — `check.py " + (m.id || "") + " --numpy`" : "";
   fwt.className = "tag fw " + (m.framework || "");
@@ -221,8 +309,7 @@ async function selectItem(key) {
   const ew = $("example-wrap");
   if (m.example) {
     $("ex-input").textContent = m.example.inputs || "—";
-    $("ex-output").textContent = m.example.output
-      || (m.example.matches ? "should match " + m.example.matches : "—");
+    $("ex-output").textContent = m.example.output || (m.example.matches ? "should match " + m.example.matches : "—");
     ew.style.display = "";
   } else ew.style.display = "none";
   const cw = $("concept-wrap");
@@ -230,11 +317,8 @@ async function selectItem(key) {
   else cw.style.display = "none";
   $("aux-out").textContent = "";
   resetResults();
-  // keep the source selector in sync with the chosen item
-  if (m.source && [...$("source").options].some((o) => o.value === m.source)) {
-    $("source").value = m.source;
-  }
-  api.post("/api/open", { key }); // switch the live nvim buffer
+  if (m.source && [...$("source").options].some((o) => o.value === m.source)) $("source").value = m.source;
+  api.post("/api/open", { key });
 }
 
 function resetResults() {
@@ -252,14 +336,12 @@ async function run(submit) {
   renderResult(r, submit);
   if (r.status === "pass") markSolved(key);
 }
-
 function markSolved(key) {
   const it = ITEMS.find((x) => x.key === key);
   if (it && !it.solved) { it.solved = true; updateProgress(); }
   $("prob-status").className = "tag solved";
   $("prob-status").textContent = "solved";
 }
-
 function renderResult(r, submit) {
   const b = $("results-body");
   if (r.status === "pass") {
@@ -281,11 +363,7 @@ function renderResult(r, submit) {
     b.textContent = "error: " + (r.message || "unknown");
   }
 }
-
-function label(key) {
-  const it = ITEMS.find((x) => x.key === key);
-  return it ? it.id : key;
-}
+function label(key) { const it = ITEMS.find((x) => x.key === key); return it ? it.id : key; }
 
 async function teardown() {
   if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. Unsaved edits in the editor are written first.")) return;
@@ -297,22 +375,17 @@ async function teardown() {
     "<div>nvim, ttyd, and the server have stopped. You can close this tab.</div>" +
     "<div>Restart with <code>./web/serve-app.sh</code>.</div></div>";
 }
-
 async function showHint() {
   $("aux-out").textContent = "…";
   const r = await api.get("/api/hint?key=" + encodeURIComponent(CURRENT));
   $("aux-out").textContent = (r.text || "").trim() || "(no hint)";
 }
-
 async function showSolution() {
   if (!confirm("Show the reference solution for " + label(CURRENT) + "? (unlocks it)")) return;
   $("aux-out").textContent = "…";
   const r = await api.post("/api/solution", { key: CURRENT, give_up: true });
   $("aux-out").textContent = (r.text || "").trim() || "(no solution)";
 }
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
 init();
