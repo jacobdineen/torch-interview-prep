@@ -64,4 +64,9 @@ echo "  mle_prep web app:  http://127.0.0.1:$APIPORT"
 echo "  (editor = real nvim via ttyd :$TTYD_PORT; loopback only)"
 echo "  Ctrl-C to stop."
 echo
-wait
+# If either half dies, don't keep serving a broken app — say which and tear down.
+while kill -0 "$TTYD_PID" 2>/dev/null && kill -0 "$API_PID" 2>/dev/null; do
+  wait -n 2>/dev/null || true
+done
+kill -0 "$TTYD_PID" 2>/dev/null || echo "ttyd exited — shutting down." >&2
+kill -0 "$API_PID" 2>/dev/null || echo "API exited — shutting down." >&2

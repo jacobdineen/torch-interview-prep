@@ -23,14 +23,13 @@ import subprocess
 import sys
 import threading
 import secrets
-import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 def _load_secret():
     """Persist the CSRF token across restarts so an already-open tab keeps working
     (a fresh token each start would 403 every open POST until the user refreshes)."""
-    path = os.path.join(tempfile.gettempdir(), "mle_prep_token")
+    path = "/tmp/mle_prep_token"
     try:
         t = open(path).read().strip()
         if len(t) >= 16:
@@ -323,18 +322,36 @@ def nvim_open(path):
     return _nvim("--remote", path, timeout=3).returncode == 0
 
 
-def nvim_save_all():
-    # Save ONLY the current buffer (the problem being graded). NOT :wa — writing
-    # *all* buffers would overwrite any unrelated file left open+modified in the
-    # persistent server (e.g. a web/ file edited on disk) with a stale buffer.
-    return _nvim("--remote-send", "<C-\\><C-N>:silent! w<CR>").returncode == 0
+def _ensure_server():
+    """Revive the persistent nvim server if it died (e.g. :qa! or a crash) while a
+    browser tab stayed connected, so Run doesn't fail until a manual reconnect."""
+    try:
+        subprocess.run(["bash", os.path.join(WEB, "mle-nvim-ensure.sh"), NVIM_SOCK], timeout=15)
+    except Exception:
+        pass
+
+
+def _save_once(path):
+    nvim_open(path)   # focus the graded buffer so we save the RIGHT file
+    # --remote-expr BLOCKS until nvim evaluates it (no fire-and-forget race where
+    # check.py reads pre-save content) and writes ONLY the current buffer (never :wa).
+    r = _nvim("--remote-expr", "execute('silent! update') . '|ok'", timeout=6)
+    return r.returncode == 0 and (r.stdout or "").strip().endswith("|ok")
+
+
+def nvim_save(path):
+    """Synchronously write the graded file. If the server is dead, revive once + retry."""
+    if _save_once(path):
+        return True
+    _ensure_server()
+    return _save_once(path)
 
 
 def teardown():
     """Stop everything: save + quit the editor, stop ttyd, drop the socket, then
     exit this API process. Idempotent and best-effort."""
     try:
-        _nvim("--remote-send", "<C-\\><C-N>:wqa!<CR>", timeout=3)
+        _nvim("--remote-send", "<C-\\><C-N>:silent! w<CR>:qa!<CR>", timeout=3)
     except Exception:
         pass
     pid = os.environ.get("TTYD_PID")
@@ -384,7 +401,7 @@ def _run_item(key):
     if not _run_lock.acquire(blocking=False):
         return {"status": "error", "message": "A run is already in progress \u2014 wait for it to finish."}
     try:
-        if not nvim_save_all():
+        if not nvim_save(r["path"]):
             return {"status": "error",
                     "message": "Could not save the editor buffers \u2014 is the nvim terminal connected? Reconnect the tab and retry."}
         cmd = [PYTHON, os.path.join(ROOT, "check.py"), r["pid"]] if r["kind"] == "problem" else [PYTHON, r["path"]]

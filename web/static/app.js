@@ -7,7 +7,8 @@ const api = {
     const send = () => fetch(p, { method: "POST", headers: { "Content-Type": "application/json", "X-MLE-Token": TOKEN }, body: JSON.stringify(body || {}) });
     let r = await send();
     if (r.status === 403) {                 // stale token (server restarted) -> refresh it and retry once
-      try { const cfg = await (await fetch("/api/config")).json(); TOKEN = cfg.token || ""; } catch (e) {}
+      try { const cfg = await (await fetch("/api/config")).json(); TOKEN = cfg.token || ""; }
+      catch (e) { console.warn("token refresh failed (server down?)", e); }
       r = await send();
     }
     if (!r.ok) throw new Error(`POST ${p} → ${r.status}`); return r.json();
@@ -493,7 +494,7 @@ function renderResult(r, submit) {
 function label(key) { const it = ITEMS.find((x) => x.key === key); return it ? it.id : key; }
 
 async function teardown() {
-  if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. Unsaved edits in the editor are written first.")) return;
+  if (!confirm("Tear down the web app?\n\nThis saves + quits nvim, stops ttyd, and stops the server. The current problem buffer is saved first.")) return;
   try { await api.post("/api/shutdown", {}); } catch (e) {}
   const dark = document.documentElement.dataset.theme !== "light";
   const fg = dark ? "#e6edf3" : "#1c2128", mut = dark ? "#9aa7b8" : "#586272", bg = dark ? "#0b0f16" : "#f4f6f9";

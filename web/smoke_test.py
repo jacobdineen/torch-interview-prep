@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -61,7 +62,44 @@ def _json(path, **kw):
         return code, {}
 
 
+def static_checks():
+    """No-server checks (CI-safe): contract, syntax, token wiring, parse-ability."""
+    print("static checks (no server)\n")
+    html = _read("static/index.html"); js = _read("static/app.js"); py = _read("app.py")
+    check("index.html / app.js / app.py readable", bool(html and js and py))
+    ids_used = set(re.findall(r'\$\("([^"]+)"\)', js))
+    ids_def = set(re.findall(r'id="([^"]+)"', html))
+    missing_ids = sorted(ids_used - ids_def)
+    check('every $("id") in app.js exists in index.html', not missing_ids,
+          ("missing: " + ", ".join(missing_ids)) if missing_ids else f"{len(ids_used)} ids ok")
+    routes_used = set(re.findall(r'(?:api\.(?:get|post)|fetch)\("(/api/[a-z_]+)', js))
+    handled = set(re.findall(r'u\.path == "(/api/[^"]+)"', py))
+    missing_routes = sorted(routes_used - handled)
+    check("every /api route used by app.js is handled in app.py", not missing_routes,
+          ("missing: " + ", ".join(missing_routes)) if missing_routes else f"{len(routes_used)} routes ok")
+    check("frontend wires the CSRF token (X-MLE-Token + TOKEN=cfg.token)",
+          "X-MLE-Token" in js and "TOKEN = cfg.token" in js)
+    check("app.py never writes ALL buffers (:wa/:wqa clobber guard)",
+          ":wa<CR>" not in py and ":wqa" not in py and "execute('silent! update')" in py)
+    import ast
+    try:
+        ast.parse(py); check("app.py parses (python AST)", True)
+    except SyntaxError as e:
+        check("app.py parses (python AST)", False, str(e))
+    if _have("node"):
+        rc = subprocess.run(["node", "--check", os.path.join(STATIC, "app.js")], capture_output=True).returncode
+        check("app.js passes node --check", rc == 0)
+    else:
+        check("app.js syntax", False, "node not found", skipped=True)
+    for sh in ("serve-app.sh", "serve-nvim.sh", "mle-nvim-ensure.sh"):
+        rc = subprocess.run(["bash", "-n", os.path.join(WEB, sh)], capture_output=True).returncode
+        check(f"{sh} is valid bash", rc == 0)
+    return _summary()
+
+
 def main():
+    if "--static" in sys.argv:
+        return static_checks()
     print(f"smoke test -> {BASE}\n")
     try:
         code, cfg = _json("/api/config")
@@ -93,21 +131,41 @@ def main():
     code_no, _ = _req("/api/open", "POST", token=None, body={"key": a_prob["key"] if a_prob else "prob:04a"})
     check("CSRF: /api/open without token -> 403", code_no == 403, f"http {code_no}")
     if a_prob:
-        code_ok, openr = _json("/api/open", method="POST", token=token, body={"key": a_prob["key"]})
-        check("/api/open with token -> ok:true (editor switches)",
-              code_ok == 200 and openr.get("ok") is True, f"http {code_ok} {openr}")
-    code_run_no, _ = _req("/api/run", "POST", token=None, body={"key": "prob:04a"})
-    check("CSRF: /api/run without token -> 403", code_run_no == 403, f"http {code_run_no}")
+        openr = {}
+        for _ in range(20):   # the persistent nvim server may still be loading config right after start
+            _, openr = _json("/api/open", method="POST", token=token, body={"key": a_prob["key"]})
+            if openr.get("ok"):
+                break
+            time.sleep(0.5)
+        check("/api/open with token -> ok:true (editor switches)", openr.get("ok") is True, str(openr))
+    for route in ("/api/run", "/api/solution", "/api/shutdown"):
+        c, _ = _req(route, "POST", token=None, body={"key": "prob:04a"})
+        check(f"CSRF: {route} without token -> 403", c == 403, f"http {c}")
 
-    if solved:
+    if a_prob:
+        # open a sentinel file in nvim and dirty it, so a run that wrongly :wa-saved
+        # would overwrite it -> this actually reproduces the clobber regression
+        sentinel = "/tmp/mle_smoke_sentinel.txt"
+        try:
+            open(sentinel, "w").write("SENTINEL_ORIGINAL\n")
+            _nvim_remote(sentinel)
+            _nvim_send(":call append(0, 'DIRTY')\r")
+        except Exception:
+            sentinel = None
         before = _hash("web/static/app.js")
-        code, rr = _json("/api/run", method="POST", token=token, body={"key": solved["key"]})
-        check("/api/run grades (valid JSON, status pass/fail/error)",
-              code == 200 and rr.get("status") in ("pass", "fail", "error"),
-              f"{solved['id']} -> {rr.get('status')}")
+        code, rr = _json("/api/run", method="POST", token=token, body={"key": a_prob["key"]})
+        check("/api/run grades (status pass/fail, NOT error)",
+              code == 200 and rr.get("status") in ("pass", "fail"),
+              f"{a_prob['id']} -> {rr.get('status')}: {(rr.get('message') or '')[:60]}")
         after = _hash("web/static/app.js")
-        check("running a problem does NOT modify web/static/app.js (:wa guard)",
-              before == after and before is not None)
+        check("a run does NOT modify web/static/app.js", before == after and before is not None)
+        if sentinel:
+            kept = open(sentinel).read().strip() == "SENTINEL_ORIGINAL"
+            check("a run does NOT write an unrelated dirty buffer (sentinel)", kept)
+            try:
+                _nvim_send(":bd! " + sentinel + "\r"); os.remove(sentinel)
+            except Exception:
+                pass
     else:
         check("/api/run grades", False, "no problem available", skipped=True)
 
@@ -134,8 +192,7 @@ def main():
           ("missing: " + ", ".join(missing_ids)) if missing_ids else f"{len(ids_used)} ids ok")
 
     py = _read("app.py")
-    routes_used = set(re.findall(r'api\.(?:get|post)\("(/api/[^"?]+)"', js))
-    routes_used |= set(re.findall(r'fetch\("(/api/[^"?]+)"', js))
+    routes_used = set(re.findall(r'(?:api\.(?:get|post)|fetch)\("(/api/[a-z_]+)', js))
     handled = set(re.findall(r'u\.path == "(/api/[^"]+)"', py))
     missing_routes = sorted(routes_used - handled)
     check("every /api route used by app.js is handled in app.py", not missing_routes,
@@ -149,6 +206,14 @@ def main():
         check("nvim server", False, "nvim not found", skipped=True)
 
     return _summary()
+
+
+def _nvim_remote(path):
+    subprocess.run(["nvim", "--server", NVIM_SOCK, "--remote", path], timeout=8)
+
+
+def _nvim_send(keys):
+    subprocess.run(["nvim", "--server", NVIM_SOCK, "--remote-send", keys], timeout=8)
 
 
 def _hash(rel):

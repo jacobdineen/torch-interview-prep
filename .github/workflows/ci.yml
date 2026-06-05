@@ -47,5 +47,12 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install numpy transformers einops
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Web static checks (contract, syntax, token wiring)
+        run: python web/smoke_test.py --static
+
       - name: Verify all problems and projects
         run: python verify_all.py
