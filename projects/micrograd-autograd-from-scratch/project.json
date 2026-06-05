@@ -1,0 +1,172 @@
+{
+  "name": "micrograd-autograd-from-scratch",
+  "title": "Build Your Own Autograd Engine (micrograd)",
+  "parts": [
+    {
+      "title": "Scalar Arithmetic",
+      "description": "Implement add, multiply, power, and subtract on Value nodes, each wiring up its local backward closure."
+    },
+    {
+      "title": "Activations",
+      "description": "Implement ReLU, tanh, and exp on Value nodes with their local gradients."
+    },
+    {
+      "title": "Reverse-Mode Autodiff",
+      "description": "Topologically sort the graph and run reverse-mode backprop from a scalar output."
+    },
+    {
+      "title": "Neural Network",
+      "description": "Build neurons, layers, and an MLP out of Value nodes."
+    },
+    {
+      "title": "Training",
+      "description": "Collect parameters, an MSE loss, zero_grad, an SGD step, and the training loop."
+    }
+  ],
+  "steps": [
+    {
+      "id": "0001",
+      "name": "v_add",
+      "part": 0,
+      "points": 5,
+      "signature": "v_add(a, b)",
+      "doc": "Return a Value holding the sum of a and b, propagating gradient to both addends."
+    },
+    {
+      "id": "0002",
+      "name": "v_mul",
+      "part": 0,
+      "points": 5,
+      "signature": "v_mul(a, b)",
+      "doc": "Return a Value holding the product of a and b, with the product-rule gradient."
+    },
+    {
+      "id": "0003",
+      "name": "v_pow",
+      "part": 0,
+      "points": 5,
+      "signature": "v_pow(a, n)",
+      "doc": "Return a Value holding a raised to the constant power n, with the power-rule gradient."
+    },
+    {
+      "id": "0004",
+      "name": "v_sub",
+      "part": 0,
+      "points": 5,
+      "signature": "v_sub(a, b)",
+      "doc": "Return a Value holding the difference a minus b, propagating gradient with opposite signs."
+    },
+    {
+      "id": "0005",
+      "name": "v_relu",
+      "part": 1,
+      "points": 5,
+      "signature": "v_relu(a)",
+      "doc": "Apply the rectified linear unit (clamp negatives to zero) to a Value."
+    },
+    {
+      "id": "0006",
+      "name": "v_tanh",
+      "part": 1,
+      "points": 5,
+      "signature": "v_tanh(a)",
+      "doc": "Apply the hyperbolic tangent activation to a Value."
+    },
+    {
+      "id": "0007",
+      "name": "v_exp",
+      "part": 1,
+      "points": 5,
+      "signature": "v_exp(a)",
+      "doc": "Apply the natural exponential to a Value."
+    },
+    {
+      "id": "0008",
+      "name": "build_topo",
+      "part": 2,
+      "points": 5,
+      "signature": "build_topo(root)",
+      "doc": "Return the nodes of root's graph in depth-first postorder (children before parents, root last)."
+    },
+    {
+      "id": "0009",
+      "name": "backward",
+      "part": 2,
+      "points": 5,
+      "signature": "backward(root)",
+      "doc": "Seed root's grad to 1.0 and run each node's _backward in reverse topological order."
+    },
+    {
+      "id": "0010",
+      "name": "init_neuron",
+      "part": 3,
+      "points": 5,
+      "signature": "init_neuron(nin, seed=0)",
+      "doc": "Create a neuron as a dict of nin random weights in [-1,1] and a zero bias."
+    },
+    {
+      "id": "0011",
+      "name": "neuron_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "neuron_forward(neuron, x)",
+      "doc": "Compute tanh of the weighted sum of inputs x plus the neuron's bias."
+    },
+    {
+      "id": "0012",
+      "name": "layer_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "layer_forward(layer, x)",
+      "doc": "Apply every neuron in the layer to the same input list x, returning their outputs."
+    },
+    {
+      "id": "0013",
+      "name": "mlp_forward",
+      "part": 3,
+      "points": 5,
+      "signature": "mlp_forward(mlp, x)",
+      "doc": "Thread the input list x through each layer in turn and return the last layer's outputs."
+    },
+    {
+      "id": "0014",
+      "name": "parameters",
+      "part": 4,
+      "points": 5,
+      "signature": "parameters(mlp)",
+      "doc": "Return a flat list of all weight and bias Values across every neuron in every layer."
+    },
+    {
+      "id": "0015",
+      "name": "mse_loss",
+      "part": 4,
+      "points": 5,
+      "signature": "mse_loss(preds, targets)",
+      "doc": "Return the summed squared-error Value between predictions and target floats."
+    },
+    {
+      "id": "0016",
+      "name": "zero_grad",
+      "part": 4,
+      "points": 5,
+      "signature": "zero_grad(params)",
+      "doc": "Reset the .grad of every parameter Value to 0.0."
+    },
+    {
+      "id": "0017",
+      "name": "sgd_step",
+      "part": 4,
+      "points": 5,
+      "signature": "sgd_step(params, lr)",
+      "doc": "Update each parameter's data in place by a gradient-descent step of size lr."
+    },
+    {
+      "id": "0018",
+      "name": "train",
+      "part": 4,
+      "points": 5,
+      "signature": "train(mlp, X, Y, lr, n_steps)",
+      "doc": "Run n_steps of full-batch SGD on the MLP and return the list of per-step loss floats."
+    }
+  ]
+}
