@@ -281,3 +281,6 @@ button.pal-group:hover { color: var(--fg); background: var(--panel2); }
 .sd-table td { padding: 7px 18px; font-size: 13px; }
 .sd-table td:nth-child(2), .sd-table td:nth-child(4) { color: var(--muted); }
 .sd-table tr + tr td { border-top: 1px solid var(--border); }
+
+/* palette overflow footer (render is capped for performance) */
+.pal-more { padding: 8px 10px; color: var(--faint); font-size: 11px; text-align: center; border-top: 1px solid var(--border); }

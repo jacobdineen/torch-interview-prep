@@ -43,6 +43,7 @@ async function init() {
 
   setupSplitters();
   setupShortcuts();
+  setupPalette();
   window.addEventListener("resize", debounce(clampSplits, 120));
   window.addEventListener("popstate", onPopState);
 
@@ -288,45 +289,59 @@ function view() {
 function fwShort(it) { if (it.framework === "numpy") return "np"; return it.numpy ? "pt+np" : "pt"; }
 
 // ===== palette =====
+const PALETTE_MAX = 250;          // cap rows actually rendered; refine search for more
+let RENDERED = [];                // the items currently in the palette (== view, capped)
 function renderPalette() {
   const v = view(), pal = $("palette");
-  if (HILITE >= v.length) HILITE = Math.max(0, v.length - 1);
+  RENDERED = v.length > PALETTE_MAX ? v.slice(0, PALETTE_MAX) : v;
+  if (HILITE >= RENDERED.length) HILITE = Math.max(0, RENDERED.length - 1);
+  if (!v.length) { pal.innerHTML = `<div class="pal-empty">no matches</div>`; return; }
   let html = "", group = null;
-  v.forEach((it, i) => {
+  for (let i = 0; i < RENDERED.length; i++) {
+    const it = RENDERED[i];
     if (it.group !== group) { group = it.group; html += `<button type="button" class="pal-group" data-group="${esc(group)}" title="Jump to first unsolved here">${esc(group)}</button>`; }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" role="option" aria-selected="${i === HILITE}" data-key="${esc(it.key)}" data-i="${i}">` +
-      `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
+      `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "\u2713" : "\u00b7"}</span>` +
       `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
       `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
-  });
-  if (!v.length) html = `<div class="pal-empty">no matches</div>`;
+  }
+  if (v.length > RENDERED.length) html += `<div class="pal-more">+${v.length - RENDERED.length} more \u2014 keep typing to narrow</div>`;
   pal.innerHTML = html;
-  pal.querySelectorAll(".pal-row").forEach((row) => {
-    row.addEventListener("click", () => { selectItem(row.dataset.key); closePalette(); });
-    row.addEventListener("mousemove", () => setHilite(parseInt(row.dataset.i, 10)));
-  });
-  pal.querySelectorAll(".pal-group").forEach((g) => {
-    g.addEventListener("click", (e) => {
-      e.stopPropagation();
+  scrollHiliteIntoView();
+}
+// Delegate clicks/hover ONCE on the container instead of per-row on every render.
+function setupPalette() {
+  const pal = $("palette");
+  pal.addEventListener("click", (e) => {
+    const row = e.target.closest(".pal-row");
+    if (row) { selectItem(row.dataset.key); closePalette(); $("filter").blur(); return; }
+    const g = e.target.closest(".pal-group");
+    if (g) {
       const grp = g.dataset.group, inGrp = view().filter((x) => x.group === grp);
       const t = inGrp.find((x) => !x.solved) || inGrp[0];
       if (t) { selectItem(t.key); closePalette(); $("filter").blur(); }
-    });
+    }
   });
-  scrollHiliteIntoView();
+  pal.addEventListener("mousemove", (e) => {
+    const row = e.target.closest(".pal-row");
+    if (row) { const i = parseInt(row.dataset.i, 10); if (i !== HILITE) setHilite(i); }
+  });
 }
+// O(1): only repaint the previously- and newly-highlighted rows.
 function setHilite(i) {
+  const pal = $("palette");
+  const prev = pal.querySelector(".pal-row.hi");
+  if (prev) { prev.classList.remove("hi"); prev.setAttribute("aria-selected", "false"); }
   HILITE = i;
-  $("palette").querySelectorAll(".pal-row").forEach((r) => {
-    const on = parseInt(r.dataset.i, 10) === i; r.classList.toggle("hi", on); r.setAttribute("aria-selected", on);
-  });
+  const cur = pal.querySelector(`.pal-row[data-i="${i}"]`);
+  if (cur) { cur.classList.add("hi"); cur.setAttribute("aria-selected", "true"); }
 }
 function scrollHiliteIntoView() { const el = $("palette").querySelector(".pal-row.hi"); if (el) el.scrollIntoView({ block: "nearest" }); }
 function openPalette() { $("palette").classList.remove("hidden"); $("filter").setAttribute("aria-expanded", "true"); }
 function closePalette() { $("palette").classList.add("hidden"); $("filter").setAttribute("aria-expanded", "false"); }
 
 function onFilterKey(e) {
-  const v = view();
+  const v = RENDERED;
   if (e.key === "ArrowDown") { e.preventDefault(); HILITE = Math.min(v.length - 1, HILITE + 1); setHilite(HILITE); scrollHiliteIntoView(); openPalette(); }
   else if (e.key === "ArrowUp") { e.preventDefault(); HILITE = Math.max(0, HILITE - 1); setHilite(HILITE); scrollHiliteIntoView(); }
   else if (e.key === "Enter") { e.preventDefault(); if (v[HILITE]) { selectItem(v[HILITE].key); closePalette(); $("filter").blur(); } }
