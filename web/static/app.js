@@ -4,7 +4,12 @@ const $ = (id) => document.getElementById(id);
 const api = {
   async get(p) { const r = await fetch(p); if (!r.ok) throw new Error(`GET ${p} → ${r.status}`); return r.json(); },
   async post(p, body) {
-    const r = await fetch(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    const send = () => fetch(p, { method: "POST", headers: { "Content-Type": "application/json", "X-MLE-Token": TOKEN }, body: JSON.stringify(body || {}) });
+    let r = await send();
+    if (r.status === 403) {                 // stale token (server restarted) -> refresh it and retry once
+      try { const cfg = await (await fetch("/api/config")).json(); TOKEN = cfg.token || ""; } catch (e) {}
+      r = await send();
+    }
     if (!r.ok) throw new Error(`POST ${p} → ${r.status}`); return r.json();
   },
 };

@@ -23,10 +23,30 @@ import subprocess
 import sys
 import threading
 import secrets
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-_SECRET = secrets.token_hex(16)        # CSRF token for mutating POSTs (exposed via same-origin /api/config)
+def _load_secret():
+    """Persist the CSRF token across restarts so an already-open tab keeps working
+    (a fresh token each start would 403 every open POST until the user refreshes)."""
+    path = os.path.join(tempfile.gettempdir(), "mle_prep_token")
+    try:
+        t = open(path).read().strip()
+        if len(t) >= 16:
+            return t
+    except Exception:
+        pass
+    t = secrets.token_hex(16)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.write(fd, t.encode()); os.close(fd)
+    except Exception:
+        pass
+    return t
+
+
+_SECRET = _load_secret()                # CSRF token for mutating POSTs (exposed via same-origin /api/config)
 _run_lock = threading.Lock()           # serialize /api/run (avoid racing check.py + torn progress files)
 _catalog_cache = {"sig": None, "data": None}
 
@@ -304,7 +324,10 @@ def nvim_open(path):
 
 
 def nvim_save_all():
-    return _nvim("--remote-send", "<C-\\><C-N>:wa<CR>").returncode == 0
+    # Save ONLY the current buffer (the problem being graded). NOT :wa — writing
+    # *all* buffers would overwrite any unrelated file left open+modified in the
+    # persistent server (e.g. a web/ file edited on disk) with a stale buffer.
+    return _nvim("--remote-send", "<C-\\><C-N>:silent! w<CR>").returncode == 0
 
 
 def teardown():
