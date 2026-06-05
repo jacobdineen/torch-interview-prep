@@ -236,3 +236,48 @@ button.danger:hover { border-color: var(--red); background: color-mix(in srgb, v
   #split { grid-template-columns: 1fr !important; grid-template-rows: minmax(160px, 38%) 8px 1fr; }
   .gutter-x { display: none; }
 }
+
+/* ===== round-2 polish ===== */
+/* structured results */
+.results-body .res-headline { font-weight: 700; margin-bottom: 8px; }
+.results-body .res-sec { margin: 8px 0 0; color: var(--fg); }
+.results-body .res-lbl { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 2px; }
+.results-body .res-hint { color: var(--amber); }
+.results-body .res-hint .res-lbl { color: color-mix(in srgb, var(--amber) 80%, var(--muted)); }
+.results-body .res-next { color: var(--accent); }
+.results-body.pass { border-left: 3px solid var(--green); }
+.results-body.fail { border-left: 3px solid var(--red); }
+.results-body .rp-dim { color: var(--muted); }
+/* idle placeholder */
+.results-placeholder { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--muted); text-align: center; }
+.results-placeholder .rp-glyph { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid var(--border2); color: var(--accent); font-size: 14px; margin-bottom: 4px; }
+.results-placeholder .rp-dim { font-size: 12px; color: var(--faint); }
+kbd { font-family: var(--mono); font-size: 11px; background: var(--panel2); border: 1px solid var(--border2);
+  border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--fg); }
+
+/* completed home cards */
+.home-card.complete { border-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
+.home-card.complete .hc-icon { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); border-color: color-mix(in srgb, var(--green) 38%, var(--border)); }
+.home-card.complete .hc-meta span:last-child { color: var(--green); font-weight: 600; }
+
+/* editor 'opening…' (neutral) vs warn (amber) */
+.editor-warn.info { color: var(--muted); border-color: var(--border); background: var(--panel2); }
+
+/* clickable palette part-headers */
+button.pal-group { display: block; width: 100%; text-align: left; cursor: pointer; border: 0;
+  border-bottom: 1px solid var(--border); border-radius: 0; }
+button.pal-group:hover { color: var(--fg); background: var(--panel2); }
+.pal-row { transition: background .07s ease; }
+
+/* shortcuts dialog */
+.shortcuts-dlg { border: 1px solid var(--border2); border-radius: var(--radius); background: var(--panel); color: var(--fg);
+  padding: 0; box-shadow: var(--shadow); max-width: 460px; width: 92vw; }
+.shortcuts-dlg::backdrop { background: rgba(0,0,0,.5); backdrop-filter: blur(2px); }
+.shortcuts-dlg .sd-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;
+  border-bottom: 1px solid var(--border); font-weight: 650; }
+.shortcuts-dlg .sd-head button { padding: 4px 9px; }
+.sd-table { width: 100%; border-collapse: collapse; padding: 6px; }
+.sd-table td { padding: 7px 18px; font-size: 13px; }
+.sd-table td:nth-child(2), .sd-table td:nth-child(4) { color: var(--muted); }
+.sd-table tr + tr td { border-top: 1px solid var(--border); }

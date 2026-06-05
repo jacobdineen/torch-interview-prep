@@ -9,11 +9,8 @@ const api = {
   },
 };
 
-let ITEMS = [];          // full catalog
-let SOURCES = [];        // ["Problems", "tiny-gpt-from-scratch", ...]
-let PROJECTS = {};       // name -> {title, description}
-let CURRENT = null;      // current item key
-let HILITE = 0;          // highlighted palette index
+let ITEMS = [], SOURCES = [], PROJECTS = {};
+let CURRENT = null, HILITE = 0;
 let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
 
 async function init() {
@@ -24,16 +21,13 @@ async function init() {
   $("nvim").src = `${location.protocol}//${location.hostname}:${cfg.ttyd_port}/`;
 
   const cat = await api.get("/api/catalog");
-  ITEMS = cat.items || [];
-  SOURCES = cat.sources || [];
-  PROJECTS = cat.projects || {};
+  ITEMS = cat.items || []; SOURCES = cat.sources || []; PROJECTS = cat.projects || {};
 
   const sourceSel = $("source");
   sourceSel.innerHTML = "";
   for (const s of ["All", ...SOURCES]) {
     const o = document.createElement("option");
-    o.value = s; o.textContent = s === "All" ? "All sources" : s;
-    sourceSel.appendChild(o);
+    o.value = s; o.textContent = s === "All" ? "All sources" : s; sourceSel.appendChild(o);
   }
   sourceSel.value = "Problems";
 
@@ -42,8 +36,7 @@ async function init() {
   const fwLabel = { numpy: "NumPy", torch: "PyTorch" };
   for (const fw of ["All", ...(cat.frameworks || ["numpy", "torch"])]) {
     const o = document.createElement("option");
-    o.value = fw; o.textContent = fw === "All" ? "Any framework" : (fwLabel[fw] || fw);
-    fwSel.appendChild(o);
+    o.value = fw; o.textContent = fw === "All" ? "Any framework" : (fwLabel[fw] || fw); fwSel.appendChild(o);
   }
   fwSel.value = "All";
   fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
@@ -71,14 +64,14 @@ async function init() {
   $("hint-btn").addEventListener("click", showHint);
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
+  $("sd-close").addEventListener("click", () => $("shortcuts-dlg").close());
+  $("shortcuts-dlg").addEventListener("click", (e) => { if (e.target.id === "shortcuts-dlg") $("shortcuts-dlg").close(); });
 
   const deep = new URLSearchParams(location.search).get("key");
   if (deep && ITEMS.find((x) => x.key === deep)) {
     const it = ITEMS.find((x) => x.key === deep);
     enterTrack(it.source, it.framework || "All", it.key);
-  } else {
-    showHome();
-  }
+  } else showHome();
 }
 
 function showInitError(err) {
@@ -90,8 +83,11 @@ function showInitError(err) {
     `<button onclick="location.reload()">Retry</button></div>`;
   document.body.appendChild(el);
 }
-
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function inField() {
+  const a = document.activeElement;
+  return /^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(a.tagName) || !!(a.closest && a.closest("details summary"));
+}
 
 // ===== theme =====
 function applyTheme(t) {
@@ -104,7 +100,7 @@ function toggleTheme() {
   localStorage.setItem("mle_theme", t); applyTheme(t);
 }
 
-// ===== editor zoom (CSS-scales the cross-origin terminal iframe) =====
+// ===== editor zoom =====
 const ZMIN = 0.7, ZMAX = 2.2;
 function applyZoom(z) {
   z = Math.max(ZMIN, Math.min(ZMAX, Math.round(z * 100) / 100));
@@ -116,25 +112,23 @@ function curZoom() { return parseFloat(getComputedStyle(document.documentElement
 function bumpZoom(d) { applyZoom(curZoom() + d); }
 
 // ===== home / track picker =====
-function trackStats(pred) {
-  const v = ITEMS.filter(pred);
-  return { total: v.length, solved: v.filter((x) => x.solved).length };
-}
+function trackStats(pred) { const v = ITEMS.filter(pred); return { total: v.length, solved: v.filter((x) => x.solved).length }; }
 function card(cls, icon, title, sub, desc, stats, onClick) {
   const pct = stats.total ? Math.round((stats.solved / stats.total) * 100) : 0;
+  const complete = stats.total > 0 && pct === 100;
   const el = document.createElement("button");
-  el.className = "home-card " + cls;
+  el.className = "home-card " + cls + (complete ? " complete" : "");
   el.innerHTML =
     `<div class="hc-top"><div class="hc-icon">${icon}</div>` +
     `<div><div class="hc-title">${esc(title)}</div><div class="hc-sub">${esc(sub)}</div></div></div>` +
     `<div class="hc-desc">${esc(desc)}</div>` +
     `<div class="hc-bar"><div style="width:${pct}%"></div></div>` +
-    `<div class="hc-meta"><span>${stats.solved}/${stats.total} solved</span><span>${pct}%</span></div>`;
+    `<div class="hc-meta"><span>${stats.solved}/${stats.total} solved</span>` +
+    `<span>${complete ? "✓ complete" : pct + "%"}</span></div>`;
   el.addEventListener("click", onClick);
   return el;
 }
 function renderHome() {
-  // resume banner
   const rb = $("resume-banner"); rb.innerHTML = "";
   const lastKey = localStorage.getItem("mle_last_key");
   const last = lastKey && ITEMS.find((x) => x.key === lastKey);
@@ -172,11 +166,11 @@ function renderHome() {
   }
 }
 function showHome() {
+  _selSeq++;                                    // cancel any in-flight selectItem
   document.body.classList.add("home-active");
   $("split").classList.add("hidden");
   $("home").classList.remove("hidden");
-  closePalette();
-  renderHome();
+  closePalette(); renderHome();
   try { history.replaceState({}, "", location.pathname); } catch (e) {}
   const h = $("home").querySelector("h1"); if (h) h.focus();
 }
@@ -196,8 +190,7 @@ function enterTrack(source, fw, key) {
 
 // ===== progress =====
 function updateProgress() {
-  const v = view();
-  const solved = v.filter((x) => x.solved).length;
+  const v = view(); const solved = v.filter((x) => x.solved).length;
   const pct = v.length ? Math.round((solved / v.length) * 100) : 0;
   $("progress-fill").style.width = pct + "%";
   $("overall").textContent = `${solved}/${v.length} solved`;
@@ -217,13 +210,13 @@ function setupSplitters() {
       gutter.classList.add("dragging");
       document.body.classList.add("resizing", axisClass);
       const move = (ev) => root.style.setProperty(cssVar, compute(ev) + "px");
-      const end = () => {
+      const end = (ev) => {
         gutter.classList.remove("dragging");
         document.body.classList.remove("resizing", axisClass);
         gutter.removeEventListener("pointermove", move);
         gutter.removeEventListener("pointerup", end);
         gutter.removeEventListener("pointercancel", end);
-        try { gutter.releasePointerCapture(e.pointerId); } catch (_) {}
+        try { gutter.releasePointerCapture((ev && ev.pointerId != null) ? ev.pointerId : e.pointerId); } catch (_) {}
         localStorage.setItem(storeKey, getComputedStyle(root).getPropertyValue(cssVar).trim());
       };
       gutter.addEventListener("pointermove", move);
@@ -242,8 +235,6 @@ function setupSplitters() {
   }, "mle_results_h", "--results-h");
   clampSplits();
 }
-
-// keep stored pixel splits usable after the window changes size
 function clampSplits() {
   if (document.body.classList.contains("home-active")) return;
   const root = document.documentElement, split = $("split"), left = $("left"), right = $("right");
@@ -262,17 +253,18 @@ function clampSplits() {
 
 function setupShortcuts() {
   document.addEventListener("keydown", (e) => {
-    const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-    // editor zoom (page-focused; the terminal iframe captures its own keys)
-    if ((e.ctrlKey || e.metaKey) && !inField) {
+    const field = inField();
+    const home = document.body.classList.contains("home-active");
+    // editor zoom: only in the workspace, page-focused
+    if ((e.ctrlKey || e.metaKey) && !field && !home) {
       if (e.key === "=" || e.key === "+") { e.preventDefault(); bumpZoom(+0.1); return; }
       if (e.key === "-" || e.key === "_") { e.preventDefault(); bumpZoom(-0.1); return; }
       if (e.key === "0") { e.preventDefault(); applyZoom(1); return; }
     }
-    if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === "/" && !document.body.classList.contains("home-active")) { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }
-    if (document.body.classList.contains("home-active")) return;
-    // workspace keyboard loop
+    if (field || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "?") { e.preventDefault(); $("shortcuts-dlg").showModal(); return; }
+    if (e.key === "/" && !home) { e.preventDefault(); $("filter").focus(); $("filter").select(); return; }
+    if (home) return;
     if (e.key === "r") { e.preventDefault(); run(false); }
     else if (e.key === "s") { e.preventDefault(); run(true); }
     else if (e.key === "n") { e.preventDefault(); gotoNextUnsolved(); }
@@ -301,7 +293,7 @@ function renderPalette() {
   if (HILITE >= v.length) HILITE = Math.max(0, v.length - 1);
   let html = "", group = null;
   v.forEach((it, i) => {
-    if (it.group !== group) { group = it.group; html += `<div class="pal-group" role="presentation">${esc(group)}</div>`; }
+    if (it.group !== group) { group = it.group; html += `<button type="button" class="pal-group" data-group="${esc(group)}" title="Jump to first unsolved here">${esc(group)}</button>`; }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" role="option" aria-selected="${i === HILITE}" data-key="${esc(it.key)}" data-i="${i}">` +
       `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "✓" : "·"}</span>` +
       `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
@@ -313,6 +305,14 @@ function renderPalette() {
     row.addEventListener("click", () => { selectItem(row.dataset.key); closePalette(); });
     row.addEventListener("mousemove", () => setHilite(parseInt(row.dataset.i, 10)));
   });
+  pal.querySelectorAll(".pal-group").forEach((g) => {
+    g.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const grp = g.dataset.group, inGrp = view().filter((x) => x.group === grp);
+      const t = inGrp.find((x) => !x.solved) || inGrp[0];
+      if (t) { selectItem(t.key); closePalette(); $("filter").blur(); }
+    });
+  });
   scrollHiliteIntoView();
 }
 function setHilite(i) {
@@ -322,47 +322,50 @@ function setHilite(i) {
   });
 }
 function scrollHiliteIntoView() { const el = $("palette").querySelector(".pal-row.hi"); if (el) el.scrollIntoView({ block: "nearest" }); }
-function openPalette() { $("palette").classList.remove("hidden"); }
-function closePalette() { $("palette").classList.add("hidden"); }
+function openPalette() { $("palette").classList.remove("hidden"); $("filter").setAttribute("aria-expanded", "true"); }
+function closePalette() { $("palette").classList.add("hidden"); $("filter").setAttribute("aria-expanded", "false"); }
 
 function onFilterKey(e) {
   const v = view();
   if (e.key === "ArrowDown") { e.preventDefault(); HILITE = Math.min(v.length - 1, HILITE + 1); setHilite(HILITE); scrollHiliteIntoView(); openPalette(); }
   else if (e.key === "ArrowUp") { e.preventDefault(); HILITE = Math.max(0, HILITE - 1); setHilite(HILITE); scrollHiliteIntoView(); }
   else if (e.key === "Enter") { e.preventDefault(); if (v[HILITE]) { selectItem(v[HILITE].key); closePalette(); $("filter").blur(); } }
-  else if (e.key === "Escape") { closePalette(); $("filter").blur(); }
+  else if (e.key === "Escape") { e.preventDefault(); closePalette(); }   // keep focus in the field
 }
 
 // ===== navigation =====
 function step(delta) {
-  const v = view();
-  const i = v.findIndex((x) => x.key === CURRENT);
+  const v = view(); const i = v.findIndex((x) => x.key === CURRENT);
   const j = Math.min(v.length - 1, Math.max(0, (i < 0 ? 0 : i + delta)));
   if (v[j]) selectItem(v[j].key);
 }
 function gotoNextUnsolved() {
-  const v = view();
-  const i = v.findIndex((x) => x.key === CURRENT);
+  const v = view(); const i = v.findIndex((x) => x.key === CURRENT);
   const nxt = v.slice(i + 1).find((x) => !x.solved) || v.find((x) => !x.solved);
   if (nxt) selectItem(nxt.key);
+  else flashResults("muted", `All ${v.length} item${v.length === 1 ? "" : "s"} in this view are solved — switch track or filter to find more.`);
 }
 
 // ===== selection =====
-async function openEditor(key) {
-  try { const r = await api.post("/api/open", { key }); setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim"); }
-  catch (e) { setEditorWarn("editor open failed"); }
+function setEditorWarn(msg, kind) {
+  const w = $("editor-warn"); if (!w) return;
+  w.textContent = msg || ""; w.className = "editor-warn" + (msg ? " " + (kind || "warn") : "");
 }
-function setEditorWarn(msg) { const w = $("editor-warn"); if (w) w.textContent = msg || ""; }
-
+async function openEditor(key) {
+  setEditorWarn("opening…", "info");
+  try { const r = await api.post("/api/open", { key }); setEditorWarn(r && r.ok ? "" : "editor may not have switched — check nvim", "warn"); }
+  catch (e) { setEditorWarn("editor open failed", "warn"); }
+}
 async function selectItem(key, push = true) {
   const seq = ++_selSeq;
   CURRENT = key;
   localStorage.setItem("mle_last_key", key);
+  setEditorWarn("");
   $("left").classList.add("loading");
   let m;
   try { [m] = await Promise.all([api.get("/api/item?key=" + encodeURIComponent(key)), openEditor(key)]); }
   catch (e) { if (seq === _selSeq) { $("left").classList.remove("loading"); flashResults("fail", "Couldn't load " + key + ": " + e.message); } return; }
-  if (seq !== _selSeq) return;            // a newer selection won
+  if (seq !== _selSeq) return;
   $("left").classList.remove("loading");
   if (!m || m.error) return;
 
@@ -391,10 +394,7 @@ async function selectItem(key, push = true) {
   $("aux-out").textContent = "";
   resetResults();
   if (m.source && [...$("source").options].some((o) => o.value === m.source)) $("source").value = m.source;
-
-  const url = "?key=" + encodeURIComponent(key);
-  try { if (push && new URLSearchParams(location.search).get("key") !== key) history.pushState({ key }, "", url); }
-  catch (e) {}
+  try { if (push && new URLSearchParams(location.search).get("key") !== key) history.pushState({ key }, "", "?key=" + encodeURIComponent(key)); } catch (e) {}
 }
 function onPopState() {
   const k = new URLSearchParams(location.search).get("key");
@@ -403,21 +403,25 @@ function onPopState() {
 }
 
 function resetResults() {
-  const b = $("results-body"); b.className = "results-body muted"; b.textContent = "Edit in the editor, then Run.";
+  const b = $("results-body");
+  b.className = "results-body muted";
+  b.innerHTML = `<div class="results-placeholder"><div class="rp-glyph">▶</div>` +
+    `<div>Write your solution in the editor</div>` +
+    `<div class="rp-dim">then press <kbd>r</kbd> or click Run</div></div>`;
 }
 function flashResults(kind, text) { const b = $("results-body"); b.className = "results-body " + kind; b.textContent = text; }
 
 async function run(submit) {
-  const seq = ++_runSeq, key = CURRENT;
+  const seq = ++_runSeq, selAt = _selSeq, key = CURRENT;
   if (!key) return;
   $("run-btn").disabled = true; $("submit-btn").disabled = true;
   const b = $("results-body"); b.className = "results-body muted";
   b.textContent = (submit ? "Submitting" : "Running") + " " + label(key) + " …";
   let r;
   try { r = await api.post("/api/run", { key }); }
-  catch (e) { if (seq === _runSeq) flashResults("fail", "error: " + e.message); }
+  catch (e) { if (seq === _runSeq && selAt === _selSeq) flashResults("fail", "error: " + e.message); }
   finally { if (seq === _runSeq) { $("run-btn").disabled = false; $("submit-btn").disabled = false; } }
-  if (seq !== _runSeq || !r) return;
+  if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
   renderResult(r, submit);
   setRunStatus(r.status);
   if (r.status === "pass") markSolved(key);
@@ -432,24 +436,27 @@ function setRunStatus(status) {
 function markSolved(key) {
   const it = ITEMS.find((x) => x.key === key);
   if (it && !it.solved) { it.solved = true; updateProgress(); }
-  $("prob-status").className = "tag solved"; $("prob-status").textContent = "solved";
+  // reflect in the palette row if present
+  const row = $("palette").querySelector(`.pal-row[data-key="${cssEsc(key)}"] .mark`);
+  if (row) { row.classList.add("ok"); row.textContent = "✓"; }
+  if (CURRENT === key) { $("prob-status").className = "tag solved"; $("prob-status").textContent = "solved"; }
 }
 function renderResult(r, submit) {
   const b = $("results-body");
   if (r.status === "pass") {
     b.className = "results-body pass";
-    let out = `✓ PASS ${r.problem || ""}`;
-    if (r.progress) out += `\n\n${r.progress}`;
-    if (submit && r.concept) out += `\n\nConcept:\n${r.concept}`;
-    if (r.next) out += `\n\nNext: ${r.next}  (press n)`;
-    b.textContent = out;
+    let h = `<div class="res-headline">✓ PASS ${esc(r.problem || "")}</div>`;
+    if (r.progress) h += `<div class="res-sec">${esc(r.progress)}</div>`;
+    if (submit && r.concept) h += `<div class="res-sec"><span class="res-lbl">Concept</span>${esc(r.concept)}</div>`;
+    if (r.next) h += `<div class="res-sec res-next">▶ Next: ${esc(r.next)} <span class="rp-dim">(press n)</span></div>`;
+    b.innerHTML = h;
   } else if (r.status === "fail") {
     b.className = "results-body fail";
-    let out = `✗ FAIL ${r.problem || ""}`;
-    if (r.hint) out += `\n\nLikely cause: ${r.hint}`;
-    if (r.detail) out += `\n${r.detail}`;
-    if (r.message) out += `\n\n${r.message}`;
-    b.textContent = out;
+    let h = `<div class="res-headline">✗ FAIL ${esc(r.problem || "")}</div>`;
+    if (r.hint) h += `<div class="res-sec res-hint"><span class="res-lbl">Likely cause</span>${esc(r.hint)}</div>`;
+    if (r.detail) h += `<div class="res-sec res-detail">${esc(r.detail)}</div>`;
+    if (r.message) h += `<div class="res-sec res-detail">${esc(r.message)}</div>`;
+    b.innerHTML = h;
   } else { b.className = "results-body fail"; b.textContent = "error: " + (r.message || "unknown"); }
 }
 function label(key) { const it = ITEMS.find((x) => x.key === key); return it ? it.id : key; }
@@ -480,5 +487,6 @@ async function showSolution() {
   a.scrollIntoView({ block: "nearest" });
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\\]]/g, "\\$&"); }
 
 init().catch(showInitError);

@@ -15,7 +15,7 @@
       <select id="framework" title="Filter by framework" aria-label="Framework"></select>
       <div class="search-wrap">
         <input id="filter" type="text" role="combobox" aria-expanded="false" aria-controls="palette"
-          placeholder="Search…   ( / focus · ↑↓ · r run · s submit · n next · h hint )" autocomplete="off" spellcheck="false" />
+          placeholder="Search id or title…   ( ↑↓ · Enter )" title="Press ? for keyboard shortcuts" autocomplete="off" spellcheck="false" />
         <div id="palette" class="palette hidden" role="listbox" aria-label="Problems"></div>
       </div>
       <div class="nav-group">
@@ -123,6 +123,18 @@
       </div>
     </section>
   </main>
+
+  <dialog id="shortcuts-dlg" class="shortcuts-dlg">
+    <div class="sd-head"><span>Keyboard shortcuts</span><button id="sd-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <table class="sd-table">
+      <tr><td><kbd>/</kbd></td><td>focus search</td><td><kbd>r</kbd></td><td>run</td></tr>
+      <tr><td><kbd>↑</kbd><kbd>↓</kbd></td><td>move in search</td><td><kbd>s</kbd></td><td>submit</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>open highlighted</td><td><kbd>n</kbd></td><td>next unsolved</td></tr>
+      <tr><td><kbd>←</kbd><kbd>→</kbd></td><td>prev / next item</td><td><kbd>h</kbd></td><td>hint</td></tr>
+      <tr><td><kbd>g</kbd></td><td>home</td><td><kbd>Ctrl</kbd>+<kbd>±</kbd></td><td>editor zoom</td></tr>
+      <tr><td><kbd>?</kbd></td><td>this help</td><td><kbd>Esc</kbd></td><td>close search</td></tr>
+    </table>
+  </dialog>
 
   <script src="/static/app.js"></script>
 </body>
