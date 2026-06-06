@@ -565,7 +565,7 @@ def _write_last_run(num, name, stub_path, status, error_type, message, exc):
     out["key"] = f"prob:{num}"
     out["ts"] = time.time()
     try:
-        tmp = LAST_RUN_FILE + ".tmp"
+        tmp = f"{LAST_RUN_FILE}.{os.getpid()}.tmp"
         with open(tmp, "w") as f:
             json.dump(out, f)
         os.replace(tmp, LAST_RUN_FILE)

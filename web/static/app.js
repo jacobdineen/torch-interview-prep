@@ -18,7 +18,9 @@ const api = {
 let ITEMS = [], SOURCES = [], PROJECTS = {}, TOKEN = "";
 let CURRENT = null, HILITE = 0;
 let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
-let _lastRunTs = 0;   // ts of the most recently handled run (web or nvim) — dedups the /api/sync poll
+let _lastRunTs = 0;      // ts of the most recently handled run (web or nvim) — dedups the /api/sync poll
+let _runInFlight = 0;    // # of web runs in flight — poll must not also react to them
+let _syncSeeded = false; // first poll only establishes a baseline (no replay)
 
 async function init() {
   applyTheme(localStorage.getItem("mle_theme") || "dark");
@@ -87,8 +89,7 @@ async function init() {
   $("sd-close").addEventListener("click", () => $("shortcuts-dlg").close());
   $("shortcuts-dlg").addEventListener("click", (e) => { if (e.target.id === "shortcuts-dlg") $("shortcuts-dlg").close(); });
 
-  try { const s0 = await api.get("/api/sync"); _lastRunTs = (s0 && s0.run && s0.run.ts) || 0; } catch (e) {}
-  setInterval(syncPoll, 1200);
+  setInterval(syncPoll, 1200);   // syncPoll() baselines itself on its first tick
 
   const deep = new URLSearchParams(location.search).get("key");
   if (deep && ITEMS.find((x) => x.key === deep)) {
@@ -467,18 +468,23 @@ function flashResults(kind, text) { const b = $("results-body"); b.className = "
 async function run(submit) {
   const seq = ++_runSeq, selAt = _selSeq, key = CURRENT;
   if (!key) return;
+  _runInFlight++;
   $("run-btn").disabled = true; $("submit-btn").disabled = true;
   const b = $("results-body"); b.className = "results-body muted";
   b.textContent = (submit ? "Submitting" : "Running") + " " + label(key) + " …";
   let r;
-  try { r = await api.post("/api/run", { key }); }
-  catch (e) { if (seq === _runSeq && selAt === _selSeq) flashResults("fail", "error: " + e.message); }
-  finally { if (seq === _runSeq) { $("run-btn").disabled = false; $("submit-btn").disabled = false; } }
-  if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
-  renderResult(r, submit);
-  setRunStatus(r.status);
-  if (r._ts) _lastRunTs = r._ts;
-  if (r.status === "pass") { markSolved(key); maybeAutoAdvance(); }
+  try {
+    try { r = await api.post("/api/run", { key }); }
+    catch (e) { if (seq === _runSeq && selAt === _selSeq) flashResults("fail", "error: " + e.message); }
+    if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
+    renderResult(r, submit);
+    setRunStatus(r.status);
+    if (r._ts) _lastRunTs = r._ts;   // claim this run's ts so the poll won't replay it
+    if (r.status === "pass") { markSolved(key); maybeAutoAdvance(); }
+  } finally {
+    if (seq === _runSeq) { $("run-btn").disabled = false; $("submit-btn").disabled = false; }
+    _runInFlight--;
+  }
 }
 function setRunStatus(status) {
   const btn = $("run-btn");
@@ -628,22 +634,29 @@ function itemExists(key) { return ITEMS.some((x) => x.key === key); }
 // same UI as the Run/Submit buttons: follow the editor's current file, and react
 // to a run we didn't initiate (result panel + solved + auto-next).
 async function syncPoll() {
-  if (document.hidden || !CURRENT) return;
+  if (document.hidden || !CURRENT || _runInFlight) return;
   let s;
   try { s = await api.get("/api/sync"); } catch (e) { return; }
-  if (!s) return;
-  const run = s.run, newRun = run && run.ts && run.ts !== _lastRunTs;
-  if (s.current && s.current !== CURRENT && itemExists(s.current)) {
-    await selectItem(s.current, true, false);     // follow nvim (e.g. you pressed `pn`) — don't reopen the file it's already on
+  if (!s || _runInFlight) return;                 // a web run started mid-poll — it will handle itself
+  if (!_syncSeeded) {                             // first poll: baseline only, never replay a historical run
+    _syncSeeded = true;
+    if (s.run && s.run.ts) _lastRunTs = s.run.ts;
+    return;
   }
-  if (newRun) {
+  const run = s.run, newRun = run && run.ts && run.ts !== _lastRunTs;
+  if (newRun) {                                   // a run we didn't start (e.g. `pp` in nvim)
     _lastRunTs = run.ts;
-    if (run.key && run.key !== CURRENT && itemExists(run.key)) await selectItem(run.key, true, false);
-    if (run.key === CURRENT) {
+    const k = run.key;
+    if (k && k !== CURRENT && itemExists(k)) await selectItem(k, true, false);
+    if (k === CURRENT) {
       renderResult(run, false);
       setRunStatus(run.status);
-      if (run.status === "pass") { markSolved(run.key); maybeAutoAdvance(); }
+      if (run.status === "pass") { markSolved(k); maybeAutoAdvance(); }
     }
+    return;                                        // one action per tick — don't also follow in the same poll
+  }
+  if (s.current && s.current !== CURRENT && itemExists(s.current)) {
+    await selectItem(s.current, true, false);      // follow nvim navigation (pn / :e) — don't reopen the file it's already on
   }
 }
 

@@ -240,12 +240,17 @@ def _write_last_run(project_root, step_id, name, step_path, status, error_type, 
     can react to project-step runs started from nvim. Best-effort + atomic."""
     out = _result_payload(project_root, step_id, name, step_path,
                           status, error_type, message, exc)
-    out["key"] = f"proj:{os.path.basename(project_root)}:{step_id}"
+    try:
+        import json as _json
+        _name = _json.load(open(os.path.join(project_root, "project.json"))).get("name") or os.path.basename(project_root)
+    except Exception:
+        _name = os.path.basename(project_root)
+    out["key"] = f"proj:{_name}:{step_id}"
     out["ts"] = time.time()
     repo_root = os.path.dirname(os.path.dirname(project_root))
     path = os.path.join(repo_root, ".last_run.json")
     try:
-        tmp = path + ".tmp"
+        tmp = f"{path}.{os.getpid()}.tmp"
         with open(tmp, "w") as f:
             json.dump(out, f)
         os.replace(tmp, path)

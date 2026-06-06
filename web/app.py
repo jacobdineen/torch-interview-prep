@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
@@ -411,25 +412,46 @@ def _path_to_key(path):
     return None
 
 
-def _current_nvim_key():
-    """Which problem/step the editor is currently showing (so the page can follow
-    nvim navigation like `pn`). Best-effort, short timeout; None if not a known file."""
-    r = _nvim("--remote-expr", "expand('%:p')", timeout=2)
-    if getattr(r, "returncode", 1) != 0:
+_lastrun_cache = {"mtime": None, "data": None}
+_curkey_cache = {"ts": 0.0, "key": None}
+
+
+def _read_last_run():
+    """Parse .last_run.json only when it actually changed (mtime-gated) — the poll
+    hits this every ~1.2s, so avoid re-parsing on every tick."""
+    try:
+        mt = os.path.getmtime(LAST_RUN)
+    except OSError:
         return None
-    return _path_to_key((r.stdout or "").strip())
+    if _lastrun_cache["mtime"] != mt:
+        try:
+            with open(LAST_RUN) as f:
+                _lastrun_cache["data"] = json.load(f)
+        except Exception:
+            _lastrun_cache["data"] = None
+        _lastrun_cache["mtime"] = mt
+    return _lastrun_cache["data"]
+
+
+def _current_nvim_key():
+    """Which problem/step the editor is showing (so the page can follow nvim nav).
+    The probe forks an nvim client, so skip it while a run holds the lock (nvim is
+    busy then) and cache briefly so the poll doesn't fork nvim on every tick."""
+    now = time.monotonic()
+    if _run_lock.locked():
+        return _curkey_cache["key"]
+    if now - _curkey_cache["ts"] < 2.0:
+        return _curkey_cache["key"]
+    r = _nvim("--remote-expr", "expand('%:p')", timeout=2)
+    key = _path_to_key((r.stdout or "").strip()) if getattr(r, "returncode", 1) == 0 else None
+    _curkey_cache["ts"], _curkey_cache["key"] = now, key
+    return key
 
 
 def _sync_state():
     """Lightweight poll target: the latest run result (from ANY front-end, incl. an
     nvim `pp`) plus the editor's current file, so the browser stays in lockstep."""
-    run = None
-    try:
-        with open(LAST_RUN) as f:
-            run = json.load(f)
-    except Exception:
-        run = None
-    return {"run": run, "current": _current_nvim_key()}
+    return {"run": _read_last_run(), "current": _current_nvim_key()}
 
 
 def _run_item(key):
@@ -625,8 +647,20 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
 
+def _warm_up():
+    """Pre-load the slow imports (torch ~1.3s) and the catalog OFF the request path,
+    so the first problem you open renders instantly instead of paying import cost."""
+    try:
+        _catalog()                       # build + cache the picker
+        import torch  # noqa: F401       # the big one — keep it off the first /api/item
+        import frameworks, examples, concepts  # noqa: F401
+    except Exception:
+        pass
+
+
 def main():
     srv = ThreadingHTTPServer(("127.0.0.1", APIPORT), Handler)
+    threading.Thread(target=_warm_up, daemon=True).start()
     print(f"API on http://127.0.0.1:{APIPORT}  (nvim socket {NVIM_SOCK}, ttyd :{TTYD_PORT})")
     try:
         srv.serve_forever()
