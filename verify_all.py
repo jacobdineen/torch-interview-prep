@@ -23,11 +23,11 @@ def main():
     py = sys.executable
     results = {}
     results["framework"] = _run("framework (grader + assembler)",
-                                 [py, os.path.join(HERE, "test_framework.py")])
+                                 [py, os.path.join(HERE, "tools", "test_framework.py")])
     results["problems"] = _run("problems (reference solutions)",
-                               [py, os.path.join(HERE, "verify_problems.py")])
+                               [py, os.path.join(HERE, "tools", "verify_problems.py")])
     results["numpy"] = _run("numpy variants (via the torch<->numpy bridge)",
-                            [py, os.path.join(HERE, "verify_numpy.py")])
+                            [py, os.path.join(HERE, "tools", "verify_numpy.py")])
     for verify in sorted(glob.glob(os.path.join(HERE, "projects", "*", "_build", "verify.py"))):
         name = os.path.basename(os.path.dirname(os.path.dirname(verify)))
         results[name] = _run(f"project: {name}", [py, verify])

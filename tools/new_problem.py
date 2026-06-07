@@ -23,7 +23,9 @@ import os
 import re
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
 PROBLEMS = os.path.join(HERE, "problems")
 STUBS = os.path.join(HERE, ".stubs")
 SRC = os.path.join(HERE, "tests", "_src")

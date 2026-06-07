@@ -11,9 +11,7 @@ import os
 import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-
-
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def main():
     gens = sorted(glob.glob(os.path.join(HERE, "projects", "*", "_build", "gen.py")))
     if not gens:

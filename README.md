@@ -31,20 +31,22 @@ The runner prints `PASS Problem 03a (flatten_batch)` plus a concept blurb and a 
 
 ## Repository layout
 
-The repo root holds the **commands you run** and two graders; everything they
-build on lives in `lib/`.
+The repo root holds the **daily commands** plus the two graders; occasional
+tools live in `tools/`, and everything they build on lives in `lib/`.
 
 ```
 prep.py            single dashboard: where am I + what's next  (start here)
 check.py           work a standalone problem  (run / hint / explain / solution / note / redo / time)
 projects.py        work a multi-step project  (status / run / explain / solution)
-run_all.py         run or summarize every problem
-reset.py           restore a problem to its pristine stub
-new_problem.py     scaffold a new problem
-new_project.py     scaffold a new from-scratch project
 verify_all.py      full correctness gate (CI): every reference solution + project passes its tests
 runner.py          grader for standalone problems   (imported by each problem file)
 project_runner.py  grader for project steps         (imported by each step file)
+
+tools/             run-occasionally commands  (run as `python tools/<name>.py`)
+  run_all.py         run / summarize every problem      reset.py            restore a problem's stub
+  new_problem.py     scaffold a problem                 new_project.py      scaffold a project
+  gen_numpy_stubs.py regen_all.py rebuild.py            build / maintenance
+  verify_problems.py verify_numpy.py test_framework.py  verification (verify_problems runs under verify_all)
 
 lib/               internal modules (not run directly)
   store.py           SQLite store — the single source of truth for progress, notes,
@@ -62,9 +64,9 @@ web/               self-hosted web app (app.py + static/) wrapping your real nvi
 docs/              guides (adding a problem/project, numpy variants, the web app)
 ```
 
-`runner.py` and `project_runner.py` stay at the repo root on purpose: every
-problem/step file imports them by name (`from runner import run_test_for`), so
-they cannot move. Everything else internal lives under `lib/`.
+`runner.py`/`project_runner.py` stay at the root because every problem/step file
+imports them by name (`from runner import run_test_for`); `check.py`/`projects.py`
+stay because the nvim integration locates the repo via `check.py` and runs both.
 
 ## Daily flow
 

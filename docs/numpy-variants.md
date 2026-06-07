@@ -30,8 +30,8 @@ problem has no NumPy variant, `--numpy` says so (it's torch-only).
 
 1. Add the parent's NumPy reference to `NUMPY_PARENTS` in `solutions_numpy.py`
    and list its child ids in `NUMPY_SUPPORTED`.
-2. `python gen_numpy_stubs.py` — writes the `problems_numpy/` stubs.
-3. `python verify_numpy.py` — every claimed NumPy variant must pass its torch
+2. `python tools/gen_numpy_stubs.py` — writes the `problems_numpy/` stubs.
+3. `python tools/verify_numpy.py` — every claimed NumPy variant must pass its torch
    test through the bridge (also runs in `verify_all.py` / CI).
 
 ## Coverage

@@ -5,10 +5,10 @@ each) that accumulate into a working program. The four existing ones
 (`tiny-gpt-from-scratch`, `tic-tac-toe-rl`, `rlhf-distilgpt2`,
 `alphazero-connect4`) all follow the same recipe. This is that recipe.
 
-## The fluid way: `new_project.py`
+## The fluid way: `tools/new_project.py`
 
 ```bash
-python new_project.py my-cool-project --title "My Cool Project"   # add --torch for torch stubs
+python tools/new_project.py my-cool-project --title "My Cool Project"   # add --torch for torch stubs
 ```
 
 This lays down the whole tree — `_build/{spec,gen,verify}.py`,
@@ -123,7 +123,7 @@ project is picked up automatically. Confirm locally before pushing:
 uv run python verify_all.py
 ```
 
-This runs the framework tests (`test_framework.py`), all problem references, and
+This runs the framework tests (`tools/test_framework.py`), all problem references, and
 every project's `verify.py`. Green here means green in GitHub Actions.
 
 ## Checklist

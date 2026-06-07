@@ -18,7 +18,9 @@ import re
 import shutil
 import sys
 
-PREP = os.path.dirname(os.path.abspath(__file__))
+PREP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PREP not in sys.path:
+    sys.path.insert(0, PREP)
 PROBLEMS = os.path.join(PREP, "problems")
 STUBS = os.path.join(PREP, ".stubs")
 PROGRESS_FILE = os.path.join(PREP, ".progress.json")

@@ -10,7 +10,7 @@ import marshal
 import os
 import sys
 
-PREP = os.path.dirname(os.path.abspath(__file__))
+PREP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(PREP, "tests", "_src")
 OUT = os.path.join(PREP, "tests", "_compiled")
 os.makedirs(OUT, exist_ok=True)

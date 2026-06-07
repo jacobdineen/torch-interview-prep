@@ -15,7 +15,7 @@ if HERE not in sys.path:
 
 def main():
     # Problems: per-tier bars (the standalone problems are the PyTorch track).
-    from run_all import show_status
+    from tools.run_all import show_status
     print("\n=== Problems  (PyTorch track) ===")
     show_status()
 

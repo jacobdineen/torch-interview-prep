@@ -23,7 +23,7 @@ import os
 import re
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECTS = os.path.join(HERE, "projects")
 TEMPLATE = os.path.join(PROJECTS, "tic-tac-toe-rl", "_build")  # most capable (handles class steps)
 

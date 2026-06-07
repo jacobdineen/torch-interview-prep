@@ -9,7 +9,7 @@ import os
 import re
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(HERE, "problems_numpy")
 sys.path.insert(0, HERE)
 from lib.solutions_numpy import NUMPY_PARENTS, NUMPY_SUPPORTED  # noqa: E402

@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-PREP = os.path.dirname(os.path.abspath(__file__))
+PREP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROBLEMS = sorted(glob.glob(os.path.join(PREP, "problems", "p*_*.py")))
 PROGRESS_FILE = os.path.join(PREP, ".progress.json")
 

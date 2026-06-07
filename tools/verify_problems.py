@@ -16,7 +16,7 @@ import sys
 import tempfile
 from importlib.machinery import SourcelessFileLoader
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROBLEMS = os.path.join(HERE, "problems")
 COMPILED = os.path.join(HERE, "tests", "_compiled")
 sys.path.insert(0, HERE)
