@@ -137,17 +137,8 @@ def _confirm(msg):
 
 
 def _clear_progress_for(ids):
-    if not os.path.exists(PROGRESS_FILE):
-        return
-    try:
-        with open(PROGRESS_FILE) as f:
-            progress = json.load(f)
-    except Exception:
-        return
-    for n in ids:
-        progress.pop(n, None)
-    with open(PROGRESS_FILE, "w") as f:
-        json.dump(progress, f, indent=2, sort_keys=True)
+    import store
+    store.clear_problems(list(ids))
 
 
 def _reset(paths, force):

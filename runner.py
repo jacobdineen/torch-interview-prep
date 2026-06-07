@@ -368,24 +368,11 @@ def _load_progress():
         return {}
 
 
-def _save_progress(progress):
-    try:
-        with open(PROGRESS_FILE, "w") as f:
-            json.dump(progress, f, indent=2, sort_keys=True)
-    except Exception:
-        pass  # progress tracking is best-effort; never block a run on it
-
-
 def _record(num, passed):
-    progress = _load_progress()
-    entry = progress.get(num, {})
-    entry["last_status"] = "pass" if passed else "fail"
-    entry["last_run"] = datetime.datetime.now().isoformat(timespec="seconds")
-    if passed:
-        entry["ever_passed"] = True
-        entry["first_passed"] = entry.get("first_passed") or entry["last_run"]
-    progress[num] = entry
-    _save_progress(progress)
+    # SQLite is the source of truth (atomic, race-free); it also re-exports
+    # .progress.json so readers (web, check.py, nvim) keep working unchanged.
+    import store
+    store.record_problem(num, passed)
 
 
 # ---------- concept blurbs ----------

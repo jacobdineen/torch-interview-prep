@@ -218,22 +218,8 @@ def _redo(pid):
     """Re-lock a solved problem: clear its pass record, hint counter, and solution
     unlock so it can be drilled fresh (the stub itself is untouched; use reset.py
     to restore the pristine stub)."""
-    import json
-    from debug_tools import HINT_STATE_FILE, SOLUTION_UNLOCK_FILE
-    cleared = False
-    for path in (os.path.join(HERE, ".progress.json"), HINT_STATE_FILE, SOLUTION_UNLOCK_FILE):
-        if not os.path.exists(path):
-            continue
-        try:
-            with open(path) as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        if isinstance(data, dict) and pid in data:
-            del data[pid]
-            cleared = True
-            with open(path, "w") as f:
-                json.dump(data, f, indent=2, sort_keys=True)
+    import store
+    cleared = store.relock_problem(pid)
     print(f"  {pid}: re-locked — solve it again to mark it passed."
           if cleared else f"  {pid}: nothing to reset (not yet solved).")
 

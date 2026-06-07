@@ -186,11 +186,8 @@ def cmd_note(root, sid, text):
     if not _find_step(man, sid):
         print(f"no step {sid}")
         return
-    path = _notes_file(root)
-    notes = _json_store(path)
-    notes.setdefault(sid, []).append(text)
-    with open(path, "w") as f:
-        json.dump(notes, f, indent=2, sort_keys=True)
+    import store
+    store.add_project_note(root, sid, text)
     print(f"  noted for {sid} (shown under --explain).")
 
 
@@ -245,12 +242,10 @@ def cmd_solution(root, sid, i_give_up):
     if not s:
         print(f"no step {sid}")
         return
-    unlocks = _json_store(_unlock_file(root))
-    if i_give_up and not unlocks.get(sid):
-        unlocks[sid] = True
-        with open(_unlock_file(root), "w") as f:
-            json.dump(unlocks, f, indent=2, sort_keys=True)
-    ok = prog.get(sid, {}).get("ever_passed") or i_give_up or unlocks.get(sid)
+    import store
+    if i_give_up and not store.is_project_unlocked(root, sid):
+        store.unlock_project(root, sid)
+    ok = prog.get(sid, {}).get("ever_passed") or i_give_up or store.is_project_unlocked(root, sid)
     if not ok:
         print(f"\n  Solution for {sid} is locked. Pass it once, or re-run with --i-give-up.")
         return

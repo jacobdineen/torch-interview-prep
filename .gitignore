@@ -13,3 +13,6 @@ __pycache__/
 projects/*/.project_progress.json
 projects/*/solution.py
 .last_run.json
+.mle_store.db
+.mle_store.db-wal
+.mle_store.db-shm

@@ -40,14 +40,14 @@ def _save_json(path, data):
 
 def add_note(pid, text):
     """Append a free-text note for a problem; resurfaces under --explain."""
-    notes = _load_json(NOTES_FILE)
-    notes.setdefault(pid, []).append(text)
-    _save_json(NOTES_FILE, notes)
+    import store
+    store.add_problem_note(pid, text)
     print(f"  Noted for {pid}: {text}")
 
 
 def get_notes(pid):
-    return _load_json(NOTES_FILE).get(pid, [])
+    import store
+    return store.get_problem_notes(pid)
 
 
 # -------------------------- hints --------------------------
@@ -64,13 +64,12 @@ def show_hints(pid, reset=False):
     if not hints:
         print(f"  No hints available for {pid}.")
         return
-    state = _load_json(HINT_STATE_FILE)
+    import store
     if reset:
-        state.pop(pid, None)
-        _save_json(HINT_STATE_FILE, state)
+        store.reset_hint(pid)
         print(f"  Hint counter for {pid} reset.")
         return
-    used = state.get(pid, 0)
+    used = store.get_hint_count(pid)
     if used >= len(hints):
         print(f"  All {len(hints)} hint(s) revealed for {pid}.")
         print(f"  Re-run with --reset-hints to start over, or try --explain / --solution.")
@@ -81,8 +80,7 @@ def show_hints(pid, reset=False):
     for line in textwrap.wrap(hint, width=78,
                                initial_indent="    ", subsequent_indent="    "):
         print(line)
-    state[pid] = used + 1
-    _save_json(HINT_STATE_FILE, state)
+    store.set_hint_count(pid, used + 1)
     if used + 1 < len(hints):
         print(f"\n  (run again with --hint for the next hint; {len(hints) - used - 1} left)")
 
@@ -201,19 +199,17 @@ def _can_show_solution(pid):
     """Return (ok, reason). Solution shows iff:
        * user has ever_passed this problem, OR
        * user has explicitly unlocked it via --i-give-up."""
-    progress = _load_json(PROGRESS_FILE)
-    if progress.get(pid, {}).get("ever_passed"):
+    import store
+    if store.load_problem_progress().get(pid, {}).get("ever_passed"):
         return True, "you've already passed this problem"
-    unlocks = _load_json(SOLUTION_UNLOCK_FILE)
-    if unlocks.get(pid):
+    if store.is_problem_unlocked(pid):
         return True, "you unlocked this with --i-give-up"
     return False, ""
 
 
 def _record_unlock(pid):
-    unlocks = _load_json(SOLUTION_UNLOCK_FILE)
-    unlocks[pid] = True
-    _save_json(SOLUTION_UNLOCK_FILE, unlocks)
+    import store
+    store.unlock_problem(pid)
 
 
 def show_solution(pid, problem_path, i_give_up=False):

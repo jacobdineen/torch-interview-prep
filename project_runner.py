@@ -155,25 +155,9 @@ def _load_progress(project_root):
         return {}
 
 
-def _save_progress(project_root, progress):
-    try:
-        with open(_progress_file(project_root), "w") as f:
-            json.dump(progress, f, indent=2, sort_keys=True)
-    except Exception:
-        pass
-
-
 def _record(project_root, step_id, passed):
-    import datetime
-    progress = _load_progress(project_root)
-    entry = progress.get(step_id, {})
-    entry["last_status"] = "pass" if passed else "fail"
-    entry["last_run"] = datetime.datetime.now().isoformat(timespec="seconds")
-    if passed:
-        entry["ever_passed"] = True
-        entry["first_passed"] = entry.get("first_passed") or entry["last_run"]
-    progress[step_id] = entry
-    _save_progress(project_root, progress)
+    import store
+    store.record_project(project_root, step_id, passed)
 
 
 # ---------- progress display + manifest ----------
