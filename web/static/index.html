@@ -10,24 +10,7 @@
   <header id="topbar">
     <button class="brand" id="home-btn" title="Home (g)" aria-label="Home"><span class="brand-mark" aria-hidden="true">▚</span> mle_prep</button>
 
-    <div class="workspace-only" style="gap:11px; align-items:center; flex:1; min-width:0;">
-      <select id="source" title="Problems or a project" aria-label="Source"></select>
-      <select id="framework" title="Filter by framework" aria-label="Framework"></select>
-      <select id="status-filter" title="Filter by status" aria-label="Status">
-        <option value="all">All</option><option value="unsolved">Unsolved</option>
-        <option value="attempted">Attempted</option><option value="solved">Solved</option>
-      </select>
-      <div class="search-wrap">
-        <input id="filter" type="text" role="combobox" aria-expanded="false" aria-controls="palette"
-          placeholder="Search id or title…   ( ↑↓ · Enter )" title="Press ? for keyboard shortcuts" autocomplete="off" spellcheck="false" />
-        <div id="palette" class="palette hidden" role="listbox" aria-label="Problems"></div>
-      </div>
-      <div class="nav-group">
-        <button id="outline-btn" class="icon-btn" title="Project outline (o)" aria-label="Outline">☰</button>
-        <button id="prev-btn" class="icon-btn" title="Previous (←)" aria-label="Previous">‹</button>
-        <button id="next-btn" title="Next unsolved (n)">next ›</button>
-      </div>
-    </div>
+    <button id="sidebar-toggle" class="icon-btn workspace-only" title="Show / hide the browse panel" aria-label="Toggle browse panel">☰</button>
 
     <div class="progress-wrap workspace-only">
       <div class="progress-track" title="Solved in this view"><div id="progress-fill" class="progress-fill"></div></div>
@@ -58,6 +41,31 @@
 
   <!-- ===== workspace ===== -->
   <main id="split" class="hidden">
+    <aside id="sidebar" aria-label="Browse and filter">
+      <div class="sidebar-head">
+        <span class="sidebar-title">Browse</span>
+        <button id="sidebar-collapse" class="icon-btn" title="Collapse panel" aria-label="Collapse browse panel">«</button>
+      </div>
+      <div class="search-wrap">
+        <input id="filter" type="text" role="combobox" aria-expanded="false" aria-controls="palette"
+          placeholder="Search id or title…" title="Press ? for keyboard shortcuts" autocomplete="off" spellcheck="false" />
+        <div id="palette" class="palette hidden" role="listbox" aria-label="Problems"></div>
+      </div>
+      <label class="side-field"><span class="side-label">Source</span>
+        <select id="source" title="Problems or a project" aria-label="Source"></select></label>
+      <label class="side-field"><span class="side-label">Framework</span>
+        <select id="framework" title="Filter by framework" aria-label="Framework"></select></label>
+      <label class="side-field"><span class="side-label">Status</span>
+        <select id="status-filter" title="Filter by status" aria-label="Status">
+          <option value="all">All</option><option value="unsolved">Unsolved</option>
+          <option value="attempted">Attempted</option><option value="solved">Solved</option>
+        </select></label>
+      <div class="side-nav">
+        <button id="prev-btn" class="nav-btn" title="Previous item (←)" aria-label="Previous">‹ Previous</button>
+        <button id="next-btn" class="nav-btn nav-next" title="Next unsolved (n)" aria-label="Next">Next ›</button>
+      </div>
+      <button id="outline-btn" class="side-outline" title="Project outline (o)" aria-label="Outline">☰ Outline</button>
+    </aside>
     <section id="left">
       <div class="prob-head">
         <div class="prob-head-main">

@@ -78,6 +78,9 @@ async function init() {
   $("teardown-btn").addEventListener("click", teardown);
   $("status-filter").addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
   $("outline-btn").addEventListener("click", toggleOutline);
+  $("sidebar-toggle").addEventListener("click", toggleSidebar);
+  $("sidebar-collapse").addEventListener("click", toggleSidebar);
+  if (localStorage.getItem("mle_sidebar_collapsed") === "1") document.body.classList.add("sidebar-collapsed");
   $("outline-close").addEventListener("click", closeOutline);
   $("outline-scrim").addEventListener("click", closeOutline);
   $("reset-btn").addEventListener("click", resetToStub);
@@ -251,8 +254,8 @@ function setupSplitters() {
   };
   const split = $("split"), right = $("right");
   drag($("gutter-x"), "cols", (ev) => {
-    const r = split.getBoundingClientRect();
-    return Math.max(280, Math.min(r.width - 360, ev.clientX - r.left));
+    const r = split.getBoundingClientRect(), sw = sidebarWidth();
+    return Math.max(280, Math.min(r.width - sw - 360, ev.clientX - r.left - sw));
   }, "mle_left_w", "--left-w");
   drag($("gutter-y"), "rows", (ev) => {
     const r = right.getBoundingClientRect();
@@ -260,13 +263,25 @@ function setupSplitters() {
   }, "mle_results_h", "--results-h");
   clampSplits();
 }
+function sidebarWidth() {
+  const sb = document.getElementById("sidebar");
+  return (sb && getComputedStyle(sb).display !== "none") ? sb.getBoundingClientRect().width : 0;
+}
+
+function toggleSidebar() {
+  document.body.classList.toggle("sidebar-collapsed");
+  localStorage.setItem("mle_sidebar_collapsed",
+    document.body.classList.contains("sidebar-collapsed") ? "1" : "0");
+  clampSplits();
+}
+
 function clampSplits() {
   if (document.body.classList.contains("home-active")) return;
   const root = document.documentElement, split = $("split"), left = $("left"), right = $("right");
   if (!split || !left) return;
-  const sw = split.getBoundingClientRect().width;
+  const sw = split.getBoundingClientRect().width, sbw = sidebarWidth();
   if (sw > 0) {
-    const lw = Math.max(280, Math.min(sw - 360, left.getBoundingClientRect().width));
+    const lw = Math.max(280, Math.min(sw - sbw - 360, left.getBoundingClientRect().width));
     root.style.setProperty("--left-w", Math.round(lw) + "px");
   }
   const rh = right.getBoundingClientRect().height;
