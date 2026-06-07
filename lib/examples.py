@@ -17,7 +17,7 @@ import glob
 import os
 import re
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SRC = os.path.join(_HERE, "tests", "_src")
 _PROBLEMS = os.path.join(_HERE, "problems")
 
@@ -261,7 +261,7 @@ def _run_reference(pid, name, fn, call):
         import torch.nn.functional as F  # noqa: F401
         if _HERE not in __import__("sys").path:
             __import__("sys").path.insert(0, _HERE)
-        from solutions import PARENT_SOLUTIONS
+        from lib.solutions import PARENT_SOLUTIONS
         parent = f"{int(re.match(r'[0-9]+', pid).group()):02d}"
         ref = PARENT_SOLUTIONS.get(parent)
         if not ref:

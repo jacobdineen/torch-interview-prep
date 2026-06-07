@@ -29,6 +29,53 @@ The runner prints `PASS Problem 03a (flatten_batch)` plus a concept blurb and a 
 
 `prep.py` is the single "where am I / what's next" dashboard across both the problems and the projects.
 
+## Repository layout
+
+The repo root holds the **commands you run** and two graders; everything they
+build on lives in `lib/`.
+
+```
+prep.py            single dashboard: where am I + what's next  (start here)
+check.py           work a standalone problem  (run / hint / explain / solution / note / redo / time)
+projects.py        work a multi-step project  (status / run / explain / solution)
+run_all.py         run or summarize every problem
+reset.py           restore a problem to its pristine stub
+new_problem.py     scaffold a new problem
+new_project.py     scaffold a new from-scratch project
+verify_all.py      full correctness gate (CI): every reference solution + project passes its tests
+runner.py          grader for standalone problems   (imported by each problem file)
+project_runner.py  grader for project steps         (imported by each step file)
+
+lib/               internal modules (not run directly)
+  store.py           SQLite store — the single source of truth for progress, notes,
+                     hints, and unlocks; mirrors each table to its legacy JSON file
+  curriculum.py      tier/order metadata        frameworks.py   torch vs numpy detection
+  concepts.py hints.py examples.py solutions.py solutions_numpy.py   per-problem content
+  debug_tools.py     hint / explain / solution   np_bridge.py    numpy-variant grading
+  assert_rewriter.py test authoring helper
+
+problems/          313 standalone problem stubs (PyTorch)     problems_numpy/  numpy variants
+projects/          multi-step projects — each has steps/, tests/, _build/, scaffold.py
+tests/             hidden graders: _compiled/*.pyc (run) + _src/*.py (readable source)
+web/               self-hosted web app (app.py + static/) wrapping your real nvim
+.stubs/            pristine stub snapshots that reset.py restores from
+docs/              guides (adding a problem/project, numpy variants, the web app)
+```
+
+`runner.py` and `project_runner.py` stay at the repo root on purpose: every
+problem/step file imports them by name (`from runner import run_test_for`), so
+they cannot move. Everything else internal lives under `lib/`.
+
+## Daily flow
+
+```bash
+uv run python prep.py                 # 1. see status + the next problem
+uv run python check.py                #    jump straight to the next unsolved (or: check.py <id>)
+# ...edit the stub, then re-run check.py <id> until it PASSES...
+uv run python projects.py <name>      # 2. or work a from-scratch project
+./web/serve-app.sh                    # 3. or do it all in a browser-hosted nvim
+```
+
 ## CLI reference
 
 ### `check.py` — the main entry point

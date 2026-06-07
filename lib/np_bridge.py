@@ -8,7 +8,7 @@ exactly when a correct NumPy solution passes this bridge; torch-specific problem
 (autograd .backward(), nn.Module, requires_grad) can't be bridged and stay
 torch-only.
 
-  from np_bridge import run_numpy
+  from lib.np_bridge import run_numpy
   passed, err = run_numpy("02a", "get_row", numpy_source_string)
 """
 import importlib.util
@@ -19,7 +19,7 @@ from importlib.machinery import SourcelessFileLoader
 
 import numpy as np
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _COMPILED = os.path.join(_HERE, "tests", "_compiled")
 _PROBLEMS = os.path.join(_HERE, "problems")
 

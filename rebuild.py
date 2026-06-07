@@ -18,7 +18,7 @@ os.makedirs(OUT, exist_ok=True)
 # Make assert_rewriter importable when this script is run directly.
 if PREP not in sys.path:
     sys.path.insert(0, PREP)
-from assert_rewriter import rewrite_assertions  # noqa: E402
+from lib.assert_rewriter import rewrite_assertions  # noqa: E402
 
 count = 0
 errors = []

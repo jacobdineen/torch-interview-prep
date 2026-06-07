@@ -128,7 +128,7 @@ def _problem_title(pid):
 
 def _tier(pid):
     try:
-        from curriculum import find_tier
+        from lib.curriculum import find_tier
         t = find_tier(pid)
         return t[1] if t else ""
     except Exception:
@@ -186,11 +186,11 @@ def _build_catalog():
     items, sources = [], ["Problems"]
     prog = _problem_progress()
     try:
-        from curriculum import all_problem_ids
+        from lib.curriculum import all_problem_ids
         ids = all_problem_ids()
     except Exception:
         ids = []
-    import frameworks
+    from lib import frameworks
     for pid in ids:
         items.append({"key": f"prob:{pid}", "kind": "problem", "source": "Problems",
                       "group": _tier(pid) or "Problems", "id": pid,
@@ -270,15 +270,15 @@ def _item_meta(key):
         prog = _problem_progress().get(pid, {})
         concept = ""
         try:
-            from concepts import get_concept
+            from lib.concepts import get_concept
             concept = get_concept(pid) or ""
         except Exception:
             pass
-        import frameworks
+        from lib import frameworks
         slug = os.path.basename(r["path"])[len(f"p{pid}_"):-3]
         example = None
         try:
-            from examples import example_for
+            from lib.examples import example_for
             example = example_for(pid, slug)
         except Exception:
             pass
@@ -289,7 +289,7 @@ def _item_meta(key):
                 "signature": _signature(tree) if tree else "",
                 "doc": _strip_example("\n".join(body)), "concept": concept, "example": example,
                 "solved": bool(prog.get("ever_passed")), "last_status": prog.get("last_status")}
-    import frameworks
+    from lib import frameworks
     man, s = r["manifest"], r["step"]
     part = _part(man, s.get("part", 0))
     pp = _project_progress(r["dir"]).get(s["id"], {})
@@ -298,7 +298,7 @@ def _item_meta(key):
         doc = (doc + "\n\n" + part["description"]).strip()
     example = None
     try:
-        from examples import example_for_step
+        from lib.examples import example_for_step
         example = example_for_step(r["name"], s["id"], s["name"])
     except Exception:
         pass

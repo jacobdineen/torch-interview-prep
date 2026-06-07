@@ -21,7 +21,7 @@ PROGRESS_FILE = os.path.join(PREP, ".progress.json")
 # Shared tier definitions live in curriculum.py.
 if PREP not in sys.path:
     sys.path.insert(0, PREP)
-from curriculum import TIERS, tier_members, has_test  # noqa: E402
+from lib.curriculum import TIERS, tier_members, has_test  # noqa: E402
 
 
 def _parse_filter(args):

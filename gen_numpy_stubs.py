@@ -12,7 +12,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "problems_numpy")
 sys.path.insert(0, HERE)
-from solutions_numpy import NUMPY_PARENTS, NUMPY_SUPPORTED  # noqa: E402
+from lib.solutions_numpy import NUMPY_PARENTS, NUMPY_SUPPORTED  # noqa: E402
 
 _RE = re.compile(r"^p(\d+[a-z]?)_(.+)\.py$")
 
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     import os as _os, re as _re, sys as _sys
     _p = _os.path.abspath(__file__)
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_p)))
-    from np_bridge import run_numpy
+    from lib.np_bridge import run_numpy
     _m = _re.match(r"p(\\d+[a-z]?)_(.+)\\.py", _os.path.basename(_p))
     _ok, _err = run_numpy(_m.group(1), _m.group(2), open(_p).read())
     print("PASS" if _ok else f"FAIL: {{_err}}")

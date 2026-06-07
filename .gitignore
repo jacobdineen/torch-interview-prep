@@ -16,3 +16,7 @@ projects/*/solution.py
 .mle_store.db
 .mle_store.db-wal
 .mle_store.db-shm
+projects/*/.notes.json
+projects/*/.solution_unlock.json
+*.json.*.tmp
+.mle_store.db.*.tmp

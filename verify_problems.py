@@ -21,7 +21,7 @@ PROBLEMS = os.path.join(HERE, "problems")
 COMPILED = os.path.join(HERE, "tests", "_compiled")
 sys.path.insert(0, HERE)
 
-from solutions import PARENT_SOLUTIONS  # noqa: E402
+from lib.solutions import PARENT_SOLUTIONS  # noqa: E402
 
 PRELUDE = ("import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\n"
            "import numpy as np\n\n\n")

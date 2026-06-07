@@ -99,7 +99,7 @@ def _write(path, content, label):
 
 def _tier_for(parent_int):
     try:
-        from curriculum import TIERS
+        from lib.curriculum import TIERS
     except Exception:
         return None
     for name, lo, hi in TIERS:

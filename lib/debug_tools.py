@@ -9,7 +9,7 @@ import sys
 import textwrap
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HINT_STATE_FILE = os.path.join(HERE, ".hint_state.json")
 PROGRESS_FILE = os.path.join(HERE, ".progress.json")
 SOLUTION_UNLOCK_FILE = os.path.join(HERE, ".solution_unlock.json")
@@ -40,13 +40,13 @@ def _save_json(path, data):
 
 def add_note(pid, text):
     """Append a free-text note for a problem; resurfaces under --explain."""
-    import store
+    from lib import store
     store.add_problem_note(pid, text)
     print(f"  Noted for {pid}: {text}")
 
 
 def get_notes(pid):
-    import store
+    from lib import store
     return store.get_problem_notes(pid)
 
 
@@ -56,7 +56,7 @@ def show_hints(pid, reset=False):
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     try:
-        from hints import get_hints
+        from lib.hints import get_hints
     except ImportError:
         print("  (hints.py not found)")
         return
@@ -64,7 +64,7 @@ def show_hints(pid, reset=False):
     if not hints:
         print(f"  No hints available for {pid}.")
         return
-    import store
+    from lib import store
     if reset:
         store.reset_hint(pid)
         print(f"  Hint counter for {pid} reset.")
@@ -126,7 +126,7 @@ def show_explain(pid, problem_path):
             print(f"      {kind} {sig}")
     # Which frameworks this problem can be solved in.
     try:
-        from frameworks import problem_has_numpy
+        from lib.frameworks import problem_has_numpy
         if problem_has_numpy(pid):
             print(f"    Frameworks: PyTorch (problems/) + NumPy "
                   f"(problems_numpy/ — run `check.py {pid} --numpy`)")
@@ -137,7 +137,7 @@ def show_explain(pid, problem_path):
     # A worked example (input -> output), if one can be extracted without giving
     # away the solution.
     try:
-        from examples import example_for
+        from lib.examples import example_for
         slug = os.path.basename(problem_path)[len(f"p{pid}_"):-3]
         ex = example_for(pid, slug)
     except Exception:
@@ -171,7 +171,7 @@ def show_explain(pid, problem_path):
                     print(line)
     # Concept blurb if available.
     try:
-        from concepts import get_concept
+        from lib.concepts import get_concept
         c = get_concept(pid)
         if c:
             print(f"    Concept:")
@@ -199,7 +199,7 @@ def _can_show_solution(pid):
     """Return (ok, reason). Solution shows iff:
        * user has ever_passed this problem, OR
        * user has explicitly unlocked it via --i-give-up."""
-    import store
+    from lib import store
     if store.load_problem_progress().get(pid, {}).get("ever_passed"):
         return True, "you've already passed this problem"
     if store.is_problem_unlocked(pid):
@@ -208,7 +208,7 @@ def _can_show_solution(pid):
 
 
 def _record_unlock(pid):
-    import store
+    from lib import store
     store.unlock_problem(pid)
 
 
@@ -216,7 +216,7 @@ def show_solution(pid, problem_path, i_give_up=False):
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     try:
-        from solutions import get_solution
+        from lib.solutions import get_solution
     except ImportError:
         print("  (solutions.py not found)")
         return
@@ -254,7 +254,7 @@ def show_time(pid, problem_path):
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     try:
-        from solutions import get_solution, get_benchmark
+        from lib.solutions import get_solution, get_benchmark
     except ImportError:
         print("  (solutions.py not found)")
         return

@@ -137,7 +137,7 @@ def _confirm(msg):
 
 
 def _clear_progress_for(ids):
-    import store
+    from lib import store
     store.clear_problems(list(ids))
 
 

@@ -14,9 +14,7 @@ import re
 
 import torch as _torch
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-
-
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PARENT_SOLUTIONS = {
 
 # ============================================================================

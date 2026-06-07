@@ -19,7 +19,7 @@ import json
 import os
 import sqlite3
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(ROOT, ".mle_store.db")
 ATTEMPTS_CAP = 50000  # keep the run-history table bounded
 

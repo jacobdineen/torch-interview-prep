@@ -8,7 +8,7 @@ import glob
 import os
 import re
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROBLEMS_DIR = os.path.join(_HERE, "problems")
 _COMPILED_DIR = os.path.join(_HERE, "tests", "_compiled")
 _SRC_DIR = os.path.join(_HERE, "tests", "_src")

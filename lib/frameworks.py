@@ -9,7 +9,7 @@ import json
 import os
 import re
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _TORCH = re.compile(r"^\s*import\s+torch\b", re.M)
 _NUMPY = re.compile(r"^\s*import\s+numpy\b", re.M)
 
@@ -45,7 +45,7 @@ def problem_framework(pid):
 def problem_has_numpy(pid):
     """True if this problem has a verified NumPy variant (solvable via the bridge)."""
     try:
-        from solutions_numpy import NUMPY_SUPPORTED
+        from lib.solutions_numpy import NUMPY_SUPPORTED
         return pid in NUMPY_SUPPORTED
     except Exception:
         return False

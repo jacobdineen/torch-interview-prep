@@ -156,7 +156,7 @@ def _load_progress(project_root):
 
 
 def _record(project_root, step_id, passed):
-    import store
+    from lib import store
     store.record_project(project_root, step_id, passed)
 
 

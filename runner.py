@@ -371,7 +371,7 @@ def _load_progress():
 def _record(num, passed):
     # SQLite is the source of truth (atomic, race-free); it also re-exports
     # .progress.json so readers (web, check.py, nvim) keep working unchanged.
-    import store
+    from lib import store
     store.record_problem(num, passed)
 
 
@@ -381,7 +381,7 @@ def _print_concept(num):
     try:
         if PREP not in sys.path:
             sys.path.insert(0, PREP)
-        from concepts import get_concept  # type: ignore
+        from lib.concepts import get_concept  # type: ignore
         text = get_concept(num)
         if not text:
             return
@@ -400,7 +400,7 @@ def _print_progress_after_pass(num):
     try:
         if PREP not in sys.path:
             sys.path.insert(0, PREP)
-        from curriculum import find_tier, tier_members, TIERS, TOTAL_PROBLEMS  # type: ignore
+        from lib.curriculum import find_tier, tier_members, TIERS, TOTAL_PROBLEMS  # type: ignore
         tier = find_tier(num)
         progress = _load_progress()
         ever = {k for k, v in progress.items() if v.get("ever_passed")}
@@ -478,7 +478,7 @@ def _progress_payload(num):
     try:
         if PREP not in sys.path:
             sys.path.insert(0, PREP)
-        from curriculum import find_tier, tier_members, TOTAL_PROBLEMS  # type: ignore
+        from lib.curriculum import find_tier, tier_members, TOTAL_PROBLEMS  # type: ignore
         ever = {k for k, v in _load_progress().items() if v.get("ever_passed")}
         lines, nxt = [], None
         tier = find_tier(num)
@@ -532,7 +532,7 @@ def _result_payload(num, name, stub_path, status, error_type, message, exc):
         try:
             if PREP not in sys.path:
                 sys.path.insert(0, PREP)
-            from concepts import get_concept  # type: ignore
+            from lib.concepts import get_concept  # type: ignore
             out["concept"] = get_concept(num)
         except Exception:
             pass

@@ -87,7 +87,7 @@ def cmd_list(root):
 
 def _framework_tag(root):
     try:
-        from frameworks import project_framework
+        from lib.frameworks import project_framework
         return f"[{project_framework(root)}]"
     except Exception:
         return ""
@@ -186,7 +186,7 @@ def cmd_note(root, sid, text):
     if not _find_step(man, sid):
         print(f"no step {sid}")
         return
-    import store
+    from lib import store
     store.add_project_note(root, sid, text)
     print(f"  noted for {sid} (shown under --explain).")
 
@@ -204,7 +204,7 @@ def cmd_explain(root, sid):
     print(f"    {s['doc']}")
     # A worked example (input -> output) run against the reference, if extractable.
     try:
-        from examples import example_for_step
+        from lib.examples import example_for_step
         ex = example_for_step(os.path.basename(root), sid, s["name"])
     except Exception:
         ex = None
@@ -242,7 +242,7 @@ def cmd_solution(root, sid, i_give_up):
     if not s:
         print(f"no step {sid}")
         return
-    import store
+    from lib import store
     if i_give_up and not store.is_project_unlocked(root, sid):
         store.unlock_project(root, sid)
     ok = prog.get(sid, {}).get("ever_passed") or i_give_up or store.is_project_unlocked(root, sid)

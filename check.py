@@ -61,7 +61,7 @@ def _next_unsolved(after=None):
     (an earlier gap) and set wrapped=True so the caller can say so.
     """
     import json
-    from curriculum import all_problem_ids
+    from lib.curriculum import all_problem_ids
     progress = {}
     pf = os.path.join(HERE, ".progress.json")
     if os.path.exists(pf):
@@ -160,28 +160,28 @@ def main():
         return
 
     if args.note is not None:
-        from debug_tools import add_note
+        from lib.debug_tools import add_note
         for m in matches:
             add_note(_id_from_path(m), args.note)
         return
 
     if args.hint or args.reset_hints:
-        from debug_tools import show_hints
+        from lib.debug_tools import show_hints
         for m in matches:
             show_hints(_id_from_path(m), reset=args.reset_hints)
         return
     if args.explain:
-        from debug_tools import show_explain
+        from lib.debug_tools import show_explain
         for m in matches:
             show_explain(_id_from_path(m), m)
         return
     if args.solution:
-        from debug_tools import show_solution
+        from lib.debug_tools import show_solution
         for m in matches:
             show_solution(_id_from_path(m), m, i_give_up=args.i_give_up)
         return
     if args.time:
-        from debug_tools import show_time
+        from lib.debug_tools import show_time
         for m in matches:
             show_time(_id_from_path(m), m)
         return
@@ -196,7 +196,7 @@ def _id_from_path(path):
 
 def _run_numpy(pids):
     """Grade the NumPy variant(s) for the given problem ids via the bridge."""
-    from np_bridge import run_numpy
+    from lib.np_bridge import run_numpy
     rc = 0
     for pid in pids:
         stub = sorted(glob.glob(os.path.join(HERE, "problems_numpy", f"p{pid}_*.py")))
@@ -218,7 +218,7 @@ def _redo(pid):
     """Re-lock a solved problem: clear its pass record, hint counter, and solution
     unlock so it can be drilled fresh (the stub itself is untouched; use reset.py
     to restore the pristine stub)."""
-    import store
+    from lib import store
     cleared = store.relock_problem(pid)
     print(f"  {pid}: re-locked — solve it again to mark it passed."
           if cleared else f"  {pid}: nothing to reset (not yet solved).")
