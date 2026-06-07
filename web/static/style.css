@@ -139,7 +139,7 @@ button:active, .btn:active { transform: translateY(1px); }
 
 /* ===== workspace split (resizable) ===== */
 #split { flex: 1; display: grid; grid-template-columns: var(--sidebar-w) var(--left-w) 8px 1fr; min-height: 0; }
-body.sidebar-collapsed #split { grid-template-columns: 0 var(--left-w) 8px 1fr; }
+body.sidebar-collapsed #split { grid-template-columns: var(--left-w) 8px 1fr; }
 body.sidebar-collapsed #sidebar { display: none; }
 #left { padding: 22px 24px; overflow: auto; transition: opacity .12s; }
 #left.loading { opacity: .45; }
