@@ -1802,11 +1802,6 @@ BENCHMARKS = {
 }
 
 
-def get_solution_was_renamed_for_back_compat():
-    """No-op; kept for API stability if anyone imports the old name."""
-    return None
-
-
 def get_benchmark(pid):
     if pid in BENCHMARKS:
         return BENCHMARKS[pid]

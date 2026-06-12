@@ -49,7 +49,6 @@ button:active, .btn:active { transform: translateY(1px); }
 #source { font-family: var(--mono); font-size: 12px; max-width: 210px; }
 #framework { font-size: 12px; }
 .icon-btn { padding: 7px 10px; line-height: 1; }
-.nav-group { display: flex; gap: 6px; }
 
 .progress-wrap { display: flex; align-items: center; gap: 9px; margin-left: auto; }
 .progress-track { width: 130px; height: 7px; background: var(--bg); border: 1px solid var(--border);

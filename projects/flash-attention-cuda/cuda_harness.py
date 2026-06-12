@@ -18,8 +18,12 @@ def _setup_env():
     # CUDA 12.3's host_config rejects gcc>12; g++-12 is the supported host compiler.
     for var, val in (("CC", "gcc-12"), ("CXX", "g++-12")):
         os.environ.setdefault(var, val)
-    venv_bin = os.path.join(_REPO, ".venv", "bin")          # ninja
-    extra = os.pathsep.join([venv_bin, os.path.join(cuda, "bin")])
+    # ninja lives next to the running interpreter (works from any checkout,
+    # e.g. a git worktree without its own .venv) or in the repo's .venv.
+    import sys
+    venv_bin = os.path.join(_REPO, ".venv", "bin")
+    extra = os.pathsep.join([os.path.dirname(sys.executable), venv_bin,
+                             os.path.join(cuda, "bin")])
     if extra not in os.environ.get("PATH", ""):
         os.environ["PATH"] = extra + os.pathsep + os.environ.get("PATH", "")
 

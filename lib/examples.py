@@ -22,35 +22,28 @@ _SRC = os.path.join(_HERE, "tests", "_src")
 _PROBLEMS = os.path.join(_HERE, "problems")
 
 
-def _fn_name(pid, slug):
-    """(name, is_class) for the symbol the problem defines (the slug differs for
-    variant problems, e.g. p16d_softmax2 defines `softmax`). Class problems get no
-    worked example — instantiating an nn.Module isn't an input->output example."""
+def _problem_def(pid, slug):
+    """(name, is_class, param_names) for the symbol the problem defines (the slug
+    differs for variant problems, e.g. p16d_softmax2 defines `softmax`). One glob +
+    parse for everything example_for needs — this runs per /api/item request.
+    Class problems get no worked example — instantiating an nn.Module isn't an
+    input->output example."""
     hits = sorted(glob.glob(os.path.join(_PROBLEMS, f"p{pid}_{slug}.py")))
     if not hits:
-        return None, False
+        return None, False, []
     try:
-        tree = ast.parse(open(hits[0]).read())
+        with open(hits[0]) as f:
+            tree = ast.parse(f.read())
     except (OSError, SyntaxError):
-        return None, False
+        return None, False, []
+    name, is_class, params = None, False, []
     for n in tree.body:
         if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
-            return n.name, isinstance(n, ast.ClassDef)
-    return None, False
-
-
-def _param_names(pid, slug):
-    hits = sorted(glob.glob(os.path.join(_PROBLEMS, f"p{pid}_{slug}.py")))
-    if not hits:
-        return []
-    try:
-        tree = ast.parse(open(hits[0]).read())
-    except (OSError, SyntaxError):
-        return []
-    for n in tree.body:
-        if isinstance(n, ast.FunctionDef):
-            return [a.arg for a in n.args.args]
-    return []
+            name, is_class = n.name, isinstance(n, ast.ClassDef)
+            if isinstance(n, ast.FunctionDef):
+                params = [a.arg for a in n.args.args]
+            break
+    return name, is_class, params
 
 
 def _shape_fmt(v):
@@ -179,7 +172,10 @@ def _find_assert(fn, name):
                 for a in asserts:
                     call = _call_to(name, a)
                     if call is None:
-                        for nm in _names(a):
+                        # sorted: _names() is a set, and hash randomization would
+                        # otherwise make the chosen call (hence the rendered
+                        # example) vary from one server process to the next.
+                        for nm in sorted(_names(a)):
                             if nm in both and _call_to(name, both[nm]):
                                 call = _call_to(name, both[nm]); break
                         if call is None:
@@ -207,14 +203,15 @@ def example_for(pid, slug):
     if not hits:
         return None
     try:
-        tree = ast.parse(open(hits[0]).read())
+        with open(hits[0]) as f:
+            tree = ast.parse(f.read())
     except (OSError, SyntaxError):
         return None
     fn = next((n for n in tree.body
                if isinstance(n, ast.FunctionDef) and n.name == f"test_p{pid}_{slug}"), None)
     if fn is None:
         return None
-    name, is_class = _fn_name(pid, slug)
+    name, is_class, params = _problem_def(pid, slug)
     if is_class:        # nn.Module / class problems don't have a value example
         return None
     name = name or slug   # the real function name (slug differs for variants)
@@ -230,7 +227,6 @@ def example_for(pid, slug):
 
     # Build the "Input" as named arguments (param = value), like a problem statement:
     #   x = arange(20).reshape(4, 5),  i = 2
-    params = _param_names(pid, slug)
     parts = []
     for idx, a in enumerate(call.args):
         pname = params[idx] if idx < len(params) else f"arg{idx}"
@@ -312,7 +308,8 @@ def _step_param_names(project, sid, name):
     if not hits:
         return []
     try:
-        tree = ast.parse(open(hits[0]).read())
+        with open(hits[0]) as f:
+            tree = ast.parse(f.read())
     except (OSError, SyntaxError):
         return []
     for n in tree.body:
@@ -334,7 +331,8 @@ def example_for_step(project, sid, name):
     if not (os.path.exists(tpath) and os.path.exists(rpath)):
         return None
     try:
-        tree = ast.parse(open(tpath).read())
+        with open(tpath) as f:
+            tree = ast.parse(f.read())
     except (OSError, SyntaxError):
         return None
     fn = next((n for n in tree.body
@@ -382,7 +380,9 @@ def example_for_step(project, sid, name):
 def _run_step_reference(rpath, fn, name, call):
     try:
         ns = {}
-        exec(compile(open(rpath).read(), "ref", "exec"), ns)
+        with open(rpath) as f:
+            ref_src = f.read()
+        exec(compile(ref_src, "ref", "exec"), ns)
         # replay the test's setup assigns up to the call
         for stmt in fn.body:
             if isinstance(stmt, ast.Assign) and isinstance(stmt.targets[0], ast.Name):

@@ -49,7 +49,7 @@ async function init() {
     o.value = fw; o.textContent = fw === "All" ? "Any framework" : (fwLabel[fw] || fw); fwSel.appendChild(o);
   }
   fwSel.value = "All";
-  fwSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
+  fwSel.addEventListener("change", refreshView);
 
   setupSplitters();
   setupShortcuts();
@@ -57,9 +57,9 @@ async function init() {
   window.addEventListener("resize", debounce(clampSplits, 120));
   window.addEventListener("popstate", onPopState);
 
-  sourceSel.addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
+  sourceSel.addEventListener("change", refreshView);
   const f = $("filter");
-  f.addEventListener("input", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
+  f.addEventListener("input", refreshView);
   f.addEventListener("focus", () => { renderPalette(); openPalette(); });
   f.addEventListener("keydown", onFilterKey);
   document.addEventListener("click", (e) => { if (!e.target.closest(".search-wrap")) closePalette(); });
@@ -76,7 +76,7 @@ async function init() {
   $("hint-btn").addEventListener("click", showHint);
   $("solution-btn").addEventListener("click", showSolution);
   $("teardown-btn").addEventListener("click", teardown);
-  $("status-filter").addEventListener("change", () => { HILITE = 0; renderPalette(); openPalette(); updateProgress(); });
+  $("status-filter").addEventListener("change", refreshView);
   $("outline-btn").addEventListener("click", toggleOutline);
   $("sidebar-toggle").addEventListener("click", toggleSidebar);
   $("sidebar-collapse").addEventListener("click", toggleSidebar);
@@ -98,11 +98,13 @@ async function init() {
   setInterval(syncPoll, 1200);   // syncPoll() baselines itself on its first tick
 
   const deep = new URLSearchParams(location.search).get("key");
-  if (deep && ITEMS.find((x) => x.key === deep)) {
-    const it = ITEMS.find((x) => x.key === deep);
-    enterTrack(it.source, it.framework || "All", it.key);
-  } else showHome();
+  const deepItem = deep ? ITEMS.find((x) => x.key === deep) : null;
+  if (deepItem) enterTrack(deepItem.source, deepItem.framework || "All", deepItem.key);
+  else showHome();
 }
+
+// Any filter/source/status change: re-render the palette + progress for the new view.
+function refreshView() { HILITE = 0; renderPalette(); openPalette(); updateProgress(); }
 
 function showInitError(err) {
   console.error(err);
@@ -699,7 +701,7 @@ async function doResetProgress(scope, payload, what, keys) {
 function dropSolves(keys) {
   try {
     if (keys === null) { localStorage.removeItem("mle_solves"); return; }
-    const m = JSON.parse(localStorage.getItem("mle_solves") || "{}");
+    const m = getSolvesMap();
     for (const k of keys) delete m[k];
     localStorage.setItem("mle_solves", JSON.stringify(m));
   } catch (e) {}
@@ -752,15 +754,18 @@ async function syncPoll() {
 }
 
 // ===== solve tracking + stats + celebration =====
+// the local solve-date map (key -> YYYY-MM-DD), shared by record/stats/reset
+function getSolvesMap() {
+  try { return JSON.parse(localStorage.getItem("mle_solves") || "{}"); } catch (e) { return {}; }
+}
 function recordSolve(key) {
   try {
-    const m = JSON.parse(localStorage.getItem("mle_solves") || "{}");
+    const m = getSolvesMap();
     if (!m[key]) { m[key] = new Date().toISOString().slice(0, 10); localStorage.setItem("mle_solves", JSON.stringify(m)); }
   } catch (e) {}
 }
 function computeStats() {
-  let solves = {};
-  try { solves = JSON.parse(localStorage.getItem("mle_solves") || "{}"); } catch (e) {}
+  const solves = getSolvesMap();
   const days = new Set(Object.values(solves));
   const today = new Date().toISOString().slice(0, 10);
   const solvedToday = Object.values(solves).filter((d) => d === today).length;

@@ -395,6 +395,22 @@ def _print_concept(num):
 
 # ---------- per-PASS progress update ----------
 
+def _bar(solved, total, width=18):
+    """The tier/part progress bar, e.g. '[#######-----------]'."""
+    filled = int(round(width * solved / total)) if total else 0
+    return "[" + "#" * filled + "-" * (width - filled) + "]"
+
+
+def _ever_passed():
+    """Set of problem ids ever solved (from the derived .progress.json)."""
+    return {k for k, v in _load_progress().items() if v.get("ever_passed")}
+
+
+def _total_solved(ever):
+    """Count only keys that look like problem ids (digits + optional letter)."""
+    return sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
+
+
 def _print_progress_after_pass(num):
     """After a PASS, print this tier's bar + overall count for momentum."""
     try:
@@ -402,8 +418,7 @@ def _print_progress_after_pass(num):
             sys.path.insert(0, PREP)
         from lib.curriculum import find_tier, tier_members, TIERS, TOTAL_PROBLEMS  # type: ignore
         tier = find_tier(num)
-        progress = _load_progress()
-        ever = {k for k, v in progress.items() if v.get("ever_passed")}
+        ever = _ever_passed()
 
         print()
         print("  Progress:")
@@ -411,10 +426,7 @@ def _print_progress_after_pass(num):
             tier_idx, tier_name, lo, hi = tier
             members = tier_members(lo, hi)
             solved = sum(1 for m in members if m in ever)
-            bar_width = 18
-            filled = int(round(bar_width * solved / len(members))) if members else 0
-            bar = "[" + "#" * filled + "-" * (bar_width - filled) + "]"
-            print(f"    {bar} {solved}/{len(members)}  {tier_name}")
+            print(f"    {_bar(solved, len(members))} {solved}/{len(members)}  {tier_name}")
             # Point FORWARD: the next unsolved problem after the one just passed.
             try:
                 cur_idx = members.index(num)
@@ -444,9 +456,7 @@ def _print_progress_after_pass(num):
             if earlier_gaps:
                 shown = ", ".join(earlier_gaps[:6]) + ("…" if len(earlier_gaps) > 6 else "")
                 print(f"    ({len(earlier_gaps)} earlier still unsolved: {shown})")
-        # Count any progress key that looks like a problem ID (digits, optional letter).
-        total_solved = sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
-        print(f"    overall: {total_solved}/{TOTAL_PROBLEMS} solved")
+        print(f"    overall: {_total_solved(ever)}/{TOTAL_PROBLEMS} solved")
     except Exception:
         pass  # progress display is best-effort
 
@@ -479,24 +489,20 @@ def _progress_payload(num):
         if PREP not in sys.path:
             sys.path.insert(0, PREP)
         from lib.curriculum import find_tier, tier_members, TOTAL_PROBLEMS  # type: ignore
-        ever = {k for k, v in _load_progress().items() if v.get("ever_passed")}
+        ever = _ever_passed()
         lines, nxt = [], None
         tier = find_tier(num)
         if tier is not None:
             _, tier_name, lo, hi = tier
             members = tier_members(lo, hi)
             solved = sum(1 for m in members if m in ever)
-            width = 18
-            filled = int(round(width * solved / len(members))) if members else 0
-            bar = "[" + "#" * filled + "-" * (width - filled) + "]"
-            lines.append(f"{bar} {solved}/{len(members)}  {tier_name}")
+            lines.append(f"{_bar(solved, len(members))} {solved}/{len(members)}  {tier_name}")
             try:
                 ci = members.index(num)
             except ValueError:
                 ci = -1
             nxt = next((m for m in members[ci + 1:] if m not in ever), None)
-        total = sum(1 for k in ever if re.match(r"^\d+[a-z]?$", k))
-        lines.append(f"overall: {total}/{TOTAL_PROBLEMS} solved")
+        lines.append(f"overall: {_total_solved(ever)}/{TOTAL_PROBLEMS} solved")
         return "\n".join(lines), nxt
     except Exception:
         return None, None

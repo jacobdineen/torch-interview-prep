@@ -11,6 +11,7 @@
 Also clears `.progress.json` entries for any reset problem so the dashboard
 reflects that you're starting over on those.
 """
+import ast
 import glob
 import json
 import os
@@ -57,7 +58,6 @@ def _resolve(arg):
 
 def _is_super_init(stmt):
     """True if stmt is exactly `super().__init__(...)`."""
-    import ast
     return (
         isinstance(stmt, ast.Expr)
         and isinstance(stmt.value, ast.Call)
@@ -73,7 +73,6 @@ def _body_is_stub(body):
     """A function body is 'stub' if, after stripping docstring + Pass +
     `super().__init__()` calls, the remaining body is exactly
     `raise NotImplementedError`."""
-    import ast
     filtered = []
     for i, stmt in enumerate(body):
         # Leading docstring
@@ -98,7 +97,6 @@ def _body_is_stub(body):
 def _is_pristine(src):
     """A problem file is pristine if every top-level function and every class
     method has a stub body."""
-    import ast
     try:
         tree = ast.parse(src)
     except SyntaxError:

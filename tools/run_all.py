@@ -4,11 +4,10 @@
   python run_all.py 4            # only parent 4's children (04a, 04b, 04c, 04d)
   python run_all.py 30-50        # parents 30 through 50 (inclusive)
   python run_all.py 4 7 12       # specific parents
-  python run_all.py --status     # progress dashboard from .progress.json (no re-runs)
+  python run_all.py --status     # progress dashboard from recorded progress (no re-runs)
   python run_all.py --help / -h  # this summary
 """
 import glob
-import json
 import os
 import re
 import subprocess
@@ -16,7 +15,6 @@ import sys
 
 PREP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROBLEMS = sorted(glob.glob(os.path.join(PREP, "problems", "p*_*.py")))
-PROGRESS_FILE = os.path.join(PREP, ".progress.json")
 
 # Shared tier definitions live in curriculum.py.
 if PREP not in sys.path:
@@ -46,13 +44,9 @@ def _parse_filter(args):
 
 
 def _load_progress():
-    if not os.path.exists(PROGRESS_FILE):
-        return {}
-    try:
-        with open(PROGRESS_FILE) as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    # The SQLite store is the source of truth; .progress.json is its derived cache.
+    from lib import store
+    return store.load_problem_progress()
 
 
 def _bar(passed, total, width=18):
@@ -61,7 +55,7 @@ def _bar(passed, total, width=18):
 
 
 def show_status():
-    """Print a per-tier dashboard from cached .progress.json. No tests are run."""
+    """Print a per-tier dashboard from recorded progress. No tests are run."""
     progress = _load_progress()
     nums_solved = {k for k, v in progress.items() if v.get("ever_passed")}
     total_passed = 0

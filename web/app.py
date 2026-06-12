@@ -110,20 +110,25 @@ def _problem_progress():
     return _load_json(os.path.join(ROOT, ".progress.json"))
 
 
+def _doc_title(doc, fallback):
+    """Title from a docstring's first 'Problem NN: <title>' line, else fallback."""
+    lines = (doc or "").splitlines()
+    if lines:
+        m = re.match(r"Problem\s+\S+:\s*(.+)", lines[0])
+        if m:
+            return m.group(1).strip()
+    return fallback
+
+
 def _problem_title(pid):
     path = _problem_path(pid)
     if not path:
         return pid
     try:
         with open(path) as f:
-            doc = (ast.get_docstring(ast.parse(f.read())) or "").splitlines()
-        if doc:
-            m = re.match(r"Problem\s+\S+:\s*(.+)", doc[0])
-            if m:
-                return m.group(1).strip()
+            return _doc_title(ast.get_docstring(ast.parse(f.read())), pid)
     except Exception:
-        pass
-    return pid
+        return pid
 
 
 def _tier(pid):
@@ -282,7 +287,7 @@ def _item_meta(key):
             example = example_for(pid, slug)
         except Exception:
             pass
-        return {"key": key, "kind": "problem", "id": pid, "title": _problem_title(pid),
+        return {"key": key, "kind": "problem", "id": pid, "title": _doc_title(full, pid),
                 "source": "Problems", "group": _tier(pid),
                 "framework": frameworks.framework_of_source(src),
                 "numpy": frameworks.problem_has_numpy(pid),

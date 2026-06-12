@@ -177,10 +177,6 @@ def _notes_file(root):
     return os.path.join(root, ".notes.json")
 
 
-def _unlock_file(root):
-    return os.path.join(root, ".solution_unlock.json")
-
-
 def cmd_note(root, sid, text):
     man = _manifest(root)
     if not _find_step(man, sid):

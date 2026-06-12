@@ -86,7 +86,7 @@ def _reference_funcs(project_root):
 
 # ---------- failure context (numpy-aware) ----------
 
-def _user_fail_site(exc, project_root):
+def _user_fail_site(exc):
     """Deepest frame inside the project's steps/ dir, via the __cause__ chain."""
     best = (None, None, None, "")
     seen = set()
@@ -123,8 +123,8 @@ def _likely_cause(error_type, message):
     return None
 
 
-def _print_failure_context(exc, project_root):
-    ff, fl, fn_, line = _user_fail_site(exc, project_root)
+def _print_failure_context(exc):
+    ff, fl, fn_, line = _user_fail_site(exc)
     if ff:
         print("  In your code:")
         print(f"    {os.path.basename(ff)}:{fl} in {fn_}")
@@ -198,7 +198,7 @@ def _print_progress_after_pass(project_root, step_id):
 
 # ---------- JSON (editor) ----------
 
-def _result_payload(project_root, step_id, name, step_path, status, error_type, message, exc):
+def _result_payload(step_id, name, step_path, status, error_type, message, exc):
     """Structured run-result dict (shared by the JSON emitter and the .last_run.json
     signal that lets the web UI react to runs started from nvim)."""
     out = {
@@ -209,24 +209,23 @@ def _result_payload(project_root, step_id, name, step_path, status, error_type, 
         "diff": None, "detail": None, "hint": _likely_cause(error_type, message),
     }
     if exc is not None:
-        ff, fl, fn_, _ = _user_fail_site(exc, project_root)
+        ff, fl, fn_, _ = _user_fail_site(exc)
         out["fail_file"], out["fail_line"], out["fail_func"] = ff, fl, fn_
     return out
 
 
-def _emit_json(project_root, step_id, name, step_path, status, error_type, message, exc):
-    print(json.dumps(_result_payload(project_root, step_id, name, step_path,
+def _emit_json(step_id, name, step_path, status, error_type, message, exc):
+    print(json.dumps(_result_payload(step_id, name, step_path,
                                      status, error_type, message, exc)))
 
 
 def _write_last_run(project_root, step_id, name, step_path, status, error_type, message, exc):
     """Persist the latest run result to the repo-root .last_run.json so the web UI
     can react to project-step runs started from nvim. Best-effort + atomic."""
-    out = _result_payload(project_root, step_id, name, step_path,
+    out = _result_payload(step_id, name, step_path,
                           status, error_type, message, exc)
     try:
-        import json as _json
-        _name = _json.load(open(os.path.join(project_root, "project.json"))).get("name") or os.path.basename(project_root)
+        _name = _load_manifest(project_root).get("name") or os.path.basename(project_root)
     except Exception:
         _name = os.path.basename(project_root)
     out["key"] = f"proj:{_name}:{step_id}"
@@ -294,7 +293,7 @@ def run_step(step_path):
         _write_last_run(root, step_id, name, step_path, "fail", "NotImplementedError",
                         "the function still raises NotImplementedError", None)
         if json_mode:
-            _emit_json(root, step_id, name, step_path, "fail", "NotImplementedError",
+            _emit_json(step_id, name, step_path, "fail", "NotImplementedError",
                        "the function still raises NotImplementedError", None)
         else:
             print(f"FAIL {label}: NotImplementedError — fill in the function body.")
@@ -304,20 +303,20 @@ def run_step(step_path):
         msg = str(e) or "(no message)"
         _write_last_run(root, step_id, name, step_path, "fail", "AssertionError", msg, e)
         if json_mode:
-            _emit_json(root, step_id, name, step_path, "fail", "AssertionError", msg, e)
+            _emit_json(step_id, name, step_path, "fail", "AssertionError", msg, e)
         else:
             print(f"FAIL {label}")
             print(f"  AssertionError: {msg}")
-            _print_failure_context(e, root)
+            _print_failure_context(e)
         _record(root, step_id, False)
         return 1
     except Exception as e:
         _write_last_run(root, step_id, name, step_path, "fail", type(e).__name__, str(e), e)
         if json_mode:
-            _emit_json(root, step_id, name, step_path, "fail", type(e).__name__, str(e), e)
+            _emit_json(step_id, name, step_path, "fail", type(e).__name__, str(e), e)
         else:
             print(f"FAIL {label}: {type(e).__name__}: {e}")
-            _print_failure_context(e, root)
+            _print_failure_context(e)
         _record(root, step_id, False)
         return 1
 
@@ -332,7 +331,7 @@ def run_step(step_path):
         print(f"[project_runner] warning: could not re-assemble solution.py: "
               f"{type(e).__name__}: {e}", file=sys.stderr)
     if json_mode:
-        _emit_json(root, step_id, name, step_path, "pass", None, None, None)
+        _emit_json(step_id, name, step_path, "pass", None, None, None)
     else:
         print(f"PASS {label}")
         _print_progress_after_pass(root, step_id)
@@ -359,7 +358,7 @@ def assemble_solution(project_root):
             out.append(f"# ===== Part {part + 1}: {parts[part]['title']} =====")
             out.append("")
         step_file = os.path.join(project_root, "steps", f"{sid}_{name}.py")
-        body = _extract_solved_def(step_file, name) if sid in ever else None
+        body = _extract_solved_def(step_file) if sid in ever else None
         if body:
             out.append(f"# -- Step {sid}  {name} --")
             out.extend(body)
@@ -373,7 +372,7 @@ def assemble_solution(project_root):
     return sol
 
 
-def _extract_solved_def(step_file, name):
+def _extract_solved_def(step_file):
     """Return the source lines of every top-level def/assignment in the step file
     except the __main__ guard and imports — i.e. the user's solved code."""
     import ast

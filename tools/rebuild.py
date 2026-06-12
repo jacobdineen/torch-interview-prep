@@ -24,7 +24,8 @@ count = 0
 errors = []
 for path in sorted(glob.glob(os.path.join(SRC, "test_p*.py"))):
     name = os.path.basename(path)[:-3]
-    src = open(path).read()
+    with open(path) as f:
+        src = f.read()
     try:
         rewritten = rewrite_assertions(src)
         code = compile(rewritten, path, "exec")
