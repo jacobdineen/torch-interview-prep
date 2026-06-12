@@ -84,6 +84,9 @@ async function init() {
   $("outline-close").addEventListener("click", closeOutline);
   $("outline-scrim").addEventListener("click", closeOutline);
   $("reset-btn").addEventListener("click", resetToStub);
+  $("reset-progress-btn").addEventListener("click", openResetDlg);
+  $("rd-close").addEventListener("click", () => $("reset-dlg").close());
+  $("reset-dlg").addEventListener("click", (e) => { if (e.target.id === "reset-dlg") $("reset-dlg").close(); });
   $("autoadvance").checked = localStorage.getItem("mle_autoadvance") === "1";
   $("autoadvance").addEventListener("change", (e) => localStorage.setItem("mle_autoadvance", e.target.checked ? "1" : "0"));
   $("cmdk-input").addEventListener("input", () => { CMDK_HI = 0; renderCmdk(); });
@@ -638,6 +641,79 @@ async function resetToStub() {
   } catch (e) { flashResults("fail", "Reset failed: " + e.message); }
 }
 
+// ===== reset progress (item / project / problems / everything) =====
+function _countsLabel(items) {
+  const solved = items.filter((x) => x.solved).length;
+  const tried = items.filter((x) => !x.solved && x.last_status === "fail").length;
+  return `${solved} solved${tried ? `, ${tried} attempted` : ""} of ${items.length}`;
+}
+function openResetDlg() {
+  const dlg = $("reset-dlg");
+  const it = ITEMS.find((x) => x.key === CURRENT);
+
+  const itemBtn = $("rd-item");
+  itemBtn.style.display = it ? "" : "none";
+  if (it) {
+    $("rd-item-d").textContent = `${it.source === "Problems" ? "" : it.source + " · "}${it.id} — ${it.title}`;
+    itemBtn.onclick = () => doResetProgress("item", { key: it.key }, `${it.id} — ${it.title}`, [it.key]);
+  }
+
+  // "this project" = the project the current item belongs to, else the selected source
+  const srcSel = $("source") ? $("source").value : "All";
+  const projName = (it && it.source !== "Problems") ? it.source
+    : (srcSel !== "All" && srcSel !== "Problems" ? srcSel : null);
+  const projBtn = $("rd-project");
+  projBtn.style.display = projName ? "" : "none";
+  if (projName) {
+    const items = ITEMS.filter((x) => x.source === projName);
+    $("rd-project-t").textContent = (PROJECTS[projName] && PROJECTS[projName].title) || projName;
+    $("rd-project-d").textContent = _countsLabel(items);
+    projBtn.onclick = () => doResetProgress("project", { project: projName },
+      `the whole project “${(PROJECTS[projName] && PROJECTS[projName].title) || projName}” (${items.length} steps)`,
+      items.map((x) => x.key));
+  }
+
+  const probs = ITEMS.filter((x) => x.source === "Problems");
+  $("rd-problems-d").textContent = _countsLabel(probs);
+  $("rd-problems").onclick = () => doResetProgress("problems", {},
+    `all ${probs.length} standalone problems`, probs.map((x) => x.key));
+
+  $("rd-all-d").textContent = _countsLabel(ITEMS) + " (problems + every project)";
+  $("rd-all").onclick = () => doResetProgress("all", {},
+    `EVERYTHING — all ${ITEMS.length} items across problems and every project`, null);
+
+  dlg.showModal();
+}
+async function doResetProgress(scope, payload, what, keys) {
+  if (!confirm(`Reset progress for ${what}?\n\nThis clears solved/attempted status plus hint & solution unlocks, and cannot be undone.\nYour code and notes are NOT touched.`)) return;
+  $("reset-dlg").close();
+  try {
+    const r = await api.post("/api/reset_progress", Object.assign({ scope }, payload));
+    if (!r.ok) { flashResults("fail", "Reset progress failed: " + (r.error || "unknown")); return; }
+    dropSolves(keys);
+    await reloadCatalog();
+    if (!document.body.classList.contains("home-active")) flashResults("muted", `Progress reset for ${what}.`);
+  } catch (e) { flashResults("fail", "Reset progress failed: " + e.message); }
+}
+// forget the local solve-date stats for the reset keys (null = forget all)
+function dropSolves(keys) {
+  try {
+    if (keys === null) { localStorage.removeItem("mle_solves"); return; }
+    const m = JSON.parse(localStorage.getItem("mle_solves") || "{}");
+    for (const k of keys) delete m[k];
+    localStorage.setItem("mle_solves", JSON.stringify(m));
+  } catch (e) {}
+}
+// refetch the catalog and repaint everything that renders solved-state
+async function reloadCatalog() {
+  const cat = await api.get("/api/catalog");
+  ITEMS = cat.items || []; SOURCES = cat.sources || []; PROJECTS = cat.projects || {};
+  renderPalette(); updateProgress();
+  if (!$("outline").classList.contains("hidden")) renderOutline();
+  if (document.body.classList.contains("home-active")) renderHome();
+  else if (CURRENT && itemExists(CURRENT)) await selectItem(CURRENT, false, false);  // refresh the status tag
+}
+
 // ===== auto-advance =====
 function maybeAutoAdvance() {
   if ($("autoadvance").checked) setTimeout(gotoNextUnsolved, 1100);
@@ -736,6 +812,7 @@ function cmdkActions() {
     { kind: "act", id: "☰", title: "Toggle project outline", src: "action", run: toggleOutline },
     { kind: "act", id: "☾", title: "Toggle light / dark theme", src: "action", run: toggleTheme },
     { kind: "act", id: "?", title: "Keyboard shortcuts", src: "action", run: () => $("shortcuts-dlg").showModal() },
+    { kind: "act", id: "⟲", title: "Reset progress…", src: "action", run: openResetDlg },
   ];
 }
 function openCmdk() {

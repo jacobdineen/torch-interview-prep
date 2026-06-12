@@ -541,6 +541,36 @@ def _reset_to_stub(key):
     return {"ok": True}
 
 
+def _reset_progress(data):
+    """Clear solved/attempted state at item / project / problems / global scope.
+    Code files are untouched (that's /api/reset); notes are kept."""
+    from lib import store
+    scope = str(data.get("scope", ""))
+    if scope == "item":
+        r = _resolve(str(data.get("key", "")))
+        if not r:
+            return {"ok": False, "error": "unknown item"}
+        if r["kind"] == "problem":
+            store.relock_problem(r["pid"])
+        else:
+            store.relock_project_step(r["dir"], r["sid"])
+    elif scope == "project":
+        name = str(data.get("project", ""))
+        d = os.path.join(ROOT, "projects", name)
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name) or \
+                not os.path.isfile(os.path.join(d, "project.json")):
+            return {"ok": False, "error": "unknown project"}
+        store.reset_project(d)
+    elif scope == "problems":
+        store.reset_all_problems()
+    elif scope == "all":
+        store.reset_everything(_project_dirs())
+    else:
+        return {"ok": False, "error": "unknown scope"}
+    _catalog_cache["sig"] = None   # solved flags are baked into the cached catalog
+    return {"ok": True}
+
+
 # ---------- HTTP ----------
 
 class Handler(BaseHTTPRequestHandler):
@@ -636,6 +666,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"ok": nvim_open(r["path"])})
         if u.path == "/api/reset":
             return self._send(200, _reset_to_stub(key))
+        if u.path == "/api/reset_progress":
+            return self._send(200, _reset_progress(data))
         if u.path == "/api/run":
             return self._send(200, _run_item(key))
         if u.path == "/api/solution":
@@ -653,7 +685,7 @@ def _warm_up():
     try:
         _catalog()                       # build + cache the picker
         import torch  # noqa: F401       # the big one — keep it off the first /api/item
-        import frameworks, examples, concepts  # noqa: F401
+        from lib import frameworks, examples, concepts  # noqa: F401
     except Exception:
         pass
 

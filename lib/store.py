@@ -287,6 +287,87 @@ def relock_problem(num):
         con.close()
 
 
+def relock_project_step(project_dir, sid):
+    """Clear progress + solution unlock for one project step (notes are kept)."""
+    init()
+    project = _project_name(project_dir)
+    con = _connect()
+    try:
+        before = con.total_changes
+        con.execute("DELETE FROM project_progress WHERE project=? AND step=?", (project, sid))
+        con.execute("DELETE FROM project_unlock WHERE project=? AND step=?", (project, sid))
+        changed = con.total_changes > before
+        con.commit()
+        _export_project_progress(con, project, project_dir)
+        _export_project_unlock(con, project, project_dir)
+        return changed
+    finally:
+        con.close()
+
+
+def reset_project(project_dir):
+    """Clear progress + solution unlocks for EVERY step of one project.
+    Notes and the attempts history (audit log, surfaced nowhere) are kept."""
+    init()
+    project = _project_name(project_dir)
+    con = _connect()
+    try:
+        before = con.total_changes
+        con.execute("DELETE FROM project_progress WHERE project=?", (project,))
+        con.execute("DELETE FROM project_unlock WHERE project=?", (project,))
+        cleared = con.total_changes - before
+        con.commit()
+        _export_project_progress(con, project, project_dir)
+        _export_project_unlock(con, project, project_dir)
+        return cleared
+    finally:
+        con.close()
+
+
+def reset_all_problems():
+    """Clear progress + hints + solution unlocks for ALL standalone problems."""
+    init()
+    con = _connect()
+    try:
+        before = con.total_changes
+        con.execute("DELETE FROM problem_progress")
+        con.execute("DELETE FROM hint_state")
+        con.execute("DELETE FROM problem_unlock")
+        cleared = con.total_changes - before
+        con.commit()
+        _export_problem_progress(con)
+        _export_hint_state(con)
+        _export_problem_unlock(con)
+        return cleared
+    finally:
+        con.close()
+
+
+def reset_everything(project_dirs):
+    """Global progress reset: problems + every project in `project_dirs` (each
+    project's derived JSON lives in its own dir, hence the explicit list).
+    Notes and the attempts history are kept."""
+    init()
+    con = _connect()
+    try:
+        before = con.total_changes
+        for table in ("problem_progress", "hint_state", "problem_unlock",
+                      "project_progress", "project_unlock"):
+            con.execute(f"DELETE FROM {table}")  # noqa: S608 — fixed identifier list
+        cleared = con.total_changes - before
+        con.commit()
+        _export_problem_progress(con)
+        _export_hint_state(con)
+        _export_problem_unlock(con)
+        for d in project_dirs:
+            project = _project_name(d)
+            _export_project_progress(con, project, d)
+            _export_project_unlock(con, project, d)
+        return cleared
+    finally:
+        con.close()
+
+
 def record_project(project_dir, step, passed):
     init()
     project = _project_name(project_dir)

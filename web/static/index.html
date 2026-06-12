@@ -65,6 +65,7 @@
         <button id="next-btn" class="nav-btn nav-next" title="Next unsolved (n)" aria-label="Next">Next ›</button>
       </div>
       <button id="outline-btn" class="side-outline" title="Project outline (o)" aria-label="Outline">☰ Outline</button>
+      <button id="reset-progress-btn" class="side-outline side-danger" title="Clear solved status for this item, a project, or everything" aria-label="Reset progress">⟲ Reset progress…</button>
     </aside>
     <section id="left">
       <div class="prob-head">
@@ -152,6 +153,23 @@
       <tr><td><kbd>?</kbd></td><td>this help</td><td><kbd>Esc</kbd></td><td>close search / outline</td></tr>
       <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td>command palette</td><td><kbd>o</kbd></td><td>project outline</td></tr>
     </table>
+  </dialog>
+
+  <!-- reset progress (scope picker) -->
+  <dialog id="reset-dlg" class="shortcuts-dlg reset-dlg">
+    <div class="sd-head"><span>Reset progress</span><button id="rd-close" class="icon-btn" aria-label="Close">✕</button></div>
+    <p class="rd-note">Clears solved / attempted status (plus hint &amp; solution unlocks). Your code is
+      <strong>not</strong> touched — use <em>↺ Reset</em> on an item to restore its stub. Notes are kept.</p>
+    <div class="rd-options">
+      <button class="rd-opt" id="rd-item">
+        <span class="rd-t">This item</span><span class="rd-d" id="rd-item-d"></span></button>
+      <button class="rd-opt" id="rd-project">
+        <span class="rd-t" id="rd-project-t">This project</span><span class="rd-d" id="rd-project-d"></span></button>
+      <button class="rd-opt" id="rd-problems">
+        <span class="rd-t">All standalone problems</span><span class="rd-d" id="rd-problems-d"></span></button>
+      <button class="rd-opt rd-danger" id="rd-all">
+        <span class="rd-t">Everything</span><span class="rd-d" id="rd-all-d"></span></button>
+    </div>
   </dialog>
 
   <!-- project outline drawer -->
