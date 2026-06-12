@@ -158,8 +158,9 @@
   <!-- reset progress (scope picker) -->
   <dialog id="reset-dlg" class="shortcuts-dlg reset-dlg">
     <div class="sd-head"><span>Reset progress</span><button id="rd-close" class="icon-btn" aria-label="Close">✕</button></div>
-    <p class="rd-note">Clears solved / attempted status (plus hint &amp; solution unlocks). Your code is
-      <strong>not</strong> touched — use <em>↺ Reset</em> on an item to restore its stub. Notes are kept.</p>
+    <p class="rd-note">Clears solved / attempted status (plus hint &amp; solution unlocks). Notes are kept.</p>
+    <label class="rd-code-opt"><input type="checkbox" id="rd-code">
+      <span>Also restore the starting code <strong>(discards your solutions in the chosen scope!)</strong></span></label>
     <div class="rd-options">
       <button class="rd-opt" id="rd-item">
         <span class="rd-t">This item</span><span class="rd-d" id="rd-item-d"></span></button>

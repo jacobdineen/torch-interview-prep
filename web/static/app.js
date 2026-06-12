@@ -651,6 +651,7 @@ function _countsLabel(items) {
 }
 function openResetDlg() {
   const dlg = $("reset-dlg");
+  $("rd-code").checked = false;   // destructive opt-in never lingers from last time
   const it = ITEMS.find((x) => x.key === CURRENT);
 
   const itemBtn = $("rd-item");
@@ -687,15 +688,23 @@ function openResetDlg() {
   dlg.showModal();
 }
 async function doResetProgress(scope, payload, what, keys) {
-  if (!confirm(`Reset progress for ${what}?\n\nThis clears solved/attempted status plus hint & solution unlocks, and cannot be undone.\nYour code and notes are NOT touched.`)) return;
+  const withCode = $("rd-code").checked;
+  const msg = withCode
+    ? `Reset ${what}?\n\n⚠ This clears solved/attempted status AND RESTORES THE STARTING CODE — your solutions in this scope are DISCARDED and cannot be recovered.\nNotes are kept.`
+    : `Reset progress for ${what}?\n\nThis clears solved/attempted status plus hint & solution unlocks, and cannot be undone.\nYour code and notes are NOT touched.`;
+  if (!confirm(msg)) return;
   $("reset-dlg").close();
   try {
-    const r = await api.post("/api/reset_progress", Object.assign({ scope }, payload));
-    if (!r.ok) { flashResults("fail", "Reset progress failed: " + (r.error || "unknown")); return; }
+    const r = await api.post("/api/reset_progress",
+      Object.assign({ scope, reset_code: withCode }, payload));
+    if (!r.ok) { flashResults("fail", "Reset failed: " + (r.error || "unknown")); return; }
     dropSolves(keys);
     await reloadCatalog();
-    if (!document.body.classList.contains("home-active")) flashResults("muted", `Progress reset for ${what}.`);
-  } catch (e) { flashResults("fail", "Reset progress failed: " + e.message); }
+    if (!document.body.classList.contains("home-active")) {
+      const codeNote = withCode ? ` Starting code restored for ${r.code_reset || 0} file(s).` : "";
+      flashResults("muted", `Progress reset for ${what}.${codeNote}`);
+    }
+  } catch (e) { flashResults("fail", "Reset failed: " + e.message); }
 }
 // forget the local solve-date stats for the reset keys (null = forget all)
 function dropSolves(keys) {

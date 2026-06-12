@@ -525,30 +525,123 @@ def _solution_text(key, give_up):
     return _text([PYTHON, os.path.join(ROOT, "projects.py"), r["name"], r["sid"], *extra])
 
 
-def _reset_to_stub(key):
-    """Restore a step/problem working file to its committed pristine stub (discards
-    the user's solution for that item) and reload it in the editor."""
-    r = _resolve(key)
-    if not r:
-        return {"ok": False, "error": "unknown item"}
-    rel = os.path.relpath(r["path"], ROOT)
+def _stub_source(path):
+    """The pristine starting code for a working file, or None.
+    problems/ prefers the .stubs/ snapshot — a few problem files were COMMITTED
+    already solved, so HEAD is not a safe stub source there. Everything else
+    (project steps, numpy variants) is committed as a stub, so HEAD is right."""
+    if os.path.dirname(path) == os.path.join(ROOT, "problems"):
+        snap = os.path.join(ROOT, ".stubs", os.path.basename(path))
+        if os.path.isfile(snap):
+            with open(snap) as f:
+                return f.read()
+    rel = os.path.relpath(path, ROOT)
     try:
         proc = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=ROOT,
                               capture_output=True, text=True, timeout=10)
-        if proc.returncode != 0:
-            return {"ok": False, "error": "no committed stub for this item"}
-        with open(r["path"], "w") as f:
-            f.write(proc.stdout)
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return proc.stdout if proc.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _doc_span(src):
+    """(start, end) char offsets of the module docstring literal, or None."""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return None
+    if not (tree.body and isinstance(tree.body[0], ast.Expr)
+            and isinstance(tree.body[0].value, ast.Constant)
+            and isinstance(tree.body[0].value.value, str)):
+        return None
+    node = tree.body[0].value
+    lines = src.splitlines(keepends=True)
+    a = sum(len(l) for l in lines[:node.lineno - 1]) + node.col_offset
+    b = sum(len(l) for l in lines[:node.end_lineno - 1]) + node.end_col_offset
+    return a, b
+
+
+def _stub_with_current_doc(cur, stub):
+    """The stub's CODE under the working file's docstring. Problem descriptions
+    are maintained in the working copy only (skip-worktree), so a code reset
+    must not regress them to the stub's older docstring."""
+    cs, ss = _doc_span(cur), _doc_span(stub)
+    if cs is None or ss is None:
+        return stub
+    return stub[:ss[0]] + cur[cs[0]:cs[1]] + stub[ss[1]:]
+
+
+def _restore_stub(path):
+    """Reset a working file's code to the stub (keeping its current docstring).
+    Returns True if the file changed."""
+    stub = _stub_source(path)
+    if stub is None:
+        return False
+    try:
+        with open(path) as f:
+            cur = f.read()
+        new = _stub_with_current_doc(cur, stub)
+        if new == cur:
+            return False
+        with open(path, "w") as f:
+            f.write(new)
+        return True
+    except OSError:
+        return False
+
+
+def _reset_to_stub(key):
+    """Restore a step/problem working file to its pristine stub (discards the
+    user's solution for that item) and reload it in the editor."""
+    r = _resolve(key)
+    if not r:
+        return {"ok": False, "error": "unknown item"}
+    if _stub_source(r["path"]) is None:
+        return {"ok": False, "error": "no stub source for this item"}
+    _restore_stub(r["path"])
     nvim_open(r["path"])
     _nvim("--remote-send", "<C-\\><C-N>:edit!<CR>", timeout=4)
     return {"ok": True}
 
 
+def _scope_code_files(scope, data):
+    """The working files whose code a reset_code request covers."""
+    if scope == "item":
+        r = _resolve(str(data.get("key", "")))
+        return [r["path"]] if r else []
+    if scope == "project":
+        d = os.path.join(ROOT, "projects", str(data.get("project", "")))
+        return sorted(glob.glob(os.path.join(d, "steps", "*.py")))
+    files = sorted(glob.glob(os.path.join(ROOT, "problems", "p*_*.py")) +
+                   glob.glob(os.path.join(ROOT, "problems_numpy", "p*_*.py")))
+    if scope == "all":
+        for d in _project_dirs():
+            files += sorted(glob.glob(os.path.join(d, "steps", "*.py")))
+    return files
+
+
+def _reset_code(scope, data):
+    """Restore starting stubs for every file in scope; reload the editor."""
+    n, changed = 0, set()
+    for path in _scope_code_files(scope, data):
+        if _restore_stub(path):
+            n += 1
+            changed.add(os.path.abspath(path))
+    # checktime re-reads unmodified buffers from disk; force-reload the current
+    # buffer ONLY if its file was actually reset (a blanket :edit! would discard
+    # unsaved edits in an unrelated buffer).
+    r = _nvim("--remote-expr", "expand('%:p')", timeout=2)
+    cur = (r.stdout or "").strip() if getattr(r, "returncode", 1) == 0 else ""
+    _nvim("--remote-send", "<C-\\><C-N>:checktime<CR>", timeout=4)
+    if cur and os.path.abspath(cur) in changed:
+        _nvim("--remote-send", "<C-\\><C-N>:edit!<CR>", timeout=4)
+    return n
+
+
 def _reset_progress(data):
     """Clear solved/attempted state at item / project / problems / global scope.
-    Code files are untouched (that's /api/reset); notes are kept."""
+    Notes are kept. With reset_code, ALSO restore the starting stubs in scope
+    (discards the user's solutions there)."""
     from lib import store
     scope = str(data.get("scope", ""))
     if scope == "item":
@@ -572,8 +665,11 @@ def _reset_progress(data):
         store.reset_everything(_project_dirs())
     else:
         return {"ok": False, "error": "unknown scope"}
+    out = {"ok": True}
+    if data.get("reset_code"):
+        out["code_reset"] = _reset_code(scope, data)
     _catalog_cache["sig"] = None   # solved flags are baked into the cached catalog
-    return {"ok": True}
+    return out
 
 
 # ---------- HTTP ----------
