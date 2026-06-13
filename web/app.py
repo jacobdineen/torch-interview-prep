@@ -132,6 +132,35 @@ def _problem_progress():
     return _load_json(os.path.join(ROOT, ".progress.json"))
 
 
+def _doc_example(doc):
+    """Worked example parsed from a docstring's `Example:` block — the fallback
+    when examples.example_for can't extract one from the test. Without this the
+    web shows LESS than nvim does: the doc body strips the Example block on the
+    assumption the box will render it."""
+    lines = (doc or "").splitlines()
+    try:
+        i = next(i for i, l in enumerate(lines) if l.strip() == "Example:")
+    except StopIteration:
+        return None
+    cur, fields = None, {"Input": [], "Output": []}
+    for l in lines[i + 1:]:
+        st = l.strip()
+        m = re.match(r"(Input|Output):\s*(.*)", st)
+        if m:
+            cur = m.group(1)
+            if m.group(2):
+                fields[cur].append(m.group(2))
+        elif cur and st and l.startswith(" "):
+            fields[cur].append(st)          # wrapped continuation line
+        elif st:
+            break                            # a new non-example section
+    inp = " ".join(fields["Input"]).strip()
+    out = " ".join(fields["Output"]).strip()
+    if not (inp or out):
+        return None
+    return {"inputs": inp or None, "output": out or None, "matches": None, "random": False}
+
+
 def _doc_title(doc, fallback):
     """Title from a docstring's first 'Problem NN: <title>' line, else fallback."""
     lines = (doc or "").splitlines()
@@ -309,6 +338,8 @@ def _item_meta(key):
             example = example_for(pid, slug)
         except Exception:
             pass
+        if not example:
+            example = _doc_example(full)
         return {"key": key, "kind": "problem", "id": pid, "title": _doc_title(full, pid),
                 "source": "Problems", "group": _tier(pid),
                 "framework": frameworks.framework_of_source(src),
@@ -329,6 +360,12 @@ def _item_meta(key):
         example = example_for_step(r["name"], s["id"], s["name"])
     except Exception:
         pass
+    if not example:
+        try:
+            with open(r["path"]) as f:
+                example = _doc_example(ast.get_docstring(ast.parse(f.read())))
+        except Exception:
+            pass
     return {"key": key, "kind": "project", "id": s["id"], "title": s["name"],
             "source": man.get("title", r["name"]),
             "group": f"Part {s.get('part', 0) + 1}: {part['title']}",

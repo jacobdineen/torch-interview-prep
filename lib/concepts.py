@@ -245,6 +245,244 @@ CONCEPTS = {
         "0..t). This is GPT-2 in ~50 lines. Real LLaMA-class models differ in: "
         "RMSNorm instead of LayerNorm, SwiGLU MLP, RoPE positional, GQA, longer context."
     ),
+    "35": (
+        "You exercised the `Dataset` contract: `__len__` + `__getitem__`, then a seeded "
+        "`DataLoader` over it. Real-world use: EVERY training loop sits on this pair; "
+        "shuffling reproducibly means seeding a `torch.Generator`, not `random`. Gotcha: "
+        "`__getitem__` should return tensors of consistent shape/dtype, or the default "
+        "collate will throw on the first ragged batch."
+    ),
+    "36": (
+        "You wrote a collate_fn that pads ragged sequences into a (B, T_max) batch with a "
+        "bool mask. Real-world use: any text/audio batch needs this; it's what "
+        "`pad_sequence` + an attention mask do in every NLP pipeline. Gotcha: the mask "
+        "must mark REAL tokens (not padding), and downstream means/losses must use it — "
+        "padding that leaks into a mean is a silent metric bug."
+    ),
+    "37": (
+        "You assembled an MLP with `nn.Sequential` and ran a fit loop: forward, loss, "
+        "`backward()`, `step()`, `zero_grad()`. Real-world use: this five-line cadence IS "
+        "model training — everything fancier is wrapped around it. Gotcha: forgetting "
+        "`zero_grad()` makes gradients accumulate across steps, which looks like a "
+        "mysteriously unstable loss."
+    ),
+    "38": (
+        "You implemented gradient accumulation: divide each micro-batch loss by the "
+        "number of accumulation steps and only `step()` after the last one. Real-world "
+        "use: it's how a 8GB GPU trains with an effective batch of 256. Gotcha: forgetting "
+        "the 1/N scaling gives gradients N× too large — same symptom as a too-high LR."
+    ),
+    "39": (
+        "You used `torch.autocast` (+ `GradScaler`) for mixed precision: matmuls run in "
+        "fp16/bf16, reductions stay fp32, and the scaler keeps tiny fp16 grads from "
+        "flushing to zero. Real-world use: AMP is on by default in serious training — "
+        "2x throughput, half the memory. Gotcha: keep MASTER weights in fp32; with bf16 "
+        "a scaler is unnecessary, with fp16 it's mandatory."
+    ),
+    "40": (
+        "You captured intermediate activations with forward hooks "
+        "(`module.register_forward_hook`). Real-world use: feature extraction, probing, "
+        "Grad-CAM, activation stats — all without touching the model's code. Gotcha: "
+        "hooks return handles; not calling `handle.remove()` leaks memory and makes "
+        "every later forward slower."
+    ),
+    "43": (
+        "You reproduced data-parallel semantics: each replica computes grads on its shard, "
+        "then grads are AVERAGED across replicas so the update matches the full-batch one. "
+        "Real-world use: this is exactly what DDP's all-reduce does after backward. "
+        "Gotcha: averaging (not summing) is what keeps the LR meaning the same as "
+        "single-GPU training."
+    ),
+    "44": (
+        "You implemented conv2d by hand: slide a kernel over (H, W), dot-product each "
+        "window, sum over input channels. Real-world use: understanding stride/padding "
+        "arithmetic is how you debug shape errors in any CNN. Gotcha: output size is "
+        "floor((H + 2p - k)/s) + 1 — an off-by-one here is the classic conv bug."
+    ),
+    "45": (
+        "You implemented max-pooling: same sliding-window arithmetic as conv, but taking "
+        "a max instead of a dot product. Real-world use: downsampling + translation "
+        "tolerance in classic CNNs; modern nets often swap it for strided conv. Gotcha: "
+        "pooling has NO learnable parameters — padding pads with -inf semantics, not zero."
+    ),
+    "46": (
+        "You did conv shape arithmetic: 3x3/s1/p1 preserves size, stride divides it, "
+        "dilation inflates the effective kernel to k + (k-1)(d-1), and transposed conv "
+        "inverts the mapping for upsampling. Real-world use: designing encoders/decoders "
+        "(UNets, GANs) is exactly this arithmetic. Gotcha: transposed conv output is "
+        "(H-1)s - 2p + k — and its checkerboard artifacts are why many decoders use "
+        "resize-then-conv instead."
+    ),
+    "47": (
+        "You assembled a small CNN classifier end to end: conv/ReLU/pool stacks, a "
+        "flatten, a linear head producing (B, 10) logits, and `train()`/`eval()` modes. "
+        "Real-world use: this is the LeNet/VGG template every vision model refines. "
+        "Gotcha: compute the flattened feature size from the conv arithmetic — hardcoding "
+        "it breaks the moment the input resolution changes."
+    ),
+    "48": (
+        "You implemented an RNN cell (tanh(Wx + Uh + b)) and unrolled it over time. "
+        "Real-world use: the unroll-and-carry-state pattern survives in every recurrent "
+        "decoder and in scan-style state-space models. Gotcha: parameters must be named "
+        "and shaped like `nn.RNNCell` (W_ih, W_hh, b_ih, b_hh) for weight transplants "
+        "to line up."
+    ),
+    "49": (
+        "You implemented an LSTM cell: four gates (i, f, g, o) from one fused matmul, "
+        "then c' = f*c + i*g and h' = o*tanh(c'). Real-world use: LSTMs still power "
+        "production speech/time-series stacks; the gate algebra is interview canon. "
+        "Gotcha: PyTorch's gate ORDER in the fused weight is i, f, g, o — scrambling it "
+        "matches shapes but produces garbage."
+    ),
+    "50": (
+        "You padded ragged sequences and then computed mask-aware reductions: a masked "
+        "mean and the last REAL timestep per sequence. Real-world use: sentence "
+        "embeddings, pooled classifier heads — anything that summarizes variable-length "
+        "sequences. Gotcha: `output[:, -1]` is the last PADDED step, not the last real "
+        "one; gather with lengths-1 instead."
+    ),
+    "51": (
+        "You ran a bidirectional LSTM over packed sequences: `pack_padded_sequence` skips "
+        "the padding compute, and the output concatenates forward+backward states into "
+        "(B, T, 2H). Real-world use: the standard pre-transformer encoder (ELMo, BiLSTM-"
+        "CRF). Gotcha: the 'sentence vector' is the concat of the forward LAST real state "
+        "and the backward FIRST — not output[:, -1]."
+    ),
+    "52": (
+        "You built sinusoidal positional encodings: PE[pos, 2i] = sin(pos/10000^(2i/d)), "
+        "cos for odd dims, ADDED to the token embeddings. Real-world use: the original "
+        "Transformer recipe, and the mental baseline for RoPE/ALiBi comparisons. Gotcha: "
+        "the frequency exponent uses the PAIR index 2i/d — using the raw dim index halves "
+        "every wavelength."
+    ),
+    "54": (
+        "You built causal masking: a strictly-upper-triangular True mask, applied as "
+        "-inf BEFORE softmax so position t attends only to ≤ t. Real-world use: this is "
+        "what makes a decoder autoregressive; every GPT forward applies it. Gotcha: mask "
+        "with -inf (or a large negative), never 0 — zeroing post-softmax breaks the "
+        "probability normalization."
+    ),
+    "55": (
+        "You assembled multi-head attention as a module: project to Q/K/V, reshape to "
+        "(B, h, T, d_k), SDPA per head, concat, output-project. Real-world use: this "
+        "module IS the transformer's workhorse; `nn.MultiheadAttention` is exactly this. "
+        "Gotcha: the reshape is view(B, T, h, d_k).transpose(1, 2) — transposing before "
+        "the view silently shuffles features across heads."
+    ),
+    "57": (
+        "You implemented ALiBi: per-head slopes (a geometric sequence) times a "
+        "-|i - j| distance bias added to attention scores — no learned positional "
+        "parameters at all. Real-world use: trains at 1k context, extrapolates further; "
+        "used by BLOOM/MPT. Gotcha: slopes are per-HEAD (shape (h, 1, 1) when adding) — "
+        "broadcasting a single slope across heads removes the multi-scale effect."
+    ),
+    "59": (
+        "You built a transformer ENCODER block: pre-LN residual attention, then a pre-LN "
+        "residual MLP. Real-world use: BERT/ViT are stacks of exactly this block. "
+        "Gotcha: pre-LN (norm inside the residual branch) is what makes deep stacks "
+        "trainable without warmup tricks; post-LN looks similar and diverges at depth."
+    ),
+    "60": (
+        "You implemented SwiGLU: down(silu(gate(x)) * up(x)) — a GATED MLP where one "
+        "projection modulates the other elementwise. Real-world use: LLaMA-class models "
+        "all swapped GELU MLPs for SwiGLU. Gotcha: there are THREE projections (gate, up, "
+        "down), conventionally bias-free, with the hidden dim ~2/3 of the GELU "
+        "equivalent to keep parameters matched."
+    ),
+    "61": (
+        "You built a GPT DECODER block: causal self-attention + MLP, each in a pre-LN "
+        "residual. Real-world use: GPT-2/LLaMA are N of these blocks in a trenchcoat. "
+        "Gotcha: verify causality empirically — perturb a later token and assert earlier "
+        "outputs are bit-identical; shape checks can't catch a leaked mask."
+    ),
+    "63": (
+        "You built a sliding-window attention mask: position t sees only the last W "
+        "tokens (optionally plus a global prefix). Real-world use: Mistral-style local "
+        "attention — O(T·W) memory instead of O(T²). Gotcha: the window is applied ON TOP "
+        "of causality; a window mask alone still leaks the future."
+    ),
+    "64": (
+        "You tied the input embedding and the LM head: logits = h @ E.T, so one matrix "
+        "serves both directions. Real-world use: GPT-2 and most LLMs tie weights — it "
+        "saves V×d parameters and improves rare-token gradients. Gotcha: tie the actual "
+        "TENSOR (same object), not a copy — `head.weight = emb.weight`, and check "
+        "`head.weight is emb.weight` after loading checkpoints."
+    ),
+    "66": (
+        "You implemented sampling filters: top-k keeps the k best logits, top-p keeps the "
+        "smallest set whose probabilities sum past p — everything else goes to -inf "
+        "before sampling. Real-world use: these two knobs are the body of every "
+        "`generate()` call. Gotcha: top-p sorts DESCENDING and must keep the first token "
+        "that crosses the threshold (shift the cutoff by one), or p=0.9 can return an "
+        "empty set."
+    ),
+    "67": (
+        "You applied a repetition penalty: divide positive logits (multiply negative "
+        "ones) for tokens already generated, exactly once per unique token. Real-world "
+        "use: the CTRL/HF `repetition_penalty` — the cheap fix for the model looping. "
+        "Gotcha: penalizing a NEGATIVE logit means multiplying by the penalty (making it "
+        "more negative) — dividing would make repeated tokens MORE likely."
+    ),
+    "68": (
+        "You implemented beam search: keep the top-B partial hypotheses by cumulative "
+        "log-prob, expand each by its top tokens, optionally length-normalize finished "
+        "ones. Real-world use: translation/summarization decoders; the contrast with "
+        "sampling is interview canon. Gotcha: compare hypotheses by SUM of log-probs "
+        "(or a length-normalized score) — comparing raw products underflows, and "
+        "unnormalized sums favor short outputs."
+    ),
+    "69": (
+        "You wrote KV-cached greedy decoding: prefill the prompt once, then each step "
+        "feeds ONE token and appends its K/V to the cache. Real-world use: this is why "
+        "generation is O(T) per token instead of O(T²) — every serving stack does it. "
+        "Gotcha: with a cache the causal mask for the new token is just 'attend to "
+        "everything cached'; re-applying the full triangular mask breaks the step shapes."
+    ),
+    "70": (
+        "You implemented speculative decoding: a small draft model proposes K tokens, the "
+        "target model verifies them in ONE forward, accepting until the first "
+        "disagreement (plus one corrected token). Real-world use: 2-3x serving speedups "
+        "with mathematically IDENTICAL output distribution. Gotcha: on rejection you must "
+        "resample from the residual distribution p_target - p_draft (clamped), not just "
+        "take target's argmax."
+    ),
+    "71": (
+        "You implemented InfoNCE: similarity matrix of two augmented views, temperature-"
+        "scaled, cross-entropy against the diagonal (each sample's positive is its own "
+        "other view). Real-world use: SimCLR/CLIP pretraining objectives. Gotcha: "
+        "normalize embeddings first and divide by temperature τ — unnormalized dot "
+        "products let one large-norm sample dominate the batch."
+    ),
+    "72": (
+        "You implemented knowledge distillation: alpha-blend hard-label CE with "
+        "KL(student_T || teacher_T) at temperature T, scaling the KL term by T². "
+        "Real-world use: DistilBERT-style compression; alpha=1 must reduce to plain CE. "
+        "Gotcha: the T² factor compensates the 1/T² gradient shrink from soft targets — "
+        "dropping it silently underweights the teacher."
+    ),
+    "73": (
+        "You implemented the VAE reparameterization trick: z = mu + sigma * eps with "
+        "eps ~ N(0,1), making the sample differentiable w.r.t. mu/sigma, plus the "
+        "closed-form KL to the unit Gaussian. Real-world use: VAEs, latent diffusion's "
+        "first stage. Gotcha: the encoder outputs LOG-variance for stability — "
+        "sigma = exp(0.5 * logvar), and the KL is -0.5 * sum(1 + logvar - mu² - "
+        "exp(logvar))."
+    ),
+    "74": (
+        "You implemented Gumbel-softmax: add Gumbel(0,1) noise (-log(-log(U))) to "
+        "logits, softmax at temperature tau, optionally straight-through to one-hot. "
+        "Real-world use: differentiable sampling over discrete choices — NAS, VQ "
+        "alternatives, discrete latents. Gotcha: clamp U away from 0/1 before the "
+        "double log, and remember tau→0 sharpens toward argmax while killing gradients."
+    ),
+    "76": (
+        "You used gradient checkpointing: drop intermediate activations in forward and "
+        "recompute them during backward, trading ~30% compute for O(sqrt(L)) activation "
+        "memory. Real-world use: how long-context transformer training fits in memory at "
+        "all. Gotcha: the checkpointed function must be side-effect-free w.r.t. RNG "
+        "(dropout needs `preserve_rng_state`, which `torch.utils.checkpoint` does by "
+        "default) or recomputation diverges from the original forward."
+    ),
 }
 
 
