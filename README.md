@@ -10,7 +10,8 @@ Requires `uv` and Python 3.12.
 uv sync
 ```
 
-That installs torch + numpy into `./.venv/`. No other dependencies.
+That installs torch + numpy (plus transformers, einops, jax, and ninja — a few
+projects need them) into `./.venv/`.
 
 ## The basic loop
 
@@ -121,15 +122,15 @@ uv run python check.py 22a --solution --i-give-up   # unlock + show reference
 uv run python check.py 65a --time                # benchmark flash attention vs reference
 ```
 
-### `run_all.py` — batch runner + dashboard
+### `tools/run_all.py` — batch runner + dashboard
 
 ```
-uv run python run_all.py            # run every problem (all 313)
-uv run python run_all.py 4          # only parent 4's children (04a, 04b, 04c, 04d)
-uv run python run_all.py 30-50      # parents 30 through 50 (inclusive)
-uv run python run_all.py 4 7 12     # specific parents
-uv run python run_all.py --status   # dashboard from .progress.json — no tests re-run
-uv run python run_all.py --help     # this summary
+uv run python tools/run_all.py            # run every problem (all 313)
+uv run python tools/run_all.py 4          # only parent 4's children (04a, 04b, 04c, 04d)
+uv run python tools/run_all.py 30-50      # parents 30 through 50 (inclusive)
+uv run python tools/run_all.py 4 7 12     # specific parents
+uv run python tools/run_all.py --status   # dashboard from recorded progress — no tests re-run
+uv run python tools/run_all.py --help     # this summary
 ```
 
 The `--status` dashboard looks like:
@@ -141,24 +142,27 @@ The `--status` dashboard looks like:
   Overall: 4/313 solved
 ```
 
-### `reset.py` — restore stubs
+### `tools/reset.py` — restore stubs
 
 ```
-uv run python reset.py 04a           # reset one task (prompts y/N)
-uv run python reset.py 04            # reset whole parent (all p04*)
-uv run python reset.py 04 --yes      # skip the confirmation
-uv run python reset.py 04 11 23a     # multiple at once
-uv run python reset.py --all --yes   # nuclear: reset everything (--yes required)
-uv run python reset.py --status      # list which problems differ from their stubs
-uv run python reset.py --help        # this summary
+uv run python tools/reset.py 04a           # reset one task (prompts y/N)
+uv run python tools/reset.py 04            # reset whole parent (all p04*)
+uv run python tools/reset.py 04 --yes      # skip the confirmation
+uv run python tools/reset.py 04 11 23a     # multiple at once
+uv run python tools/reset.py --all --yes   # nuclear: reset everything (--yes required)
+uv run python tools/reset.py --status      # list which problems differ from their stubs
+uv run python tools/reset.py --help        # this summary
 ```
 
-Resetting also clears the matching entry in `.progress.json` so the dashboard reflects that you're starting over.
+Resetting also clears that problem's progress in the store so the dashboard reflects
+that you're starting over. The web app has the same thing built in: **⟲ Reset
+progress** in the sidebar resets status (and optionally the code) at item / project /
+everything scope, and any discarded code is first tarred into `.reset_backups/`.
 
-### `rebuild.py` — recompile tests
+### `tools/rebuild.py` — recompile tests
 
 ```
-uv run python rebuild.py
+uv run python tools/rebuild.py
 ```
 
 Reads `tests/_src/*.py`, AST-rewrites assertions for nicer failure output, then writes `tests/_compiled/*.pyc`. Only needed if you edit a test source by hand.
@@ -185,13 +189,13 @@ Reads `tests/_src/*.py`, AST-rewrites assertions for nicer failure output, then 
 | 14 | 71-74 | Auxiliary Losses (InfoNCE, KD, VAE reparam, Gumbel-softmax) |
 | 15 | 75-77 | LLM Specifics & Capstone (LoRA, gradient checkpointing, MiniGPT end-to-end) |
 
-Concept blurbs (one per parent) live in `concepts.py`. Graduated hints (3-4 per parent, 280 total) live in `hints.py`. Reference solutions (one full impl per parent, child-specific subsets extracted at lookup time) live in `solutions.py`. Benchmarks for compute-sensitive problems live in the `BENCHMARKS` dict at the bottom of `solutions.py`.
+Concept blurbs (one per parent) live in `lib/concepts.py`. Graduated hints (3-4 per parent, 280 total) live in `lib/hints.py`. Reference solutions (one full impl per parent, child-specific subsets extracted at lookup time) live in `lib/solutions.py`. Benchmarks for compute-sensitive problems live in the `BENCHMARKS` dict at the bottom of `lib/solutions.py`.
 
 **Adding a problem.** Scaffold the stub, pristine snapshot, and test skeleton in
 one command, then fill in the test and reference:
 
 ```bash
-python new_problem.py 78a clip_to_unit --sig "(x, lo, hi)" --desc "clamp x into [lo, hi]"
+python tools/new_problem.py 78a clip_to_unit --sig "(x, lo, hi)" --desc "clamp x into [lo, hi]"
 ```
 
 See [docs/adding-a-problem.md](docs/adding-a-problem.md) for the full walkthrough.
@@ -199,7 +203,8 @@ See [docs/adding-a-problem.md](docs/adding-a-problem.md) for the full walkthroug
 ## Projects (multi-step builds)
 
 Alongside the standalone problems, **projects** are long ordered sequences of small
-steps that accumulate into one working artifact. Four are included:
+steps that accumulate into one working artifact. Seventeen are included (698 steps);
+the six biggest:
 
 - **tiny-gpt-from-scratch** (NumPy) — 166 steps / 8 parts: a character-level GPT (tokenizer,
   NumPy/softmax foundations, data pipeline + bigram baseline, single-layer neural bigram,
@@ -221,6 +226,14 @@ steps that accumulate into one working artifact. Four are included:
 - **metrics-and-evaluation-from-scratch** (NumPy) — 10 steps / 3 parts: the model-evaluation
   toolkit (train/test split, k-fold, confusion matrix, precision/recall/F1 + macro-F1, tie-safe
   ROC AUC, and MAE/RMSE/R²).
+
+Plus eleven more: **attention-is-all-you-need** (79 steps — the original Transformer,
+encoder-decoder + beam search), **cnn-from-scratch-numpy** (59), **flash-attention-cuda**
+(26 — real CUDA kernels JIT-compiled and graded on your GPU), **mlp-in-jax-from-scratch**
+(21), **rnn-lstm-from-scratch** (21), **diffusion-ddpm-from-scratch** (21),
+**mini-vllm-inference-engine** (20 — paged KV cache + continuous batching),
+**micrograd-autograd-from-scratch** (18), **flash-attention-from-scratch** (18 — the
+tiled algorithm in pure torch), **einops** (17), and **bpe-tokenizer-from-scratch** (15).
 
 Each step is one function (or class) in `projects/<name>/steps/NNNN_<fn>.py`. You solve it
 like a problem (run the file, or `<leader>pp` in nvim) — it's graded by a hidden test that
@@ -253,16 +266,19 @@ Each project has its own README with the full part breakdown and expected result
 [alphazero-connect4](projects/alphazero-connect4/README.md) ·
 [classical-ml-from-scratch](projects/classical-ml-from-scratch/README.md) ·
 [metrics-and-evaluation-from-scratch](projects/metrics-and-evaluation-from-scratch/README.md). To add your own,
-scaffold it with `python new_project.py <name> --title "..."` and see
+scaffold it with `python tools/new_project.py <name> --title "..."` and see
 [docs/adding-a-project.md](docs/adding-a-project.md).
 
 ## Continuous integration
 
 `python verify_all.py` is the correctness gate. It runs, in order:
-`test_framework.py` (the grader + assembler themselves, against a throwaway
-project), `verify_problems.py` (every problem's reference solution against its
-compiled test, using a temp dir so your working files are never touched), and
-each project's `_build/verify.py`. It exits non-zero if anything fails.
+`tools/test_framework.py` (the grader + assembler themselves, against a throwaway
+project), `tools/test_store.py` (the SQLite progress store — recording, per-scope
+resets, concurrency — against an isolated temp DB), `tools/verify_problems.py`
+(every problem's reference solution against its compiled test, using a temp dir so
+your working files are never touched), `tools/verify_numpy.py`, and each project's
+`_build/verify.py`. CI also runs `web/smoke_test.py --static` (frontend/backend
+contract, JS syntax, CSRF wiring). It exits non-zero if anything fails.
 
 GitHub Actions runs it on every push and pull request (`.github/workflows/ci.yml`,
 CPU-only torch, HuggingFace model cached), so a change to shared tooling, a
@@ -273,49 +289,16 @@ locally before pushing:
 uv run python verify_all.py
 ```
 
-## File layout
+## Local state (gitignored, per-machine)
 
-```
-mle_prep/
-├── pyproject.toml             # uv project, torch + numpy + transformers deps
-├── prep.py                    # unified dashboard: problems + projects + what's next
-├── check.py                   # main problem CLI
-├── run_all.py                 # batch runner + --status dashboard
-├── reset.py                   # restore from .stubs/ snapshot
-├── rebuild.py                 # recompile tests/_src/ -> tests/_compiled/
-├── runner.py                  # dispatcher each problem stub's __main__ calls
-├── debug_tools.py             # backs check.py's --hint/--explain/--solution/--time
-├── assert_rewriter.py         # AST-rewrites assertions for rich failure output
-├── curriculum.py              # tier definitions, parent→tier lookup, has_test
-├── concepts.py                # concept blurbs (printed on PASS)
-├── hints.py                   # graduated hints
-├── solutions.py               # parent reference impls + per-child extractor + BENCHMARKS
-├── new_problem.py             # scaffold a new problem (stub + .stubs + test skeleton)
-├── new_project.py             # scaffold a new project (_build/steps/tests tree)
-├── regen_all.py               # re-run every project's _build/gen.py
-├── projects.py                # multi-step project CLI (mirrors check.py)
-├── project_runner.py          # grades one project step + assembles solution.py
-├── verify_all.py              # CI gate: framework + problems + every project
-├── verify_problems.py         # checks all problem reference solutions pass
-├── test_framework.py          # tests the grader + assembler themselves
-├── problems/                  # 313 stub files you edit
-│   └── pNN<letter>_<slug>.py
-├── projects/                  # multi-step builds (see docs/adding-a-project.md)
-│   └── <name>/{_build,steps,tests,scaffold.py,project.json,README.md}
-├── tests/
-│   ├── _compiled/             # opaque .pyc the runner loads
-│   └── _src/                  # readable source (don't peek before solving)
-├── web/                       # browser app: serve-app.sh, serve-nvim.sh, app.py, static/
-├── docs/                      # adding-a-problem.md, adding-a-project.md, web-nvim.md
-├── .github/workflows/ci.yml   # runs verify_all.py on every push / PR
-└── .stubs/                    # pristine snapshot used by reset.py
-```
-
-Local state (gitignored, per-machine):
-
-- `.progress.json` — pass/fail history (drives the dashboard + solution gating)
-- `.hint_state.json` — how many hints you've revealed per problem
-- `.solution_unlock.json` — manual `--i-give-up` unlocks
+All mutable practice state lives in one SQLite database, `.mle_store.db` —
+progress, notes, hint counters, solution unlocks, and the full attempt history
+(which powers the home-screen heatmap and survives resets). Every write also
+re-exports the matching legacy JSON file (`.progress.json`, `.notes.json`,
+`.hint_state.json`, `.solution_unlock.json`, per-project
+`.project_progress.json`) so anything that still reads JSON keeps working;
+the DB is the source of truth. Code resets archive whatever they discard into
+`.reset_backups/solutions-<timestamp>.tar.gz`.
 
 ## Editor setup
 
@@ -336,7 +319,7 @@ The repo root and venv python are auto-detected by walking up to `check.py`.
 
 | Keymap | Command | What it does |
 |---|---|---|
-| `<leader>pp` | `:PracticeRun` | Run the current problem. PASS → notify; FAIL → diagnostic on the failing line + a float with the diff and likely cause. |
+| `<leader>pp` | `:PracticeRun` | Run the current problem. PASS → notify; FAIL → notify with the likely cause + a diagnostic on the failing line (no popups — the web results panel mirrors every run). |
 | `<leader>pn` | `:PracticeNext` | Open the next unsolved problem. |
 | `<leader>pf` | `:PracticePick` | Telescope picker over all problems **and project steps**, marked `[x]` solved / `[ ]` unsolved. |
 | `<leader>ph` | `:PracticeHint` | Next graduated hint (float). |
@@ -348,7 +331,7 @@ The repo root and venv python are auto-detected by walking up to `check.py`.
 | `<leader>pd` | `:PracticeStatus` | Unified dashboard (problems + projects + next) via `prep.py`; in a project step, that project's status. |
 | `<leader>pw` | `:PracticeAutorun` | Toggle run-on-save for problems **and project steps** (off by default). |
 
-The same maps work on project steps (`projects/*/steps/NNNN_*.py`), routing to `projects.py`. On PASS the float shows the concept blurb + tier progress; on FAIL it shows the diff detail. After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
+The same maps work on project steps (`projects/*/steps/NNNN_*.py`), routing to `projects.py`. If the web app is open, every nvim-initiated run also lands in its results panel (concept, progress, diff detail) and the page follows your navigation. After a failed run, `[d` / `]d` jump between diagnostics and `<leader>xx` opens them in Trouble.
 
 ### Browser web app
 
@@ -359,7 +342,24 @@ sudo apt-get install -y ttyd && sudo systemctl disable --now ttyd   # one-time
 ./web/serve-app.sh                                                   # http://127.0.0.1:8000
 ```
 
-The editor is your actual `nvim` (streamed via ttyd + xterm.js), so every `<leader>p` keymap works identically; picking a problem does an `nvim --remote` buffer switch, and Run does a remote `:wa` + `check.py`. For just the editor with no surrounding UI, use `./web/serve-nvim.sh`. Both bind loopback; reach a remote box by tunnelling the ports. See [docs/web-nvim.md](docs/web-nvim.md).
+The editor is your actual `nvim` (streamed via ttyd + xterm.js), so every `<leader>p`
+keymap works identically; picking a problem does an `nvim --remote` buffer switch, and
+Run saves just the graded buffer (a synchronous `:update`) then runs `check.py`. Runs
+started from nvim (`<leader>pp`) drive the same UI. Also built in:
+
+- a **home screen** with per-track cards, day-streak stats, and a GitHub-style
+  **activity heatmap** built from the attempt history (it survives resets);
+- a collapsible **browse sidebar** (search, source/framework/status filters,
+  Previous / Next), a project outline drawer (`o`), and a command palette (`Ctrl-K`);
+- **⟲ Reset progress** — clear solved status (and optionally restore starting code,
+  with the discarded solutions tarred into `.reset_backups/` first) per item,
+  per project, or globally;
+- a **stale-tab banner**: if the server restarts on newer code under an open tab,
+  the tab notices on its next sync poll and tells you to reload instead of
+  half-working.
+
+For just the editor with no surrounding UI, use `./web/serve-nvim.sh`. Both bind
+loopback; reach a remote box by tunnelling the ports. See [docs/web-nvim.md](docs/web-nvim.md).
 
 ## Workflow tips
 
@@ -367,4 +367,4 @@ The editor is your actual `nvim` (streamed via ttyd + xterm.js), so every `<lead
 - When stuck: `--explain` to clarify what's being asked, then `--hint` (escalates), then `--solution --i-give-up`.
 - When passing: read the concept blurb that prints on PASS — it's where the cross-references between problems live.
 - When something's slow: `--time` will tell you if your implementation is algorithmically off vs the reference (the 10x kind, not the 1.2x kind).
-- Want to redo a problem? `reset.py <id>` and it's a clean stub again.
+- Want to redo a problem? `tools/reset.py <id>` (or the web app's ⟲ Reset) and it's a clean stub again.

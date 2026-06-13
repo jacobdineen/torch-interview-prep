@@ -15,7 +15,7 @@ const api = {
   },
 };
 
-let ITEMS = [], SOURCES = [], PROJECTS = {}, TOKEN = "";
+let ITEMS = [], SOURCES = [], PROJECTS = {}, TOKEN = "", BUILD = "";
 let CURRENT = null, HILITE = 0;
 let _selSeq = 0, _runSeq = 0, _runStatusTimer = null;
 let _lastRunTs = 0;      // ts of the most recently handled run (web or nvim) — dedups the /api/sync poll
@@ -28,6 +28,8 @@ async function init() {
 
   const cfg = await api.get("/api/config");
   TOKEN = cfg.token || "";
+  BUILD = cfg.build || "";
+  $("stale-reload").addEventListener("click", () => location.reload());
   $("nvim").src = `${location.protocol}//${location.hostname}:${cfg.ttyd_port}/`;
 
   const cat = await api.get("/api/catalog");
@@ -162,6 +164,7 @@ function card(cls, icon, title, sub, desc, stats, onClick) {
 }
 function renderHome() {
   renderStats();
+  renderHeatmap();
   const rb = $("resume-banner"); rb.innerHTML = "";
   const lastKey = localStorage.getItem("mle_last_key");
   const last = lastKey && ITEMS.find((x) => x.key === lastKey);
@@ -499,6 +502,7 @@ async function run(submit) {
     if (seq !== _runSeq || selAt !== _selSeq || !r) return;   // navigated away mid-run
     renderResult(r, submit);
     setRunStatus(r.status);
+    _heatCache = null;
     if (r._ts) _lastRunTs = r._ts;   // claim this run's ts so the poll won't replay it
     if (r.status === "pass") { markSolved(key); maybeAutoAdvance(); }
   } finally {
@@ -638,7 +642,10 @@ async function resetToStub() {
   if (!confirm("Reset " + label(CURRENT) + " to the starting stub?\n\nThis DISCARDS your current code for this item and reloads the editor.")) return;
   try {
     const r = await api.post("/api/reset", { key: CURRENT });
-    if (r.ok) { flashResults("muted", "Reset to the starting stub. Your editor was reloaded."); }
+    if (r.ok) {
+      flashResults("muted", "Reset to the starting stub. Your editor was reloaded."
+        + (r.backup ? ` (previous code saved to ${r.backup})` : ""));
+    }
     else flashResults("fail", "Reset failed: " + (r.error || "unknown"));
   } catch (e) { flashResults("fail", "Reset failed: " + e.message); }
 }
@@ -701,7 +708,10 @@ async function doResetProgress(scope, payload, what, keys) {
     dropSolves(keys);
     await reloadCatalog();
     if (!document.body.classList.contains("home-active")) {
-      const codeNote = withCode ? ` Starting code restored for ${r.code_reset || 0} file(s).` : "";
+      const codeNote = withCode
+        ? ` Starting code restored for ${r.code_reset || 0} file(s).` +
+          (r.backup ? ` Discarded solutions backed up to ${r.backup}.` : "")
+        : "";
       flashResults("muted", `Progress reset for ${what}.${codeNote}`);
     }
   } catch (e) { flashResults("fail", "Reset failed: " + e.message); }
@@ -736,10 +746,12 @@ function itemExists(key) { return ITEMS.some((x) => x.key === key); }
 // same UI as the Run/Submit buttons: follow the editor's current file, and react
 // to a run we didn't initiate (result panel + solved + auto-next).
 async function syncPoll() {
-  if (document.hidden || !CURRENT || _runInFlight) return;
+  if (document.hidden || _runInFlight) return;
   let s;
   try { s = await api.get("/api/sync"); } catch (e) { return; }
-  if (!s || _runInFlight) return;                 // a web run started mid-poll — it will handle itself
+  if (!s) return;
+  if (s.build && BUILD && s.build !== BUILD) $("stale-banner").classList.remove("hidden");
+  if (!CURRENT || _runInFlight) return;           // a web run started mid-poll — it will handle itself
   if (!_syncSeeded) {                             // first poll: baseline only, never replay a historical run
     _syncSeeded = true;
     if (s.run && s.run.ts) _lastRunTs = s.run.ts;
@@ -753,6 +765,7 @@ async function syncPoll() {
     if (k === CURRENT) {
       renderResult(run, false);
       setRunStatus(run.status);
+      _heatCache = null;
       if (run.status === "pass") { markSolved(k); maybeAutoAdvance(); }
     }
     return;                                        // one action per tick — don't also follow in the same poll
@@ -798,6 +811,47 @@ function renderStats() {
     stat(s.solvedToday, "Today") +
     stat((s.streak > 0 ? "<span class='flame'>🔥</span> " : "") + s.streak, "Day streak");
 }
+// ===== activity heatmap (GitHub-style; from the server's attempt history) =====
+let _heatCache = null;
+async function renderHeatmap() {
+  const el = $("heatmap"); if (!el) return;
+  if (!_heatCache) {
+    try { _heatCache = (await api.get("/api/stats")).days || {}; }
+    catch (e) { el.innerHTML = ""; return; }
+  }
+  const days = _heatCache;
+  const today = new Date();
+  const WEEKS = 18;
+  // start on the Sunday WEEKS-1 weeks back, so today lands in the last column
+  const start = new Date(today);
+  start.setDate(start.getDate() - start.getDay() - (WEEKS - 1) * 7);
+  let html = "";
+  const months = [];
+  for (let w = 0; w < WEEKS; w++) {
+    let cells = "";
+    for (let d = 0; d < 7; d++) {
+      const dt = new Date(start); dt.setDate(start.getDate() + w * 7 + d);
+      if (dt > today) { cells += `<i class="hm-cell hm-future"></i>`; continue; }
+      const key = dt.toISOString().slice(0, 10);
+      const v = days[key];
+      let lvl = 0;
+      if (v) lvl = v.passes >= 8 ? 4 : v.passes >= 4 ? 3 : v.passes >= 1 ? 2 : 1;
+      const tip = `${key} — ${v ? v.runs : 0} run${v && v.runs !== 1 ? "s" : ""}, ${v ? v.passes : 0} passed`;
+      cells += `<i class="hm-cell hm-l${lvl}" title="${tip}"></i>`;
+    }
+    const first = new Date(start); first.setDate(start.getDate() + w * 7);
+    const m = first.toLocaleString("en", { month: "short" });
+    months.push(first.getDate() <= 7 ? m : "");
+    html += `<div class="hm-week">${cells}</div>`;
+  }
+  el.innerHTML =
+    `<div class="hm-months">${months.map((m) => `<span>${m}</span>`).join("")}</div>` +
+    `<div class="hm-grid">${html}</div>` +
+    `<div class="hm-legend"><span>less</span>` +
+    [0, 1, 2, 3, 4].map((l) => `<i class="hm-cell hm-l${l}"></i>`).join("") +
+    `<span>more</span></div>`;
+}
+
 let _confettiTimer = null;
 function celebrate(key) {
   const t = $("toast");

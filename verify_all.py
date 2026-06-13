@@ -24,6 +24,8 @@ def main():
     results = {}
     results["framework"] = _run("framework (grader + assembler)",
                                  [py, os.path.join(HERE, "tools", "test_framework.py")])
+    results["store"] = _run("store (sqlite progress/reset/concurrency, isolated db)",
+                            [py, os.path.join(HERE, "tools", "test_store.py")])
     results["problems"] = _run("problems (reference solutions)",
                                [py, os.path.join(HERE, "tools", "verify_problems.py")])
     results["numpy"] = _run("numpy variants (via the torch<->numpy bridge)",

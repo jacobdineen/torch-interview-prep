@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="home-active">
+  <div id="stale-banner" class="stale-banner hidden" role="alert">
+    The server was updated under this tab — its requests may be silently ignored.
+    <button id="stale-reload">Reload now</button>
+  </div>
+
   <header id="topbar">
     <button class="brand" id="home-btn" title="Home (g)" aria-label="Home"><span class="brand-mark" aria-hidden="true">▚</span> mle_prep</button>
 
@@ -28,6 +33,7 @@
       <p>Standalone problems by framework, or work end-to-end through a project.</p>
     </div>
     <div id="home-stats" class="home-stats"></div>
+    <div id="heatmap" class="heatmap" title="Runs per day (attempt history survives resets)"></div>
     <div id="resume-banner" class="resume-banner hidden"></div>
     <div class="home-section">
       <h2>Problems</h2>

@@ -46,7 +46,29 @@ def _load_secret():
     return t
 
 
+def _build_stamp():
+    """Identify the running server build. The page learns it at load (config) and
+    re-checks it on every sync poll, so an open tab notices a server restart on
+    newer code and shows a reload banner instead of silently sending stale
+    requests (which once made a working feature look broken)."""
+    try:
+        proc = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                              cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              capture_output=True, text=True, timeout=5)
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        return str(int(max(os.path.getmtime(os.path.join(here, f))
+                           for f in ("app.py", os.path.join("static", "app.js")))))
+    except Exception:
+        return "unknown"
+
+
 _SECRET = _load_secret()                # CSRF token for mutating POSTs (exposed via same-origin /api/config)
+_BUILD = _build_stamp()                 # compared by the page to detect a stale tab
 _run_lock = threading.Lock()           # serialize /api/run (avoid racing check.py + torn progress files)
 _catalog_cache = {"sig": None, "data": None}
 
@@ -456,7 +478,7 @@ def _current_nvim_key():
 def _sync_state():
     """Lightweight poll target: the latest run result (from ANY front-end, incl. an
     nvim `pp`) plus the editor's current file, so the browser stays in lockstep."""
-    return {"run": _read_last_run(), "current": _current_nvim_key()}
+    return {"run": _read_last_run(), "current": _current_nvim_key(), "build": _BUILD}
 
 
 def _run_item(key):
@@ -571,23 +593,36 @@ def _stub_with_current_doc(cur, stub):
     return stub[:ss[0]] + cur[cs[0]:cs[1]] + stub[ss[1]:]
 
 
-def _restore_stub(path):
-    """Reset a working file's code to the stub (keeping its current docstring).
-    Returns True if the file changed."""
+def _stub_replacement(path):
+    """The reset content for a working file (stub code under the current
+    docstring), or None when there is no stub / nothing would change."""
     stub = _stub_source(path)
     if stub is None:
-        return False
+        return None
     try:
         with open(path) as f:
             cur = f.read()
-        new = _stub_with_current_doc(cur, stub)
-        if new == cur:
-            return False
-        with open(path, "w") as f:
-            f.write(new)
-        return True
     except OSError:
-        return False
+        return None
+    new = _stub_with_current_doc(cur, stub)
+    return None if new == cur else new
+
+
+def _backup_solutions(paths):
+    """Tar the files a code reset is about to overwrite into .reset_backups/.
+    The reset is presented as irreversible, but a misclick shouldn't actually
+    cost real work. Best-effort: a failed backup never blocks the reset."""
+    import tarfile
+    try:
+        d = os.path.join(ROOT, ".reset_backups")
+        os.makedirs(d, exist_ok=True)
+        out = os.path.join(d, time.strftime("solutions-%Y%m%d-%H%M%S") + ".tar.gz")
+        with tarfile.open(out, "w:gz") as tar:
+            for p in paths:
+                tar.add(p, arcname=os.path.relpath(p, ROOT))
+        return os.path.relpath(out, ROOT)
+    except Exception:
+        return None
 
 
 def _reset_to_stub(key):
@@ -598,10 +633,18 @@ def _reset_to_stub(key):
         return {"ok": False, "error": "unknown item"}
     if _stub_source(r["path"]) is None:
         return {"ok": False, "error": "no stub source for this item"}
-    _restore_stub(r["path"])
+    new = _stub_replacement(r["path"])
+    backup = None
+    if new is not None:
+        backup = _backup_solutions([r["path"]])
+        try:
+            with open(r["path"], "w") as f:
+                f.write(new)
+        except OSError as e:
+            return {"ok": False, "error": str(e)}
     nvim_open(r["path"])
     _nvim("--remote-send", "<C-\\><C-N>:edit!<CR>", timeout=4)
-    return {"ok": True}
+    return {"ok": True, "backup": backup}
 
 
 def _scope_code_files(scope, data):
@@ -621,12 +664,20 @@ def _scope_code_files(scope, data):
 
 
 def _reset_code(scope, data):
-    """Restore starting stubs for every file in scope; reload the editor."""
+    """Restore starting stubs for every file in scope (backing the discarded
+    solutions up first); reload the editor. Returns (count, backup_path)."""
+    targets = [(p, new) for p in _scope_code_files(scope, data)
+               if (new := _stub_replacement(p)) is not None]
+    backup = _backup_solutions([p for p, _ in targets]) if targets else None
     n, changed = 0, set()
-    for path in _scope_code_files(scope, data):
-        if _restore_stub(path):
+    for path, new in targets:
+        try:
+            with open(path, "w") as f:
+                f.write(new)
             n += 1
             changed.add(os.path.abspath(path))
+        except OSError:
+            pass
     # checktime re-reads unmodified buffers from disk; force-reload the current
     # buffer ONLY if its file was actually reset (a blanket :edit! would discard
     # unsaved edits in an unrelated buffer).
@@ -635,7 +686,7 @@ def _reset_code(scope, data):
     _nvim("--remote-send", "<C-\\><C-N>:checktime<CR>", timeout=4)
     if cur and os.path.abspath(cur) in changed:
         _nvim("--remote-send", "<C-\\><C-N>:edit!<CR>", timeout=4)
-    return n
+    return n, backup
 
 
 def _reset_progress(data):
@@ -667,7 +718,7 @@ def _reset_progress(data):
         return {"ok": False, "error": "unknown scope"}
     out = {"ok": True}
     if data.get("reset_code"):
-        out["code_reset"] = _reset_code(scope, data)
+        out["code_reset"], out["backup"] = _reset_code(scope, data)
     _catalog_cache["sig"] = None   # solved flags are baked into the cached catalog
     return out
 
@@ -735,7 +786,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path.startswith("/static/"):
             return self._serve_static(u.path[len("/static/"):])
         if u.path == "/api/config":
-            return self._send(200, {"ttyd_port": TTYD_PORT, "token": _SECRET})
+            return self._send(200, {"ttyd_port": TTYD_PORT, "token": _SECRET, "build": _BUILD})
         if u.path == "/api/catalog":
             return self._send(200, _catalog())
         if u.path == "/api/item":
@@ -745,6 +796,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"text": _hint_text((q.get("key") or [""])[0])})
         if u.path == "/api/sync":
             return self._send(200, _sync_state())
+        if u.path == "/api/stats":
+            from lib import store
+            return self._send(200, {"days": store.attempts_by_day()})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):

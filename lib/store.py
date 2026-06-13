@@ -368,6 +368,22 @@ def reset_everything(project_dirs):
         con.close()
 
 
+def attempts_by_day(days=126):
+    """{'YYYY-MM-DD': {'runs': n, 'passes': m}} over the last `days` days, from
+    the attempts history (which deliberately survives progress resets). Powers
+    the activity heatmap on the web home screen."""
+    init()
+    con = _connect()
+    try:
+        rows = con.execute(
+            "SELECT substr(ts, 1, 10) AS d, COUNT(*), SUM(status = 'pass')"
+            " FROM attempts WHERE d >= date('now', 'localtime', ?) GROUP BY d",
+            (f"-{int(days)} day",)).fetchall()
+        return {d: {"runs": c, "passes": p or 0} for d, c, p in rows}
+    finally:
+        con.close()
+
+
 def record_project(project_dir, step, passed):
     init()
     project = _project_name(project_dir)

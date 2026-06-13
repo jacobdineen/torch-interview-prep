@@ -408,3 +408,25 @@ button.reset:hover { border-color: var(--amber); background: color-mix(in srgb, 
 .confetti i { position: absolute; top: -12px; width: 8px; height: 8px; opacity: .9; will-change: transform; }
 @keyframes confetti-fall { to { transform: translateY(105vh) rotate(720deg); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } }
+
+/* ===== stale-tab banner ===== */
+.stale-banner { position: sticky; top: 0; z-index: 100; padding: 9px 16px; text-align: center;
+  font-size: 13px; font-weight: 600; color: #1c2128; background: var(--yellow, #d29922);
+  display: flex; align-items: center; justify-content: center; gap: 12px; }
+.stale-banner button { padding: 4px 12px; font-size: 12.5px; font-weight: 700;
+  background: rgba(0,0,0,.25); color: inherit; border: 1px solid rgba(0,0,0,.35); }
+.stale-banner.hidden { display: none; }
+
+/* ===== activity heatmap (home) ===== */
+.heatmap { max-width: 1100px; margin: 0 auto 26px; }
+.hm-months { display: flex; margin-left: 0; }
+.hm-months span { width: 13px; margin-right: 3px; font-size: 9.5px; color: var(--faint); overflow: visible; white-space: nowrap; }
+.hm-grid { display: flex; gap: 3px; }
+.hm-week { display: flex; flex-direction: column; gap: 3px; }
+.hm-cell { width: 13px; height: 13px; border-radius: 3px; background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.hm-future { background: transparent; }
+.hm-l1 { background: color-mix(in srgb, var(--fg) 18%, transparent); }
+.hm-l2 { background: color-mix(in srgb, var(--green) 35%, transparent); }
+.hm-l3 { background: color-mix(in srgb, var(--green) 65%, transparent); }
+.hm-l4 { background: var(--green); }
+.hm-legend { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10px; color: var(--faint); }

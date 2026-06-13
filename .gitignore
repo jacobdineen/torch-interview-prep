@@ -20,3 +20,6 @@ projects/*/.notes.json
 projects/*/.solution_unlock.json
 *.json.*.tmp
 .mle_store.db.*.tmp
+
+# discarded-solution backups written by the web reset (web/app.py)
+.reset_backups/
