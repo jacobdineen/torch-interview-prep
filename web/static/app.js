@@ -86,6 +86,9 @@ async function init() {
   $("outline-close").addEventListener("click", closeOutline);
   $("outline-scrim").addEventListener("click", closeOutline);
   $("reset-btn").addEventListener("click", resetToStub);
+  $("compare-btn").addEventListener("click", openCompare);
+  $("cmp-close").addEventListener("click", () => $("compare-dlg").close());
+  $("compare-dlg").addEventListener("click", (e) => { if (e.target.id === "compare-dlg") $("compare-dlg").close(); });
   $("reset-progress-btn").addEventListener("click", openResetDlg);
   $("rd-close").addEventListener("click", () => $("reset-dlg").close());
   $("reset-dlg").addEventListener("click", (e) => { if (e.target.id === "reset-dlg") $("reset-dlg").close(); });
@@ -165,6 +168,7 @@ function card(cls, icon, title, sub, desc, stats, onClick) {
 function renderHome() {
   renderStats();
   renderHeatmap();
+  renderReviewStrip();
   const rb = $("resume-banner"); rb.innerHTML = "";
   const lastKey = localStorage.getItem("mle_last_key");
   const last = lastKey && ITEMS.find((x) => x.key === lastKey);
@@ -351,7 +355,7 @@ function renderPalette() {
     const it = RENDERED[i];
     if (it.group !== group) { group = it.group; html += `<button type="button" class="pal-group" data-group="${esc(group)}" title="Jump to first unsolved here">${esc(group)}</button>`; }
     html += `<div class="pal-row${i === HILITE ? " hi" : ""}" role="option" aria-selected="${i === HILITE}" data-key="${esc(it.key)}" data-i="${i}">` +
-      `<span class="mark ${it.solved ? "ok" : ""}">${it.solved ? "\u2713" : "\u00b7"}</span>` +
+      `<span class="mark ${it.due ? "due" : it.solved ? "ok" : ""}">${it.due ? "\u21bb" : it.solved ? "\u2713" : "\u00b7"}</span>` +
       `<span class="fwdot ${esc(it.framework || "")}" title="${it.numpy ? "torch + numpy" : esc(it.framework || "")}">${fwShort(it)}</span>` +
       `<span class="pid">${esc(it.id)}</span><span class="ptitle">${esc(it.title)}</span></div>`;
   }
@@ -451,6 +455,11 @@ async function selectItem(key, push = true, openNvim = true) {
   const st = $("prob-status");
   st.className = "tag " + (m.solved ? "solved" : m.last_status === "fail" ? "failed" : "");
   st.textContent = m.solved ? "solved" : m.last_status === "fail" ? "attempted" : "unsolved";
+  const dueItem = ITEMS.find((x) => x.key === key);
+  const dueEl = $("prob-due");
+  dueEl.style.display = dueItem && dueItem.due ? "" : "none";
+  dueEl.textContent = dueItem && dueItem.due ? "review due" : "";
+  if (dueItem && dueItem.due_why) dueEl.title = dueItem.due_why;
   $("prob-sig").textContent = m.signature || "";
   $("prob-doc").textContent = m.doc || "";
   const ew = $("example-wrap");
@@ -542,11 +551,39 @@ function renderResult(r, submit) {
     b.className = "results-body fail";
     let h = `<div class="res-headline">✗ FAIL ${esc(r.problem || "")}</div>`;
     if (r.hint) h += `<div class="res-sec res-hint"><span class="res-lbl">Likely cause</span>${esc(r.hint)}</div>`;
-    if (r.detail) h += `<div class="res-sec res-detail">${esc(r.detail)}</div>`;
+    if (r.diff) h += diffTable(r.diff);
+    else if (r.detail) h += `<div class="res-sec res-detail">${esc(r.detail)}</div>`;
     if (r.message) h += `<div class="res-sec res-detail">${esc(r.message)}</div>`;
     b.innerHTML = h;
   } else { b.className = "results-body fail"; b.textContent = "error: " + (r.message || "unknown"); }
 }
+// Structured shape/dtype/value diff -> a small table (clearer than flat text).
+function diffTable(d) {
+  const row = (l, a, b, bad) =>
+    `<tr><td class="dt-l">${esc(l)}</td><td${bad ? ' class="dt-bad"' : ""}>${esc(a)}</td>` +
+    `<td${bad ? ' class="dt-bad"' : ""}>${esc(b)}</td></tr>`;
+  let head = `<tr><th></th><th>${esc(d.a || "yours")}</th><th>${esc(d.b || "expected")}</th></tr>`;
+  let rows = "";
+  if (d.kind === "shape") {
+    const sa = d.shape_a || [], sb = d.shape_b || [];
+    const n = Math.max(sa.length, sb.length);
+    for (let i = 0; i < n; i++) {
+      rows += row(`axis ${i}`, sa[i] === undefined ? "—" : sa[i],
+        sb[i] === undefined ? "—" : sb[i], sa[i] !== sb[i]);
+    }
+    rows += row("rank", sa.length, sb.length, sa.length !== sb.length);
+  } else if (d.kind === "dtype") {
+    rows += row("dtype", d.dtype_a, d.dtype_b, true);
+  } else if (d.kind === "value") {
+    let out = `<div class="res-sec"><table class="diff-table">${head}</table>` +
+      `<div class="dt-facts">max |Δ| = ${Number(d.max_diff).toPrecision(4)}`;
+    if (d.first_index) out += ` · first mismatch at [${d.first_index.join(", ")}]`;
+    if (d.scale) out += ` · values ~${Number(d.scale).toPrecision(4)}× expected (missing/extra factor?)`;
+    return out + `</div></div>`;
+  } else return "";
+  return `<div class="res-sec"><table class="diff-table">${head}${rows}</table></div>`;
+}
+
 function label(key) { const it = ITEMS.find((x) => x.key === key); return it ? it.id : key; }
 
 async function teardown() {
@@ -584,6 +621,7 @@ function statusOk(x) {
   if (st === "solved") return !!x.solved;
   if (st === "unsolved") return !x.solved;
   if (st === "attempted") return !x.solved && x.last_status === "fail";
+  if (st === "due") return !!x.due;
   return true;
 }
 
@@ -816,10 +854,11 @@ let _heatCache = null;
 async function renderHeatmap() {
   const el = $("heatmap"); if (!el) return;
   if (!_heatCache) {
-    try { _heatCache = (await api.get("/api/stats")).days || {}; }
+    try { _heatCache = await api.get("/api/stats"); }
     catch (e) { el.innerHTML = ""; return; }
   }
-  const days = _heatCache;
+  renderWeakAreas(_heatCache.weak || []);
+  const days = _heatCache.days || {};
   const today = new Date();
   const WEEKS = 18;
   // start on the Sunday WEEKS-1 weeks back, so today lands in the last column
@@ -850,6 +889,77 @@ async function renderHeatmap() {
     `<div class="hm-legend"><span>less</span>` +
     [0, 1, 2, 3, 4].map((l) => `<i class="hm-cell hm-l${l}"></i>`).join("") +
     `<span>more</span></div>`;
+}
+
+// ===== review queue (spaced repetition) =====
+function renderReviewStrip() {
+  const el = $("review-strip"); if (!el) return;
+  const due = ITEMS.filter((x) => x.due);
+  if (!due.length) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.innerHTML = `<div><div class="rv-label">Review</div>` +
+    `<div class="rv-title">${due.length} item${due.length === 1 ? "" : "s"} due — solved a while ago, worth re-doing cold</div></div>`;
+  const btn = document.createElement("button");
+  btn.textContent = "Start review →";
+  btn.addEventListener("click", enterReview);
+  el.appendChild(btn);
+}
+function enterReview() {
+  document.body.classList.remove("home-active");
+  $("home").classList.add("hidden");
+  $("split").classList.remove("hidden");
+  $("source").value = "All";
+  $("framework").value = "All";
+  $("status-filter").value = "due";
+  renderPalette(); updateProgress(); clampSplits();
+  const first = view()[0];
+  if (first) selectItem(first.key);
+  else showHome();
+}
+
+// ===== weak areas (from the attempts history) =====
+function renderWeakAreas(weak) {
+  const el = $("weak-areas"); if (!el) return;
+  if (!weak.length) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  let html = `<div class="wa-head">Weak areas <span class="wa-note">fail rate from your run history — click to drill</span></div>`;
+  for (const w of weak) {
+    const total = w.fails + w.passes;
+    const pct = Math.round((w.fails / total) * 100);
+    html += `<button class="wa-row" data-group="${esc(w.group)}">` +
+      `<span class="wa-name">${esc(w.group)}</span>` +
+      `<span class="wa-bar"><i style="width:${pct}%"></i></span>` +
+      `<span class="wa-nums">${w.fails}F / ${w.passes}P</span></button>`;
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".wa-row").forEach((r) => r.addEventListener("click", () => {
+    const g = r.dataset.group;
+    const it = ITEMS.find((x) => x.group === g) || ITEMS.find((x) => x.source === g);
+    document.body.classList.remove("home-active");
+    $("home").classList.add("hidden");
+    $("split").classList.remove("hidden");
+    $("source").value = it && it.source !== "Problems" ? it.source : "Problems";
+    $("framework").value = "All";
+    $("status-filter").value = "all";
+    $("filter").value = it && it.source === "Problems" ? g : "";
+    renderPalette(); updateProgress(); clampSplits();
+    const v = view();
+    const target = v.find((x) => !x.solved) || v[0];
+    if (target) selectItem(target.key);
+  }));
+}
+
+// ===== compare with reference =====
+async function openCompare() {
+  if (!CURRENT) return;
+  let r;
+  try { r = await api.post("/api/compare", { key: CURRENT }); }
+  catch (e) { flashResults("fail", "Compare failed: " + e.message); return; }
+  if (r.error) { flashResults("muted", r.error); return; }
+  $("cmp-title").textContent = "Compare — " + label(CURRENT);
+  $("cmp-mine").textContent = r.mine || "(no code yet)";
+  $("cmp-ref").textContent = r.reference || "";
+  $("compare-dlg").showModal();
 }
 
 let _confettiTimer = null;

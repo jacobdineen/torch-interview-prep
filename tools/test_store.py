@@ -109,6 +109,19 @@ def main():
         check(today in days and days[today]["runs"] >= 8 and days[today]["passes"] >= 5,
               "attempts_by_day aggregates today's history (post-reset)")
 
+        # --- attempt_stats aggregates (review queue / weak areas source)
+        store.record_problem("42a", False)
+        store.record_problem("42a", False)
+        store.record_problem("42a", True)
+        store.record_problem("42a", False)
+        st = store.attempt_stats()["42a"]
+        check(st["fails_before_pass"] == 2 and st["passes"] == 1 and st["fails"] == 3,
+              "attempt_stats: fails-before-pass vs total fails")
+        check(st["first_pass"] is not None and st["last_pass"] == st["first_pass"],
+              "attempt_stats: first/last pass tracked")
+        check(st["kind"] == "problem" and st["attempts"] == 4,
+              "attempt_stats: kind + attempt count")
+
         # --- concurrent recording never loses ever_passed
         def hammer(i):
             for j in range(25):

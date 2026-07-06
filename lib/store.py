@@ -384,6 +384,47 @@ def attempts_by_day(days=126):
         con.close()
 
 
+def attempt_stats():
+    """Per-key aggregates over the attempts history:
+      {key: {kind, attempts, fails_before_pass, first_ts, first_pass, last_pass,
+             solve_seconds}}
+    `key` is the raw attempts key ('01a' for problems, 'project:step' for steps).
+    solve_seconds = first attempt -> first pass (None while unsolved or when the
+    first run passed). Powers the review queue + weak-areas panel."""
+    init()
+    con = _connect()
+    try:
+        rows = con.execute("SELECT kind, key, status, ts FROM attempts ORDER BY id").fetchall()
+    finally:
+        con.close()
+    out = {}
+    for kind, key, status, ts in rows:
+        e = out.setdefault(key, {"kind": kind, "attempts": 0, "fails_before_pass": 0,
+                                 "first_ts": ts, "first_pass": None, "last_pass": None})
+        e.setdefault("passes", 0)
+        e.setdefault("fails", 0)
+        e["attempts"] += 1
+        if status == "pass":
+            e["passes"] += 1
+            if e["first_pass"] is None:
+                e["first_pass"] = ts
+            e["last_pass"] = ts
+        else:
+            e["fails"] += 1
+            if e["first_pass"] is None:
+                e["fails_before_pass"] += 1
+    for e in out.values():
+        e["solve_seconds"] = None
+        if e["first_pass"] and e["first_pass"] != e["first_ts"]:
+            try:
+                a = datetime.datetime.fromisoformat(e["first_ts"])
+                b = datetime.datetime.fromisoformat(e["first_pass"])
+                e["solve_seconds"] = max(0.0, (b - a).total_seconds())
+            except ValueError:
+                pass
+    return out
+
+
 def record_project(project_dir, step, passed):
     init()
     project = _project_name(project_dir)

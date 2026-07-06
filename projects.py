@@ -5,6 +5,7 @@
   python projects.py <project> --status    # per-part progress bars
   python projects.py <project> --next      # next unsolved step (id + path)
   python projects.py <project> <id>        # run that step
+  python projects.py <project> <id> --hint      # graduated hint (auto-generated; escalates)
   python projects.py <project> <id> --explain   # signature + what it does + notes
   python projects.py <project> <id> --solution [--i-give-up]   # reference (unlock persists)
   python projects.py <project> <id> --note "TEXT"   # jot a note; shown under --explain
@@ -187,6 +188,33 @@ def cmd_note(root, sid, text):
     print(f"  noted for {sid} (shown under --explain).")
 
 
+def cmd_hint(root, sid):
+    man = _manifest(root)
+    s = _find_step(man, sid)
+    if not s:
+        print(f"no step {sid}")
+        return
+    from lib import store
+    from lib.project_hints import step_hints
+    hints = step_hints(root, sid, s["name"])
+    if not hints:
+        print("  No hints available for this step — try --explain or --solution.")
+        return
+    hkey = f"proj:{os.path.basename(root)}:{sid}"
+    n = store.get_hint_count(hkey)
+    idx = min(n, len(hints) - 1)
+    if n < len(hints):
+        store.set_hint_count(hkey, n + 1)
+    print()
+    for i, h in enumerate(hints[:idx + 1], 1):
+        print(f"  Hint {i}/{len(hints)}:")
+        for ln in h.split("\n"):
+            print(f"    {ln}")
+        print()
+    if idx + 1 >= len(hints):
+        print("  (no more hints — --solution is next if you're stuck)")
+
+
 def cmd_explain(root, sid):
     man = _manifest(root)
     s = _find_step(man, sid)
@@ -259,6 +287,7 @@ def main():
     p.add_argument("--next", action="store_true")
     p.add_argument("--list", action="store_true")
     p.add_argument("--explain", action="store_true")
+    p.add_argument("--hint", action="store_true")
     p.add_argument("--solution", action="store_true")
     p.add_argument("--i-give-up", action="store_true")
     p.add_argument("--note", metavar="TEXT",
@@ -296,6 +325,8 @@ def main():
     sid = _norm_id(args.id)
     if args.note is not None:
         return cmd_note(root, sid, args.note)
+    if args.hint:
+        return cmd_hint(root, sid)
     if args.explain:
         return cmd_explain(root, sid)
     if args.solution:

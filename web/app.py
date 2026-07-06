@@ -191,6 +191,59 @@ def _tier(pid):
         return ""
 
 
+# ---------- review queue (spaced repetition from the attempts history) ----------
+
+REVIEW_DAYS_STRUGGLED = 7    # re-surface sooner when it took real effort...
+REVIEW_DAYS_EASY = 21        # ...and later when it went down easily
+STRUGGLE_FAILS = 3           # fails before the first pass
+STRUGGLE_SECONDS = 900       # or >15 min from first attempt to first pass
+
+
+def _review_map():
+    """{catalog_key: reason} for every attempts-history entry whose last pass is
+    old enough to be due for review. Solved-ness is enforced by the caller (the
+    catalog), so a reset correctly empties the queue even though history stays."""
+    import datetime as _dt
+    from lib import store
+    now = _dt.datetime.now()
+    due = {}
+    for raw, e in store.attempt_stats().items():
+        if not e.get("last_pass"):
+            continue
+        struggled = (e["fails_before_pass"] >= STRUGGLE_FAILS
+                     or (e.get("solve_seconds") or 0) > STRUGGLE_SECONDS)
+        interval = REVIEW_DAYS_STRUGGLED if struggled else REVIEW_DAYS_EASY
+        try:
+            age = (now - _dt.datetime.fromisoformat(e["last_pass"])).days
+        except ValueError:
+            continue
+        if age < interval:
+            continue
+        key = f"prob:{raw}" if e["kind"] == "problem" else f"proj:{raw}"
+        due[key] = f"passed {age}d ago" + (" after a struggle" if struggled else "")
+    return due
+
+
+def _weak_areas():
+    """Aggregate fails/passes per tier (problems) and per project (steps) from
+    the attempts history — the 'where do I actually struggle' panel."""
+    from lib import store
+    groups = {}
+    for raw, e in store.attempt_stats().items():
+        if e["kind"] == "problem":
+            t = _tier(raw)
+            label = t or "Problems"
+        else:
+            label = raw.split(":", 1)[0]
+        g = groups.setdefault(label, {"group": label, "fails": 0, "passes": 0})
+        g["fails"] += e.get("fails", 0)
+        g["passes"] += e.get("passes", 0)
+    out = [g for g in groups.values()
+           if g["fails"] >= 2 and g["fails"] + g["passes"] >= 5]
+    out.sort(key=lambda g: (-g["fails"] / (g["fails"] + g["passes"]), -g["fails"]))
+    return out[:6]
+
+
 # ---------- projects ----------
 
 def _project_dirs():
@@ -227,12 +280,15 @@ def _catalog_sig():
 
 
 def _catalog():
-    """Cached: rebuild only when a problem/project file changes (mtime)."""
+    """Cached: rebuild when a problem/project file changes (mtime) OR every
+    10 minutes — review due-ness drifts with wall-clock time, not file state."""
     sig = _catalog_sig()
-    if sig is not None and _catalog_cache["sig"] == sig and _catalog_cache["data"] is not None:
+    fresh = (time.monotonic() - _catalog_cache.get("ts", 0)) < 600
+    if sig is not None and _catalog_cache["sig"] == sig             and _catalog_cache["data"] is not None and fresh:
         return _catalog_cache["data"]
     data = _build_catalog()
     _catalog_cache["sig"], _catalog_cache["data"] = sig, data
+    _catalog_cache["ts"] = time.monotonic()
     return data
 
 
@@ -241,6 +297,10 @@ def _build_catalog():
     for grouping/filtering in the picker."""
     items, sources = [], ["Problems"]
     prog = _problem_progress()
+    try:
+        due_map = _review_map()
+    except Exception:
+        due_map = {}
     try:
         from lib.curriculum import all_problem_ids
         ids = all_problem_ids()
@@ -253,7 +313,10 @@ def _build_catalog():
                       "title": _problem_title(pid), "framework": frameworks.problem_framework(pid),
                       "numpy": frameworks.problem_has_numpy(pid),
                       "solved": bool(prog.get(pid, {}).get("ever_passed")),
-                      "last_status": prog.get(pid, {}).get("last_status")})
+                      "last_status": prog.get(pid, {}).get("last_status"),
+                      "due": bool(prog.get(pid, {}).get("ever_passed"))
+                             and f"prob:{pid}" in due_map,
+                      "due_why": due_map.get(f"prob:{pid}") or None})
     projects = {}
     for d in _project_dirs():
         man = _manifest(d)
@@ -272,7 +335,10 @@ def _build_catalog():
                           "group": f"Part {s.get('part', 0) + 1}: {_part(man, s.get('part', 0))['title']}",
                           "id": s["id"], "title": s["name"],
                           "solved": bool(pp.get(s["id"], {}).get("ever_passed")),
-                          "last_status": pp.get(s["id"], {}).get("last_status")})
+                          "last_status": pp.get(s["id"], {}).get("last_status"),
+                          "due": bool(pp.get(s["id"], {}).get("ever_passed"))
+                                 and f"proj:{name}:{s['id']}" in due_map,
+                          "due_why": due_map.get(f"proj:{name}:{s['id']}") or None})
     return {"sources": sources, "items": items, "projects": projects,
             "frameworks": [frameworks.NUMPY, frameworks.TORCH]}
 
@@ -570,8 +636,22 @@ def _hint_text(key):
         return "unknown item"
     if r["kind"] == "problem":
         return _text([PYTHON, os.path.join(ROOT, "check.py"), r["pid"], "--hint"])
-    return ("Project steps don't have graded hints — read the part description under "
-            "the title, or use Solution.")
+    # Project steps: graduated hints generated from the step's readable test +
+    # reference sources (lib/project_hints); counter shared with the store.
+    from lib import store
+    from lib.project_hints import step_hints
+    hints = step_hints(r["dir"], r["sid"], r["step"]["name"])
+    if not hints:
+        return "No hints available for this step — read the part description or use Solution."
+    hkey = f"proj:{r['name']}:{r['sid']}"
+    n = store.get_hint_count(hkey)
+    idx = min(n, len(hints) - 1)
+    if n < len(hints):
+        store.set_hint_count(hkey, n + 1)
+    out = [f"Hint {i}/{len(hints)}:\n{h}" for i, h in enumerate(hints[:idx + 1], 1)]
+    if idx + 1 >= len(hints):
+        out.append("(no more hints — Solution is next if you're stuck)")
+    return "\n\n".join(out)
 
 
 def _solution_text(key, give_up):
@@ -660,6 +740,80 @@ def _backup_solutions(paths):
         return os.path.relpath(out, ROOT)
     except Exception:
         return None
+
+
+def _user_code(path):
+    """The learner's code from a working file: source minus the module docstring
+    and the __main__ runner guard — what you'd want in a side-by-side compare."""
+    try:
+        with open(path) as f:
+            src = f.read()
+        tree = ast.parse(src)
+    except (OSError, SyntaxError):
+        return ""
+    lines = src.splitlines()
+    out = []
+    for i, node in enumerate(tree.body):
+        if i == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) \
+                and isinstance(node.value.value, str):
+            continue                                   # module docstring
+        if isinstance(node, ast.If):
+            t = node.test
+            if isinstance(t, ast.Compare) and isinstance(t.left, ast.Name) \
+                    and t.left.id == "__name__":
+                continue                               # the runner guard
+        out.extend(lines[node.lineno - 1:node.end_lineno])
+        out.append("")
+    return "\n".join(out).strip()
+
+
+def _step_reference_source(proj_dir, name):
+    """The reference for one step: a top-level def/class from tests/_ref/reference.py,
+    or (CUDA-style projects) the string assigned to `name`."""
+    path = os.path.join(proj_dir, "tests", "_ref", "reference.py")
+    try:
+        with open(path) as f:
+            src = f.read()
+        tree = ast.parse(src)
+    except (OSError, SyntaxError):
+        return None
+    lines = src.splitlines()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                and node.name == name:
+            return "\n".join(lines[node.lineno - 1:node.end_lineno])
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name \
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return node.value.value.strip()
+    return None
+
+
+def _compare_payload(key):
+    """Side-by-side material: the learner's current code + the reference. Gated
+    exactly like Solution: pass the item once, or unlock it with --i-give-up."""
+    r = _resolve(key)
+    if not r:
+        return {"error": "unknown item"}
+    from lib import store
+    if r["kind"] == "problem":
+        allowed = bool(_problem_progress().get(r["pid"], {}).get("ever_passed")) \
+                  or store.is_problem_unlocked(r["pid"])
+        ref = None
+        if allowed:
+            try:
+                from lib.solutions import get_solution
+                ref = get_solution(r["pid"])
+            except Exception:
+                ref = None
+    else:
+        allowed = bool(_project_progress(r["dir"]).get(r["sid"], {}).get("ever_passed")) \
+                  or store.is_project_unlocked(r["dir"], r["sid"])
+        ref = _step_reference_source(r["dir"], r["step"]["name"]) if allowed else None
+    if not allowed:
+        return {"error": "Locked — pass this item first (or unlock it via Solution)."}
+    return {"mine": _user_code(r["path"]),
+            "reference": (ref or "").strip() or "(reference not found)"}
 
 
 def _reset_to_stub(key):
@@ -835,7 +989,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, _sync_state())
         if u.path == "/api/stats":
             from lib import store
-            return self._send(200, {"days": store.attempts_by_day()})
+            return self._send(200, {"days": store.attempts_by_day(),
+                                    "weak": _weak_areas()})
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -864,6 +1019,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, _run_item(key))
         if u.path == "/api/solution":
             return self._send(200, {"text": _solution_text(key, bool(data.get("give_up")))})
+        if u.path == "/api/compare":
+            return self._send(200, _compare_payload(key))
         if u.path == "/api/shutdown":
             self._send(200, {"ok": True})
             teardown()
